@@ -24,7 +24,7 @@ describe("provider secret persistence", () => {
   it("stores ciphertext in Mongo and decrypts only at the service boundary", async () => {
     const plaintext = "telegram-provider-token";
     const created = await createProviderSecret("telegram", "bot-token", plaintext);
-    const raw = await ProviderSecretModel.findById(created.id).lean();
+    const raw = await ProviderSecretModel.findById(created.id).select("+ciphertext").lean();
 
     expect(raw?.ciphertext).toBeTypeOf("string");
     expect(raw?.ciphertext).not.toContain(plaintext);
@@ -33,7 +33,9 @@ describe("provider secret persistence", () => {
 
   it("does not persist a plaintext secret field", async () => {
     await createProviderSecret("telegram", "webhook-secret", "sensitive-value");
-    const raw = await ProviderSecretModel.findOne({ name: "webhook-secret" }).lean();
+    const raw = await ProviderSecretModel.findOne({ name: "webhook-secret" })
+      .select("+ciphertext")
+      .lean();
 
     expect(raw).not.toHaveProperty("secret");
     expect(JSON.stringify(raw)).not.toContain("sensitive-value");
