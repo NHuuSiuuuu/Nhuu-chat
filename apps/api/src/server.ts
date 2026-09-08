@@ -3,10 +3,10 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { env } from "@nhuu-chat/config";
-import { Server as SocketIOServer } from "socket.io";
 
 import { createApp } from "./app.js";
 import { connectDatabase, disconnectDatabase } from "./db/mongoose.js";
+import { createRealtimeServer } from "./realtime/socket.js";
 
 import type { Server as HttpServer } from "node:http";
 
@@ -43,7 +43,7 @@ export async function startServer(dependencies: ServerDependencies = {}): Promis
   await connect(env.MONGODB_URI);
   const httpServer = createServer(createApp());
 
-  const socketServer = new SocketIOServer(httpServer);
+  const socketServer = createRealtimeServer(httpServer);
 
   const shutdown = async () => {
     socketServer.close();
