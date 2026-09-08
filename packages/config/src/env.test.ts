@@ -32,9 +32,30 @@ describe("environment configuration", () => {
     expect(env).toEqual({ ...validEnvironment, PORT: 3000 });
   });
 
-  it("rejects missing Telegram configuration", async () => {
-    await expect(importEnv({ TELEGRAM_BOT_TOKEN: "" })).rejects.toThrow(
-      /TELEGRAM_BOT_TOKEN/
+  it("accepts the supported secure database protocols", async () => {
+    const { env } = await importEnv({
+      MONGODB_URI: "mongodb+srv://cluster.example.com/nhuu-chat",
+      REDIS_URL: "rediss://cache.example.com:6380"
+    });
+
+    expect(env.MONGODB_URI).toBe("mongodb+srv://cluster.example.com/nhuu-chat");
+    expect(env.REDIS_URL).toBe("rediss://cache.example.com:6380");
+  });
+
+  it.each([
+    ["NODE_ENV", "staging"],
+    ["MONGODB_URI", "mongodb-nope://localhost/nhuu-chat"],
+    ["REDIS_URL", "redis-nope://localhost:6379"],
+    ["JWT_SECRET", "too-short"],
+    ["ENCRYPTION_KEY", "too-short"],
+    ["TELEGRAM_BOT_TOKEN", ""],
+    ["TELEGRAM_WEBHOOK_SECRET", "too-short"],
+    ["PORT", "not-a-port"],
+    ["PORT", "0"],
+    ["PORT", "65536"]
+  ])("rejects invalid %s value %s", async (name, value) => {
+    await expect(importEnv({ [name]: value })).rejects.toThrow(
+      new RegExp(name)
     );
   });
 });

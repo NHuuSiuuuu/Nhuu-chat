@@ -9,6 +9,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@nhuu-chat/config": "workspace:*",
+    "@nhuu-chat/contracts": "workspace:*",
     "express": "^5.1.0",
     "socket.io": "^4.8.1"
   }

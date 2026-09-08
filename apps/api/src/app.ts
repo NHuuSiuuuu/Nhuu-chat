@@ -1,6 +1,6 @@
 import express, { type Express } from "express";
 
-import type { HealthResponse } from "../../../packages/contracts/src/index.js";
+import type { HealthResponse } from "@nhuu-chat/contracts";
 
 export function createApp(): Express {
   const app = express();
