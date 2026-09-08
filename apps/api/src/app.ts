@@ -2,6 +2,9 @@ import express, { type Express } from "express";
 
 import type { HealthResponse } from "@nhuu-chat/contracts";
 
+import { authRouter } from "./auth/auth.routes.js";
+import { errorHandler } from "./common/errors.js";
+
 export function createApp(): Express {
   const app = express();
 
@@ -11,6 +14,8 @@ export function createApp(): Express {
 
     response.status(200).json(health);
   });
+  app.use("/api/v1/auth", authRouter);
+  app.use(errorHandler);
 
   return app;
 }
