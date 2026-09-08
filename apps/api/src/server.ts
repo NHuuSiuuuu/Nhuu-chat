@@ -6,7 +6,7 @@ import { env } from "@nhuu-chat/config";
 
 import { createApp } from "./app.js";
 import { connectDatabase, disconnectDatabase } from "./db/mongoose.js";
-import { createRealtimeServer } from "./realtime/socket.js";
+import { closeRealtimeServer, createRealtimeServer } from "./realtime/socket.js";
 
 import type { Server as HttpServer } from "node:http";
 
@@ -47,6 +47,7 @@ export async function startServer(dependencies: ServerDependencies = {}): Promis
 
   const shutdown = async () => {
     socketServer.close();
+    await closeRealtimeServer(socketServer);
     await new Promise<void>((resolve) => {
       if (!httpServer.listening) {
         resolve();

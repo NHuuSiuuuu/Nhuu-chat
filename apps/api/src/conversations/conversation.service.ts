@@ -1,5 +1,7 @@
 import { AppError } from "../common/errors.js";
 import { ConversationModel } from "../models/conversation.model.js";
+import { UserModel } from "../models/user.model.js";
+import { isValidObjectId } from "mongoose";
 
 export async function listConversations(query: {
   page?: string;
@@ -7,8 +9,8 @@ export async function listConversations(query: {
   platform?: string;
   status?: string;
 }) {
-  const page = Math.max(1, Number(query.page) || 1);
-  const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+  const page = parsePositiveInt(query.page, 1);
+  const limit = Math.min(100, parsePositiveInt(query.limit, 20));
   const filter: Record<string, unknown> = {};
   if (query.platform) filter.platform = query.platform;
   if (query.status) filter.status = query.status;
@@ -20,9 +22,18 @@ export async function listConversations(query: {
 }
 
 export async function updateAssignment(id: string, assignedAgentId: string | null) {
+  if (assignedAgentId !== null && (!isValidObjectId(assignedAgentId) || !(await UserModel.exists({ _id: assignedAgentId, role: "agent" })))) {
+    throw new AppError(400, "INVALID_AGENT", "assignedAgentId must identify an agent");
+  }
   const row = await ConversationModel.findByIdAndUpdate(id, { assignedAgentId }, { new: true }).lean();
   if (!row) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
   return toConversation(row);
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  if (!/^\d+$/.test(value) || Number(value) < 1) throw new AppError(400, "INVALID_PAGINATION", "page and limit must be positive integers");
+  return Number(value);
 }
 
 export async function updateStatus(id: string, status: "open" | "pending" | "closed") {

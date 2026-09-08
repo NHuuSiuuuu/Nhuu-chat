@@ -21,3 +21,9 @@ export async function readProviderSecret(id: string): Promise<string> {
 
   return readEncryptedSecret({ secret: record.ciphertext });
 }
+
+export async function readProviderSecretByName(provider: string, name: string): Promise<string> {
+  const record = await ProviderSecretModel.findOne({ provider, name }).select("+ciphertext");
+  if (!record) throw new AppError(404, "SECRET_NOT_FOUND", "Secret was not found");
+  return readEncryptedSecret({ secret: record.ciphertext });
+}

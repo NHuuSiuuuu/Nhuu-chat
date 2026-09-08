@@ -2,14 +2,20 @@ import { AppError } from "../common/errors.js";
 import { MessageModel } from "../models/message.model.js";
 
 export async function listMessages(conversationId: string, query: { page?: string; limit?: string }) {
-  const page = Math.max(1, Number(query.page) || 1);
-  const limit = Math.min(100, Math.max(1, Number(query.limit) || 50));
+  const page = parsePositiveInt(query.page, 1);
+  const limit = Math.min(100, parsePositiveInt(query.limit, 50));
   const filter = { conversationId };
   const [rows, total] = await Promise.all([
     MessageModel.find(filter).sort({ createdAt: 1, _id: 1 }).skip((page - 1) * limit).limit(limit).lean(),
     MessageModel.countDocuments(filter)
   ]);
   return { messages: rows.map(toMessage), total };
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  if (!/^\d+$/.test(value) || Number(value) < 1) throw new AppError(400, "INVALID_PAGINATION", "page and limit must be positive integers");
+  return Number(value);
 }
 
 export function toMessage(row: any) {
