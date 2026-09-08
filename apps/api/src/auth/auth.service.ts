@@ -120,9 +120,19 @@ export async function login(email: string, password: string): Promise<{
 export async function rotateRefreshToken(refreshToken: string): Promise<TokenPair> {
   const tokenUser = await verifyToken(refreshToken, "refresh");
   const currentDigest = refreshDigest(refreshToken);
-  const tokens = await issueTokens(tokenUser);
+  const document = await UserModel.findById(tokenUser.id).select("+refreshTokenHash");
+  if (!document || document.refreshTokenHash !== currentDigest) {
+    throw new AppError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid or revoked");
+  }
+
+  const currentUser: AuthUser = {
+    id: document.id,
+    email: document.email,
+    role: document.role
+  };
+  const tokens = await issueTokens(currentUser);
   const result = await UserModel.updateOne(
-    { _id: tokenUser.id, refreshTokenHash: currentDigest },
+    { _id: document._id, refreshTokenHash: currentDigest },
     { $set: { refreshTokenHash: refreshDigest(tokens.refreshToken) } }
   );
 

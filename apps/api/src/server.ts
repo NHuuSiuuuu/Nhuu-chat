@@ -4,31 +4,52 @@ import { env } from "@nhuu-chat/config";
 import { Server as SocketIOServer } from "socket.io";
 
 import { createApp } from "./app.js";
+import { connectDatabase, disconnectDatabase } from "./db/mongoose.js";
 
 export async function startServer(): Promise<void> {
+  await connectDatabase(env.MONGODB_URI);
   const httpServer = createServer(createApp());
 
-  new SocketIOServer(httpServer);
+  const socketServer = new SocketIOServer(httpServer);
 
-  await new Promise<void>((resolve, reject) => {
-    const onStartupError = (error: Error) => {
-      httpServer.off("listening", onListening);
-      reject(error);
-    };
-    const onListening = () => {
-      httpServer.off("error", onStartupError);
-      httpServer.on("error", (error) => {
-        console.error("HTTP server runtime error", error);
-        process.exitCode = 1;
-        httpServer.close();
-      });
-      resolve();
-    };
+  const shutdown = async () => {
+    socketServer.close();
+    await new Promise<void>((resolve) => {
+      if (!httpServer.listening) {
+        resolve();
+        return;
+      }
+      httpServer.close(() => resolve());
+    });
+    await disconnectDatabase();
+  };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
 
-    httpServer.once("error", onStartupError);
-    httpServer.once("listening", onListening);
-    httpServer.listen(env.PORT);
-  });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const onStartupError = (error: Error) => {
+        httpServer.off("listening", onListening);
+        reject(error);
+      };
+      const onListening = () => {
+        httpServer.off("error", onStartupError);
+        httpServer.on("error", (error) => {
+          console.error("HTTP server runtime error", error);
+          process.exitCode = 1;
+          void shutdown();
+        });
+        resolve();
+      };
+
+      httpServer.once("error", onStartupError);
+      httpServer.once("listening", onListening);
+      httpServer.listen(env.PORT);
+    });
+  } catch (error) {
+    await disconnectDatabase();
+    throw error;
+  }
 }
 
 void startServer().catch((error) => {

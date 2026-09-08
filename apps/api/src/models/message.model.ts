@@ -1,5 +1,11 @@
 import { model, models, Schema, type InferSchemaType } from "mongoose";
 
+function normalizeExternalMessageId(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  return normalized || undefined;
+}
+
 const attachmentSchema = new Schema(
   {
     url: { type: String, required: true },
@@ -22,7 +28,7 @@ const messageSchema = new Schema(
       enum: ["facebook", "instagram", "zalo", "telegram"],
       required: true
     },
-    externalMessageId: { type: String },
+    externalMessageId: { type: String, set: normalizeExternalMessageId },
     senderType: { type: String, enum: ["customer", "agent", "bot"], required: true },
     senderId: { type: String, required: true },
     type: {

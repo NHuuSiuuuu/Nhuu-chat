@@ -55,4 +55,20 @@ describe("domain idempotency indexes", () => {
 
     expect(await MessageModel.countDocuments()).toBe(2);
   });
+
+  it("normalizes empty external identifiers as missing", async () => {
+    const conversationId = new mongoose.Types.ObjectId();
+    const message = {
+      conversationId,
+      platform: "telegram",
+      externalMessageId: "",
+      senderType: "customer",
+      senderId: "42",
+      content: "Không có id ngoài"
+    };
+
+    await MessageModel.create([message, message]);
+
+    expect(await MessageModel.countDocuments()).toBe(2);
+  });
 });

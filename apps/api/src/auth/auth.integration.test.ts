@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../app.js";
 import { requireRole } from "./auth.middleware.js";
 import { hashPassword } from "./auth.service.js";
+import { verifyAccessToken } from "./auth.service.js";
 import { UserModel } from "../models/user.model.js";
 import { startTestDatabase, stopTestDatabase } from "../test/mongo-repl-set.js";
 
@@ -45,7 +46,7 @@ describe("authentication and roles", () => {
     });
   });
 
-  it("rotates a refresh token and rejects replay of the consumed token", async () => {
+  it("reissues a refresh token with the user's current role and rejects replay", async () => {
     await UserModel.create({
       email: "agent@example.com",
       name: "Agent",
@@ -59,6 +60,8 @@ describe("authentication and roles", () => {
     });
     const oldRefreshToken = login.body.refreshToken as string;
 
+    await UserModel.updateOne({ email: "agent@example.com" }, { $set: { role: "customer" } });
+
     const refreshed = await request(createApp())
       .post("/api/v1/auth/refresh")
       .send({ refreshToken: oldRefreshToken });
@@ -68,43 +71,60 @@ describe("authentication and roles", () => {
 
     expect(refreshed.status).toBe(200);
     expect(refreshed.body.refreshToken).not.toBe(oldRefreshToken);
+    await expect(verifyAccessToken(refreshed.body.accessToken)).resolves.toMatchObject({
+      email: "agent@example.com",
+      role: "customer"
+    });
     expect(replay.status).toBe(401);
   });
 
-  it("denies a customer while allowing an agent on an agent route", async () => {
+  it("enforces the admin-only role matrix", async () => {
     const app = createApp();
-    app.get("/agent-only", requireRole("admin", "agent"), (_request, response) => {
+    app.get("/admin-only", requireRole("admin"), (_request, response) => {
       response.status(200).json({ allowed: true });
     });
 
-    const customer = await UserModel.create({
-      email: "customer@example.com",
-      name: "Customer",
+    for (const role of ["admin", "agent", "customer"] as const) {
+      await UserModel.create({
+        email: `${role}@example.com`,
+        name: role,
+        passwordHash: await hashPassword("correct horse battery staple"),
+        role
+      });
+    }
+
+    const tokens = new Map<string, string>();
+    for (const role of ["admin", "agent", "customer"] as const) {
+      const login = await request(createApp()).post("/api/v1/auth/login").send({
+        email: `${role}@example.com`,
+        password: "correct horse battery staple"
+      });
+      tokens.set(role, login.body.accessToken);
+    }
+
+    await expect(request(app).get("/admin-only").set("Authorization", `Bearer ${tokens.get("admin")}`)).resolves.toMatchObject({ status: 200 });
+    await expect(request(app).get("/admin-only").set("Authorization", `Bearer ${tokens.get("agent")}`)).resolves.toMatchObject({ status: 403 });
+    await expect(request(app).get("/admin-only").set("Authorization", `Bearer ${tokens.get("customer")}`)).resolves.toMatchObject({ status: 403 });
+  });
+
+  it("rejects missing, malformed and refresh tokens on access routes", async () => {
+    const app = createApp();
+    app.get("/admin-only", requireRole("admin"), (_request, response) => response.sendStatus(200));
+    await UserModel.create({
+      email: "admin@example.com",
+      name: "Admin",
       passwordHash: await hashPassword("correct horse battery staple"),
-      role: "customer"
+      role: "admin"
     });
-    const agent = await UserModel.create({
-      email: "agent@example.com",
-      name: "Agent",
-      passwordHash: await hashPassword("correct horse battery staple"),
-      role: "agent"
+    const login = await request(createApp()).post("/api/v1/auth/login").send({
+      email: "admin@example.com",
+      password: "correct horse battery staple"
     });
 
-    const customerLogin = await request(createApp())
-      .post("/api/v1/auth/login")
-      .send({ email: customer.email, password: "correct horse battery staple" });
-    const agentLogin = await request(createApp())
-      .post("/api/v1/auth/login")
-      .send({ email: agent.email, password: "correct horse battery staple" });
-
-    const denied = await request(app)
-      .get("/agent-only")
-      .set("Authorization", `Bearer ${customerLogin.body.accessToken}`);
-    const allowed = await request(app)
-      .get("/agent-only")
-      .set("Authorization", `Bearer ${agentLogin.body.accessToken}`);
-
-    expect(denied.status).toBe(403);
-    expect(allowed.status).toBe(200);
+    for (const token of [undefined, "not-a-jwt", login.body.refreshToken]) {
+      const response = request(app).get("/admin-only");
+      if (token) response.set("Authorization", `Bearer ${token}`);
+      await expect(response).resolves.toMatchObject({ status: 401 });
+    }
   });
 });
