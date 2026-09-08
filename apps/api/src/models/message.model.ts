@@ -1,4 +1,4 @@
-import { model, models, Schema, type InferSchemaType } from "mongoose";
+import mongoose, { model, Schema, type InferSchemaType } from "mongoose";
 
 function normalizeExternalMessageId(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -57,4 +57,4 @@ messageSchema.index(
 );
 
 export type Message = InferSchemaType<typeof messageSchema>;
-export const MessageModel = models.Message ?? model<Message>("Message", messageSchema);
+export const MessageModel = mongoose.models.Message ?? model<Message>("Message", messageSchema);

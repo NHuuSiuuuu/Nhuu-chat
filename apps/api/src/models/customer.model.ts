@@ -1,4 +1,4 @@
-import { model, models, Schema, type InferSchemaType } from "mongoose";
+import mongoose, { model, Schema, type InferSchemaType } from "mongoose";
 
 const platforms = ["facebook", "instagram", "zalo", "telegram"] as const;
 
@@ -19,4 +19,4 @@ const customerSchema = new Schema(
 customerSchema.index({ platform: 1, platformId: 1 }, { unique: true });
 
 export type Customer = InferSchemaType<typeof customerSchema>;
-export const CustomerModel = models.Customer ?? model<Customer>("Customer", customerSchema);
+export const CustomerModel = mongoose.models.Customer ?? model<Customer>("Customer", customerSchema);

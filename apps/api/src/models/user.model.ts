@@ -1,4 +1,4 @@
-import { model, models, Schema, type InferSchemaType } from "mongoose";
+import mongoose, { model, Schema, type InferSchemaType } from "mongoose";
 
 export const roles = ["admin", "agent", "customer"] as const;
 export type Role = (typeof roles)[number];
@@ -25,4 +25,4 @@ userSchema.set("toJSON", {
 
 export type User = InferSchemaType<typeof userSchema>;
 
-export const UserModel = models.User ?? model<User>("User", userSchema);
+export const UserModel = mongoose.models.User ?? model<User>("User", userSchema);

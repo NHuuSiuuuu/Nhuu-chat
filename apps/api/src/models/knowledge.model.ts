@@ -1,4 +1,4 @@
-import { model, models, Schema, type InferSchemaType } from "mongoose";
+import mongoose, { model, Schema, type InferSchemaType } from "mongoose";
 
 const knowledgeDocumentSchema = new Schema(
   {
@@ -39,7 +39,7 @@ export type KnowledgeDocument = InferSchemaType<typeof knowledgeDocumentSchema>;
 export type KnowledgeChunk = InferSchemaType<typeof knowledgeChunkSchema>;
 
 export const KnowledgeDocumentModel =
-  models.KnowledgeDocument ??
+  mongoose.models.KnowledgeDocument ??
   model<KnowledgeDocument>("KnowledgeDocument", knowledgeDocumentSchema);
 export const KnowledgeChunkModel =
-  models.KnowledgeChunk ?? model<KnowledgeChunk>("KnowledgeChunk", knowledgeChunkSchema);
+  mongoose.models.KnowledgeChunk ?? model<KnowledgeChunk>("KnowledgeChunk", knowledgeChunkSchema);

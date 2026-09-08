@@ -1,4 +1,4 @@
-import { model, models, Schema, type InferSchemaType } from "mongoose";
+import mongoose, { model, Schema, type InferSchemaType } from "mongoose";
 
 const conversationSchema = new Schema(
   {
@@ -21,4 +21,4 @@ const conversationSchema = new Schema(
 
 export type Conversation = InferSchemaType<typeof conversationSchema>;
 export const ConversationModel =
-  models.Conversation ?? model<Conversation>("Conversation", conversationSchema);
+  mongoose.models.Conversation ?? model<Conversation>("Conversation", conversationSchema);
