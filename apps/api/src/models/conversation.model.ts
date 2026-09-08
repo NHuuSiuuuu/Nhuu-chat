@@ -20,5 +20,6 @@ const conversationSchema = new Schema(
 );
 
 export type Conversation = InferSchemaType<typeof conversationSchema>;
+conversationSchema.index({ platform: 1, channelId: 1 }, { unique: true });
 export const ConversationModel =
   mongoose.models.Conversation ?? model<Conversation>("Conversation", conversationSchema);
