@@ -2,13 +2,17 @@ import { AppError } from "../common/errors.js";
 import { readEncryptedSecret, writeEncryptedSecret } from "../common/secret-storage.js";
 import { ProviderSecretModel } from "./provider-secret.model.js";
 
+export function buildProviderSecretDocument(provider: string, name: string, plaintext: string) {
+  const encrypted = writeEncryptedSecret(plaintext);
+  return { provider, name, ciphertext: encrypted.secret };
+}
+
 export async function createProviderSecret(
   provider: string,
   name: string,
   plaintext: string
 ) {
-  const encrypted = writeEncryptedSecret(plaintext);
-  return ProviderSecretModel.create({ provider, name, ciphertext: encrypted.secret });
+  return ProviderSecretModel.create(buildProviderSecretDocument(provider, name, plaintext));
 }
 
 export async function readProviderSecret(id: string): Promise<string> {
