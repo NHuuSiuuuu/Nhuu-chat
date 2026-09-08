@@ -6,7 +6,7 @@ import { verifyAccessToken } from "../auth/auth.service.js";
 import { chatEvents } from "@nhuu-chat/contracts";
 import { ConversationModel } from "../models/conversation.model.js";
 
-const redisClients = new WeakMap<Server, RedisClientType>();
+const redisClients = new WeakMap<Server, { pub: RedisClientType; sub: RedisClientType }>();
 let activeServer: Server | undefined;
 
 export function createRealtimeServer(httpServer: HttpServer, redisUrl = process.env.REDIS_URL): Server {
@@ -38,7 +38,7 @@ export function createRealtimeServer(httpServer: HttpServer, redisUrl = process.
     });
   });
   activeServer = io;
-  if (redisUrl) void attachRedisAdapter(io, redisUrl);
+  if (redisUrl) void attachRedisAdapter(io, redisUrl).catch((error) => console.error("Redis adapter unavailable", error));
   return io;
 }
 
@@ -47,8 +47,9 @@ export function emitChatEvent(event: string, conversationId: string, payload: un
 }
 
 export async function closeRealtimeServer(io: Server): Promise<void> {
-  const client = redisClients.get(io);
-  if (client?.isOpen) await client.quit();
+  const clients = redisClients.get(io);
+  if (clients?.pub.isOpen) await clients.pub.quit();
+  if (clients?.sub.isOpen) await clients.sub.quit();
   redisClients.delete(io);
   if (activeServer === io) activeServer = undefined;
 }
@@ -60,5 +61,5 @@ async function attachRedisAdapter(io: Server, url: string): Promise<void> {
   subClient.on("error", () => undefined);
   await Promise.all([pubClient.connect(), subClient.connect()]);
   io.adapter(createAdapter(pubClient, subClient));
-  redisClients.set(io, pubClient);
+  redisClients.set(io, { pub: pubClient, sub: subClient });
 }
