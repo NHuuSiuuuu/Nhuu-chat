@@ -26,7 +26,9 @@ const appEnvSchema = z.object({
   JWT_SECRET: z.string().min(32),
   ENCRYPTION_KEY: z.string().min(32),
   TELEGRAM_BOT_TOKEN: z.string().min(1),
-  TELEGRAM_WEBHOOK_SECRET: z.string().min(16)
+  TELEGRAM_WEBHOOK_SECRET: z.string().min(16),
+  TELEGRAM_API_ID: z.coerce.number().int().positive().optional(),
+  TELEGRAM_API_HASH: z.string().min(1).optional()
 });
 
 export type AppEnv = z.infer<typeof appEnvSchema>;

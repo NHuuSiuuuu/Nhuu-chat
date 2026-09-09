@@ -10,7 +10,11 @@
   "dependencies": {
     "@nhuu-chat/contracts": "workspace:*",
     "react": "^19.1.1",
+    "qrcode": "^1.5.4",
     "react-dom": "^19.1.1",
     "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.5"
   }
 }

@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useState } from "react";
 export function MessageComposer({ onSend, disabled = false }: { onSend: (content: string) => Promise<void>; disabled?: boolean }) {
   const [content, setContent] = useState("");

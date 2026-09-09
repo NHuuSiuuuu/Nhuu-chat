@@ -5,6 +5,7 @@ import { createClient, type RedisClientType } from "redis";
 import { verifyAccessToken } from "../auth/auth.service.js";
 import { chatEvents } from "@nhuu-chat/contracts";
 import { ConversationModel } from "../models/conversation.model.js";
+import { canJoinConversation } from "./access.js";
 
 const redisClients = new WeakMap<Server, { pub: RedisClientType; sub: RedisClientType }>();
 let activeServer: Server | undefined;
@@ -20,11 +21,13 @@ export function createRealtimeServer(httpServer: HttpServer, redisUrl = process.
     } catch { next(new Error("unauthorized")); }
   });
   io.on("connection", (socket) => {
+    const auth = socket.data.auth as { id: string; role: string };
+    void socket.join(`inbox:${auth.id}`);
+    if (auth.role === "admin") void socket.join("inbox:admins");
     socket.on(chatEvents.joinRoom, async (conversationId: unknown, callback?: (result: { ok: boolean }) => void) => {
       if (typeof conversationId !== "string" || !conversationId) return callback?.({ ok: false });
-      const auth = socket.data.auth as { id: string; role: string };
       const conversation = await ConversationModel.findById(conversationId).lean().catch(() => null);
-      const allowed = auth.role === "admin" || (auth.role === "agent" && String(conversation?.assignedAgentId) === auth.id);
+      const allowed = Boolean(conversation && canJoinConversation(auth, conversation));
       if (!allowed) return callback?.({ ok: false });
       await socket.join(`conversation:${conversationId}`);
       callback?.({ ok: true });
@@ -44,6 +47,12 @@ export function createRealtimeServer(httpServer: HttpServer, redisUrl = process.
 
 export function emitChatEvent(event: string, conversationId: string, payload: unknown): void {
   activeServer?.to(`conversation:${conversationId}`).emit(event, payload);
+}
+
+export function emitInboxEvent(event: string, ownerId: string | null, payload: unknown): void {
+  if (!activeServer) return;
+  activeServer.to("inbox:admins").emit(event, payload);
+  if (ownerId) activeServer.to(`inbox:${ownerId}`).emit(event, payload);
 }
 
 export async function closeRealtimeServer(io: Server): Promise<void> {

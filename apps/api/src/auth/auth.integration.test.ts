@@ -24,6 +24,67 @@ describe("authentication and roles", () => {
     await stopTestDatabase();
   }, 30_000);
 
+  it("registers a normalized customer and returns safe user tokens", async () => {
+    const response = await request(createApp()).post("/api/v1/auth/register").send({
+      name: "New Customer",
+      email: "  NEW.Customer@Example.COM ",
+      password: "correct horse battery staple",
+      role: "admin"
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body.user).toMatchObject({ email: "new.customer@example.com", role: "customer" });
+    expect(response.body.user).not.toHaveProperty("passwordHash");
+    expect(response.body).toMatchObject({
+      accessToken: expect.any(String),
+      refreshToken: expect.any(String)
+    });
+    await expect(verifyAccessToken(response.body.accessToken)).resolves.toMatchObject({
+      email: "new.customer@example.com",
+      role: "customer"
+    });
+
+    const document = await UserModel.findOne({ email: "new.customer@example.com" }).select(
+      "+passwordHash"
+    );
+    expect(document).not.toBeNull();
+    expect(document?.role).toBe("customer");
+    expect(document?.passwordHash).not.toBe("correct horse battery staple");
+  });
+
+  it("rejects invalid registration fields", async () => {
+    for (const body of [
+      { email: "user@example.com", password: "correct horse battery staple" },
+      { name: "Customer", password: "correct horse battery staple" },
+      { name: "Customer", email: "user@example.com" },
+      { name: "Customer", email: "user@example.com", password: "short" }
+    ]) {
+      const response = await request(createApp()).post("/api/v1/auth/register").send(body);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toMatchObject({ code: "INVALID_REQUEST" });
+    }
+  });
+
+  it("rejects duplicate registration emails with a stable conflict error", async () => {
+    const first = await request(createApp()).post("/api/v1/auth/register").send({
+      name: "First Customer",
+      email: "customer@example.com",
+      password: "correct horse battery staple"
+    });
+    const duplicate = await request(createApp()).post("/api/v1/auth/register").send({
+      name: "Second Customer",
+      email: " CUSTOMER@example.com ",
+      password: "another correct password"
+    });
+
+    expect(first.status).toBe(201);
+    expect(duplicate.status).toBe(409);
+    expect(duplicate.body).toEqual({
+      error: { code: "DUPLICATE_RESOURCE", message: "Resource already exists" }
+    });
+  });
+
   it("logs in with a valid password without exposing the password hash", async () => {
     await UserModel.create({
       email: "admin@example.com",

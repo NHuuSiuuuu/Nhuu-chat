@@ -1,3 +1,4 @@
+import * as React from "react";
 import type { ChatMessageContract, ConversationContract } from "@nhuu-chat/contracts";
 import { MessageComposer } from "./MessageComposer.js";
 export function ChatWindow({ conversation, messages, onSend }: { conversation: ConversationContract | null; messages: ChatMessageContract[]; onSend: (content: string) => Promise<void> }) {

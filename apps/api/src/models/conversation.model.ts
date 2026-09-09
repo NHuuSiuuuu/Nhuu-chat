@@ -5,10 +5,11 @@ const conversationSchema = new Schema(
     customerId: { type: Schema.Types.ObjectId, ref: "Customer", required: true, index: true },
     platform: {
       type: String,
-      enum: ["facebook", "instagram", "zalo", "telegram"],
+      enum: ["facebook", "instagram", "zalo", "telegram", "telegram_personal"],
       required: true
     },
     channelId: { type: String, required: true },
+    ownerId: { type: Schema.Types.ObjectId, ref: "User", default: null, index: true },
     assignedAgentId: { type: Schema.Types.ObjectId, ref: "User", default: null, index: true },
     unreadCount: { type: Number, default: 0, min: 0 },
     status: { type: String, enum: ["open", "pending", "closed"], default: "open", index: true },

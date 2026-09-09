@@ -3,7 +3,7 @@ export interface HealthResponse {
   service: "nhuu-chat";
 }
 
-export type ChatPlatform = "facebook" | "instagram" | "zalo" | "telegram";
+export type ChatPlatform = "facebook" | "instagram" | "zalo" | "telegram" | "telegram_personal";
 export type ConversationStatus = "open" | "pending" | "closed";
 
 export interface ChatMessageContract {

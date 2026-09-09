@@ -25,7 +25,7 @@ const messageSchema = new Schema(
     },
     platform: {
       type: String,
-      enum: ["facebook", "instagram", "zalo", "telegram"],
+      enum: ["facebook", "instagram", "zalo", "telegram", "telegram_personal"],
       required: true
     },
     externalMessageId: { type: String, set: normalizeExternalMessageId },

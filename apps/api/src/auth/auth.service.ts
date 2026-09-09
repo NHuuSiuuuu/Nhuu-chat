@@ -92,6 +92,32 @@ export async function verifyAccessToken(token: string): Promise<AuthUser> {
   return user;
 }
 
+export async function register(
+  name: string,
+  email: string,
+  password: string
+): Promise<{ user: AuthUser; tokens: TokenPair }> {
+  const document = await UserModel.create({
+    name: name.trim(),
+    email: email.trim().toLowerCase(),
+    passwordHash: await hashPassword(password),
+    role: "customer"
+  });
+
+  const user: AuthUser = {
+    id: document.id,
+    email: document.email,
+    role: document.role
+  };
+  const tokens = await issueTokens(user);
+  await UserModel.updateOne(
+    { _id: document._id },
+    { $set: { refreshTokenHash: refreshDigest(tokens.refreshToken) } }
+  );
+
+  return { user, tokens };
+}
+
 export async function login(email: string, password: string): Promise<{
   user: AuthUser;
   tokens: TokenPair;

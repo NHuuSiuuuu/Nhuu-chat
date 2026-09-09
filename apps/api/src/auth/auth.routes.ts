@@ -1,9 +1,34 @@
 import { Router } from "express";
 
 import { AppError } from "../common/errors.js";
-import { login, rotateRefreshToken } from "./auth.service.js";
+import { login, register, rotateRefreshToken } from "./auth.service.js";
 
 export const authRouter = Router();
+
+authRouter.post("/register", async (request, response, next) => {
+  try {
+    const { name, email, password } = request.body as Record<string, unknown>;
+    if (
+      typeof name !== "string" ||
+      !name.trim() ||
+      typeof email !== "string" ||
+      !email.trim() ||
+      typeof password !== "string" ||
+      password.length < 8
+    ) {
+      throw new AppError(
+        400,
+        "INVALID_REQUEST",
+        "Name, email and a password of at least 8 characters are required"
+      );
+    }
+
+    const { user, tokens } = await register(name, email, password);
+    response.status(201).json({ user, ...tokens });
+  } catch (error) {
+    next(error);
+  }
+});
 
 authRouter.post("/login", async (request, response, next) => {
   try {

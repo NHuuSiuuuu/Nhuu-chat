@@ -6,6 +6,9 @@ import { normalizeTelegramUpdate } from "./telegram.normalizer.js";
 import { TelegramClient } from "./telegram.client.js";
 import { telegramChannelConfigSchema, telegramUpdateSchema } from "./telegram.schemas.js";
 import { isBotPaused } from "../../orchestration/bot-pause.service.js";
+import { emitChatEvent, emitInboxEvent } from "../../realtime/socket.js";
+import { toConversation } from "../../conversations/conversation.service.js";
+import { toMessage } from "../../messages/message.service.js";
 
 export async function ingestTelegramUpdate(input: unknown): Promise<void> {
   const update = telegramUpdateSchema.parse(input);
@@ -44,7 +47,7 @@ export async function ingestTelegramUpdate(input: unknown): Promise<void> {
   );
 
   try {
-    await MessageModel.create({
+    const storedMessage = await MessageModel.create({
       conversationId: conversation._id,
       platform: normalized.platform,
       externalMessageId: normalized.externalMessageId,
@@ -62,6 +65,11 @@ export async function ingestTelegramUpdate(input: unknown): Promise<void> {
       { _id: conversation._id },
       { $inc: { unreadCount: 1 } }
     );
+    const updatedConversation = await ConversationModel.findById(conversation._id).lean();
+    if (updatedConversation) {
+      emitChatEvent("chat:message_received", String(conversation._id), toMessage(storedMessage.toObject()));
+      emitInboxEvent("chat:conversation_updated", null, toConversation(updatedConversation));
+    }
   } catch (error) {
     if (isDuplicateKey(error)) return;
     throw error;
