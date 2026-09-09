@@ -18,15 +18,20 @@ function conversationIdParam(value: string | string[]): string {
 
 conversationRouter.get("/", requireRole(...inboxAccessRoles), async (req, res, next) => {
   try {
+    const auth = (req as AuthenticatedRequest).auth;
+    if (!auth) throw new AppError(401, "AUTHENTICATION_REQUIRED", "Authentication is required");
     const query = req.query as Record<string, unknown>;
     const scalar = (value: unknown) => typeof value === "string" ? value : undefined;
-    res.json(await listConversations({ page: scalar(query.page), limit: scalar(query.limit), platform: scalar(query.platform), status: scalar(query.status) }));
+    res.json(await listConversations({ page: scalar(query.page), limit: scalar(query.limit), platform: scalar(query.platform), status: scalar(query.status) }, auth));
   } catch (e) { next(e); }
 });
 conversationRouter.get("/:id/messages", requireRole(...inboxAccessRoles), async (req, res, next) => {
   try {
     const conversationId = conversationIdParam(req.params.id);
-    if (!(await ConversationModel.exists({ _id: conversationId }))) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
+    const auth = (req as AuthenticatedRequest).auth;
+    if (!auth) throw new AppError(401, "AUTHENTICATION_REQUIRED", "Authentication is required");
+    const accessFilter = auth.role === "admin" ? {} : auth.role === "agent" ? { assignedAgentId: auth.id } : { ownerId: auth.id };
+    if (!(await ConversationModel.exists({ _id: conversationId, ...accessFilter }))) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
     const query = req.query as Record<string, unknown>;
     res.json(await listMessages(conversationId, { page: typeof query.page === "string" ? query.page : undefined, limit: typeof query.limit === "string" ? query.limit : undefined }));
   } catch (e) { next(e); }
@@ -35,8 +40,12 @@ conversationRouter.patch("/:id/read", requireRole(...inboxAccessRoles), async (r
   try {
     const auth = (req as AuthenticatedRequest).auth;
     if (!auth) throw new AppError(401, "AUTHENTICATION_REQUIRED", "Authentication is required");
-    const result = await markConversationRead(conversationIdParam(req.params.id), auth);
-    emitInboxEvent("chat:conversation_updated", auth.role === "customer" ? auth.id : null, result);
+    const conversationId = conversationIdParam(req.params.id);
+    const target = await ConversationModel.findById(conversationId).lean();
+    const result = await markConversationRead(conversationId, auth);
+    const recipients = new Set([target?.ownerId ? String(target.ownerId) : "", target?.assignedAgentId ? String(target.assignedAgentId) : ""]);
+    for (const recipient of recipients) if (recipient) emitInboxEvent("chat:conversation_updated", recipient, result);
+    if (recipients.size === 1 || !recipients.has(auth.id)) emitInboxEvent("chat:conversation_updated", null, result);
     res.json(result);
   } catch (e) { next(e); }
 });

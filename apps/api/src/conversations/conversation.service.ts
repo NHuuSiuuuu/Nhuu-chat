@@ -3,18 +3,20 @@ import { ConversationModel } from "../models/conversation.model.js";
 import { UserModel } from "../models/user.model.js";
 import { isValidObjectId } from "mongoose";
 import type { AuthUser } from "../auth/auth.service.js";
+import { conversationAccessFilter } from "../realtime/access.js";
 
 export async function listConversations(query: {
   page?: string;
   limit?: string;
   platform?: string;
   status?: string;
-}) {
+}, auth?: AuthUser) {
   const page = parsePositiveInt(query.page, 1);
   const limit = Math.min(100, parsePositiveInt(query.limit, 20));
   const filter: Record<string, unknown> = {};
   if (query.platform) filter.platform = query.platform;
   if (query.status) filter.status = query.status;
+  if (auth) Object.assign(filter, conversationAccessFilter(auth));
   const [rows, total] = await Promise.all([
     ConversationModel.find(filter).populate("customerId", "name avatarUrl").sort({ lastMessageAt: -1, _id: 1 }).skip((page - 1) * limit).limit(limit).lean(),
     ConversationModel.countDocuments(filter)
@@ -44,7 +46,7 @@ export async function updateStatus(id: string, status: "open" | "pending" | "clo
 }
 
 export async function markConversationRead(id: string, auth: AuthUser) {
-  const accessFilter = auth.role === "admin" ? {} : auth.role === "agent" ? { assignedAgentId: auth.id } : { ownerId: auth.id };
+  const accessFilter = conversationAccessFilter(auth);
   const row = await ConversationModel.findOneAndUpdate({ _id: id, ...accessFilter }, { unreadCount: 0 }, { new: true }).populate("customerId", "name avatarUrl").lean();
   if (!row) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
   return toConversation(row);
