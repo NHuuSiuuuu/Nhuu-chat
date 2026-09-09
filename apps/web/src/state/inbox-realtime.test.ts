@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { appendUniqueMessage, upsertConversation } from "./inbox-realtime.js";
+import { appendUniqueMessage, mergeMessages, upsertConversation } from "./inbox-realtime.js";
 
 const conversation = {
   id: "conversation-1",
@@ -33,5 +33,11 @@ describe("inbox realtime state", () => {
 
   it("does not append the same socket message twice", () => {
     expect(appendUniqueMessage([message], message)).toEqual([message]);
+  });
+
+  it("merges history without dropping a message received while history was loading", () => {
+    const realtimeMessage = { ...message, id: "message-2", content: "Tin realtime", createdAt: "2026-09-09T08:00:01.000Z" };
+
+    expect(mergeMessages([realtimeMessage], [message])).toEqual([message, realtimeMessage]);
   });
 });

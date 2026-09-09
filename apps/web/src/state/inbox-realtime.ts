@@ -4,6 +4,12 @@ export function appendUniqueMessage(messages: ChatMessageContract[], message: Ch
   return messages.some((item) => item.id === message.id) ? messages : [...messages, message];
 }
 
+export function mergeMessages(current: ChatMessageContract[], incoming: ChatMessageContract[]): ChatMessageContract[] {
+  const byId = new Map(current.map((message) => [message.id, message]));
+  for (const message of incoming) byId.set(message.id, message);
+  return [...byId.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
+}
+
 export function upsertConversation(conversations: ConversationContract[], conversation: ConversationContract): ConversationContract[] {
   return [conversation, ...conversations.filter((item) => item.id !== conversation.id)]
     .sort((left, right) => right.lastMessageAt.localeCompare(left.lastMessageAt));
