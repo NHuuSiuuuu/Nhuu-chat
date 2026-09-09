@@ -5,6 +5,7 @@ import { createProviderSecret } from "../../models/provider-secret.service.js";
 import { normalizeTelegramUpdate } from "./telegram.normalizer.js";
 import { TelegramClient } from "./telegram.client.js";
 import { telegramChannelConfigSchema, telegramUpdateSchema } from "./telegram.schemas.js";
+import { isBotPaused } from "../../orchestration/bot-pause.service.js";
 
 export async function ingestTelegramUpdate(input: unknown): Promise<void> {
   const update = telegramUpdateSchema.parse(input);
@@ -77,6 +78,16 @@ export async function registerTelegramChannel(input: unknown) {
   await new TelegramClient(config.botToken).setWebhook(webhookUrl, webhookSecret);
   return { provider: "telegram", webhookUrl } as const;
 }
+
+export async function orchestrateTelegramReply(input: TelegramReplyInput, deps: { now: () => Date; answer: (content: string) => Promise<{ answer: string; sources: unknown[]; handoff: boolean }>; createBotMessage: (input: TelegramReplyInput, answer: string) => Promise<{ id: string }>; enqueue: (command: { messageId: string; conversationId: string; platform: "telegram"; channelId: string; content: string }) => Promise<string> }): Promise<void> {
+  if (isBotPaused(input.botPausedUntil ?? null, deps.now())) return;
+  const result = await deps.answer(input.content);
+  const { botPausedUntil: _botPausedUntil, ...messageInput } = input;
+  const message = await deps.createBotMessage(messageInput, result.answer);
+  await deps.enqueue({ messageId: message.id, conversationId: input.conversationId, platform: "telegram", channelId: input.channelId, content: result.answer });
+}
+
+interface TelegramReplyInput { conversationId: string; channelId: string; content: string; botPausedUntil?: Date | null; }
 
 function isDuplicateKey(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === 11000;
