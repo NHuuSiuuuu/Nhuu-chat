@@ -9,17 +9,22 @@ import { conversationRouter } from "./conversations/conversation.routes.js";
 import { messageRouter } from "./messages/message.routes.js";
 import { customerRouter } from "./customers/customer.routes.js";
 import { knowledgeRouter } from "./knowledge/knowledge.routes.js";
+import { corsAllowlist, rateLimit, requestId, securityHeaders } from "./common/security.middleware.js";
 
 export function createApp(): Express {
   const app = express();
 
+  app.disable("x-powered-by");
+  app.use(securityHeaders);
+  app.use(requestId);
+  app.use(corsAllowlist);
   app.use(express.json());
   app.get("/health", (_request, response) => {
     const health: HealthResponse = { status: "ok", service: "nhuu-chat" };
 
     response.status(200).json(health);
   });
-  app.use("/api/v1/auth", authRouter);
+  app.use("/api/v1/auth", rateLimit({ windowMs: 60_000, max: 60 }), authRouter);
   app.use("/api/v1/channels/telegram", telegramRouter);
   app.use("/api/v1/conversations", conversationRouter);
   app.use("/api/v1/messages", messageRouter);
