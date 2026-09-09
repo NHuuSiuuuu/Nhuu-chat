@@ -7,11 +7,13 @@ import { env } from "@nhuu-chat/config";
 import { createApp } from "./app.js";
 import { connectDatabase, disconnectDatabase } from "./db/mongoose.js";
 import { closeRealtimeServer, createRealtimeServer } from "./realtime/socket.js";
+import { restoreActivePersonalClients } from "./channels/telegram-personal/telegram-personal.service.js";
 
 import type { Server as HttpServer } from "node:http";
 
 export interface ServerDependencies {
   connectDatabase?: (uri: string) => Promise<void>;
+  restorePersonalClients?: () => Promise<void>;
   disconnectDatabase?: () => Promise<void>;
   listen?: (server: HttpServer, port: number) => Promise<void>;
 }
@@ -39,8 +41,10 @@ function listenHttpServer(server: HttpServer, port: number): Promise<void> {
 
 export async function startServer(dependencies: ServerDependencies = {}): Promise<ServerHandle> {
   const connect = dependencies.connectDatabase ?? connectDatabase;
+  const restore = dependencies.restorePersonalClients ?? restoreActivePersonalClients;
   const disconnect = dependencies.disconnectDatabase ?? disconnectDatabase;
   await connect(env.MONGODB_URI);
+  await restore();
   const httpServer = createServer(createApp());
 
   const socketServer = createRealtimeServer(httpServer);

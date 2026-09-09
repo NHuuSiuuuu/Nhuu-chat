@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const findOne = vi.fn();
+const find = vi.fn();
 const decryptSecret = vi.fn(() => "restored-session");
 const fakeClient = {
   connect: vi.fn(async () => undefined),
@@ -21,7 +22,7 @@ vi.mock("telegram", () => ({
 vi.mock("telegram/events/index.js", () => ({ NewMessage: class {} }));
 vi.mock("telegram/sessions/index.js", () => ({ StringSession: class { constructor(public readonly value: string) {} } }));
 vi.mock("../../common/crypto.js", () => ({ decryptSecret, encryptSecret: vi.fn() }));
-vi.mock("./telegram-personal.model.js", () => ({ TelegramPersonalSessionModel: { findOne } }));
+vi.mock("./telegram-personal.model.js", () => ({ TelegramPersonalSessionModel: { findOne, find } }));
 
 describe("Telegram personal session restore", () => {
   beforeEach(() => {
@@ -44,5 +45,20 @@ describe("Telegram personal session restore", () => {
     expect(fakeClient.connect).toHaveBeenCalledOnce();
     expect(fakeClient.checkAuthorization).toHaveBeenCalledOnce();
     expect(client).toBeDefined();
+  });
+
+  it("restores every active personal session during API startup", async () => {
+    find.mockReturnValue({
+      select: () => ({
+        lean: async () => [{ userId: "user-2", encryptedSession: "encrypted-session", status: "active" }]
+      })
+    });
+    const { restoreActivePersonalClients } = await import("./telegram-personal.service.js");
+
+    await restoreActivePersonalClients();
+
+    expect(find).toHaveBeenCalledWith({ status: "active" });
+    expect(decryptSecret).toHaveBeenCalledWith("encrypted-session");
+    expect(fakeClient.connect).toHaveBeenCalledOnce();
   });
 });

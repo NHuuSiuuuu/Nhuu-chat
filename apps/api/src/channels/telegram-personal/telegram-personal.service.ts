@@ -162,8 +162,25 @@ export async function getActivePersonalClient(userId: string): Promise<TelegramC
     .lean();
   if (!session) return undefined;
 
+  return restorePersonalClient(userId, session.encryptedSession);
+}
+
+export async function restoreActivePersonalClients(): Promise<void> {
+  const sessions = await TelegramPersonalSessionModel.find({ status: "active" })
+    .select("+encryptedSession")
+    .lean();
+  await Promise.all(sessions.map(async (session) => {
+    try {
+      await restorePersonalClient(String(session.userId), session.encryptedSession);
+    } catch (error) {
+      console.error(`Failed to restore Telegram personal session for user ${String(session.userId)}`, error);
+    }
+  }));
+}
+
+async function restorePersonalClient(userId: string, encryptedSession: string): Promise<TelegramClient | undefined> {
   const credentials = telegramCredentials();
-  const client = new TelegramClient(new StringSession(decryptSecret(session.encryptedSession)), credentials.apiId, credentials.apiHash, {
+  const client = new TelegramClient(new StringSession(decryptSecret(encryptedSession)), credentials.apiId, credentials.apiHash, {
     connectionRetries: 3
   });
   await client.connect();

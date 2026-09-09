@@ -17,6 +17,9 @@ describe("production server bootstrap", () => {
       connectDatabase: async () => {
         events.push("connect");
       },
+      restorePersonalClients: async () => {
+        events.push("restore-personal-sessions");
+      },
       disconnectDatabase: async () => {
         events.push("disconnect");
       },
@@ -25,9 +28,9 @@ describe("production server bootstrap", () => {
       }
     });
 
-    expect(events).toEqual(["connect", "listen"]);
+    expect(events).toEqual(["connect", "restore-personal-sessions", "listen"]);
     await handle.shutdown();
-    expect(events).toEqual(["connect", "listen", "disconnect"]);
+    expect(events).toEqual(["connect", "restore-personal-sessions", "listen", "disconnect"]);
   });
 
   it("disconnects when listen fails after database connection", async () => {
@@ -36,6 +39,7 @@ describe("production server bootstrap", () => {
     await expect(
       startServer({
         connectDatabase: async () => undefined,
+        restorePersonalClients: async () => undefined,
         disconnectDatabase,
         listen: async () => {
           throw new Error("port is unavailable");
