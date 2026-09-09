@@ -16,20 +16,22 @@ export function InboxPage({ token, refresh, onBack }: { token: string; refresh?:
   const [conversations, setConversations] = useState<ConversationContract[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageContract[]>([]);
+  const readSequenceRef = React.useRef(0);
   const active = conversations.find((item) => item.id === activeId) ?? null;
   const [readRequestKey, setReadRequestKey] = useState(0);
   async function markActiveRead(id: string) {
-    let previous: ConversationContract | undefined;
+    const sequence = ++readSequenceRef.current;
+    let previousUnread: number | undefined;
     setConversations((current) => current.map((item) => {
       if (item.id !== id) return item;
-      previous = item;
+      previousUnread = item.unreadCount;
       return markConversationRead(item);
     }));
     try {
       const result = await apiRequest<ConversationContract>(API_URL, `/api/v1/conversations/${id}/read`, token, { method: "PATCH" }, refresh);
-      setConversations((current) => current.map((item) => item.id === id ? { ...item, ...result, unreadCount: 0 } : item));
+      if (sequence === readSequenceRef.current) setConversations((current) => current.map((item) => item.id === id ? { ...item, ...result, unreadCount: 0 } : item));
     } catch {
-      if (previous) setConversations((current) => current.map((item) => item.id === id ? previous as ConversationContract : item));
+      if (sequence === readSequenceRef.current && previousUnread !== undefined) setConversations((current) => current.map((item) => item.id === id && item.unreadCount === 0 ? { ...item, unreadCount: previousUnread ?? item.unreadCount } : item));
     }
   }
   useEffect(() => { void apiRequest<{ conversations: ConversationContract[] }>(API_URL, "/api/v1/conversations", token, {}, refresh).then((result) => { setConversations(result.conversations); setActiveId((current) => current ?? result.conversations[0]?.id ?? null); }); }, [token, refresh]);
@@ -51,7 +53,7 @@ export function InboxPage({ token, refresh, onBack }: { token: string; refresh?:
     socket.on("connect", joinActiveRoom);
     socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => { if (message.conversationId === activeId) { setMessages((current) => appendUniqueMessage(current, message)); void markActiveRead(activeId); } });
     socket.on(chatEvents.conversationUpdated, (conversation: ConversationContract) => {
-      setConversations((current) => upsertConversation(current, conversation.id === activeId ? markConversationRead(conversation) : conversation));
+      setConversations((current) => upsertConversation(current, conversation));
       setActiveId((current) => current ?? conversation.id);
     });
     joinActiveRoom();
