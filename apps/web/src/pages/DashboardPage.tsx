@@ -8,7 +8,7 @@ import { PlatformIcon } from "../components/dashboard/PlatformIcon.js";
 
 interface TelegramStatus { connected: boolean; displayName: string | null; username: string | null; }
 
-export function DashboardPage({ token, refresh, onOpenInbox }: { token: string; refresh?: () => Promise<string | null>; onOpenInbox: () => void }) {
+export function DashboardPage({ token, refresh, onOpenInbox }: { token: string; refresh?: () => Promise<string | null>; onOpenInbox: () => void; onOpenTelegram?: () => void }) {
   const [status, setStatus] = useState<TelegramStatus | null>(null);
   const [showConnect, setShowConnect] = useState(false);
   const [search, setSearch] = useState("");
