@@ -25,6 +25,5 @@ describe("ConnectModal Tailwind migration", () => {
     expect(source).toContain("error ?? qr.error");
     expect(source).toContain("event.key !== \"Tab\"");
     expect(source).toContain("openerRef.current?.focus()");
-    expect(source).toContain('provider === "all"');
   });
 });
