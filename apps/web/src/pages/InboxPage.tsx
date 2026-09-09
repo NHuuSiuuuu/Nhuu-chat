@@ -30,10 +30,10 @@ export function InboxPage({ token, refresh, onBack }: { token: string; refresh?:
       return markConversationRead(item);
     }));
     try {
-      const result = await apiRequest<ConversationContract>(API_URL, `/api/v1/conversations/${id}/read`, token, { method: "PATCH" }, refresh);
+      await apiRequest<ConversationContract>(API_URL, `/api/v1/conversations/${id}/read`, token, { method: "PATCH" }, refresh);
       if (readStateRef.current.get(id)?.generation === generation) {
         readStateRef.current.delete(id);
-        setConversations((current) => current.map((item) => item.id === id ? { ...item, ...result, unreadCount: 0 } : item));
+        setConversations((current) => current.map((item) => item.id === id ? { ...item, unreadCount: 0 } : item));
       }
     } catch {
       const readState = readStateRef.current.get(id);
@@ -64,7 +64,7 @@ export function InboxPage({ token, refresh, onBack }: { token: string; refresh?:
     socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => { if (message.conversationId === activeId) { setMessages((current) => appendUniqueMessage(current, message)); void markActiveRead(activeId); } });
     socket.on(chatEvents.conversationUpdated, (conversation: ConversationContract) => {
       const readState = readStateRef.current.get(conversation.id);
-      if (conversation.unreadCount === 0 && readState) readStateRef.current.set(conversation.id, { ...readState, confirmedGeneration: readState.generation });
+      if (conversation.unreadCount === 0 && readState) readStateRef.current.set(conversation.id, { generation: readState.generation, baseline: 0, confirmedGeneration: readState.generation });
       setConversations((current) => upsertConversation(current, conversation));
       setActiveId((current) => current ?? conversation.id);
     });
