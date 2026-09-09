@@ -44,6 +44,11 @@ export function ConnectModal({ token, refresh, onClose, onConnected }: { token: 
       if (!focusable?.length) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
+      if (!dialogRef.current?.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
+        return;
+      }
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
@@ -107,7 +112,7 @@ export function ConnectModal({ token, refresh, onClose, onConnected }: { token: 
   const provider = connectionProviders.find((item) => item.id === selected) ?? connectionProviders[0];
   return <div className={`fixed inset-0 z-20 grid place-items-center bg-slate-900/50 p-3 backdrop-blur-[5px] transition-opacity duration-200 motion-reduce:transition-none sm:p-6 ${closing ? "opacity-0" : "opacity-100"}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) requestClose(); }}>
     <section ref={dialogRef} className={`flex max-h-[calc(100vh-2rem)] w-full max-w-[1120px] flex-col overflow-hidden rounded-[20px] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.28)] transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none ${closing ? "translate-y-2 scale-[.98] opacity-0" : "translate-y-0 scale-100 opacity-100"}`} role="dialog" aria-modal="true" aria-labelledby="connect-modal-title">
-      <header className="flex shrink-0 items-center justify-between border-b border-slate-200/80 px-5 py-[18px] sm:px-7 sm:py-[22px]"><h2 id="connect-modal-title" className="m-0 text-[15px] font-bold text-slate-700 sm:text-xl">Thêm kết nối</h2><button ref={closeButtonRef} autoFocus className="cursor-pointer border-0 bg-transparent text-[25px] leading-none text-slate-400 transition-colors hover:text-slate-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500" type="button" aria-label="Đóng" onClick={requestClose}>×</button></header>
+      <header className="flex shrink-0 items-center justify-between border-b border-slate-200/80 px-5 py-[18px] sm:px-7 sm:py-[22px]"><h2 id="connect-modal-title" className="m-0 text-[15px] font-bold text-slate-700 sm:text-xl">Thêm kết nối</h2><button ref={closeButtonRef} className="cursor-pointer border-0 bg-transparent text-[25px] leading-none text-slate-400 transition-colors hover:text-slate-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500" type="button" aria-label="Đóng" onClick={requestClose}>×</button></header>
       <div className="min-h-0 flex-1 overflow-y-auto"><div className="grid min-h-[540px] grid-cols-1 sm:grid-cols-[260px_minmax(0,1fr)]">
         <nav className="flex max-h-none gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50/70 p-3 sm:block sm:max-h-[540px] sm:overflow-y-auto sm:border-r sm:border-b-0" aria-label="Nền tảng kết nối">
           {connectionProviders.map((item) => <button key={item.id} type="button" className={`flex min-h-16 min-w-[150px] w-full shrink-0 cursor-pointer items-center gap-3 rounded-lg border-0 px-3.5 py-3 text-left text-[15px] transition-[background-color,transform] duration-150 hover:translate-x-0.5 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-500 motion-reduce:transition-none ${selected === item.id ? "bg-blue-50 text-slate-900" : "bg-transparent text-slate-700"}`} onClick={() => { setSelected(item.id); if (item.id !== "telegram") { setQr(null); setError(null); } }}><span className={`inline-grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 [&_.platform-icon]:block ${item.id === "pending" ? "bg-amber-100" : ""}`}><PlatformIcon provider={item.id} size={24} /></span><span>{item.label}</span>{item.badge && <small className="ml-auto rounded-lg bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">{item.badge}</small>}</button>)}

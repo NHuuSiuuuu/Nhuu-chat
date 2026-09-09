@@ -20,10 +20,11 @@ describe("ConnectModal Tailwind migration", () => {
     expect(source).toContain("max-h-[calc(100vh-2rem)]");
     expect(source).toContain("overflow-y-auto");
     expect(source).toContain("KeyboardEvent");
-    expect(source).toContain("autoFocus");
+    expect(source).not.toContain("autoFocus");
     expect(source).toContain("closeButtonRef");
     expect(source).toContain("error ?? qr.error");
     expect(source).toContain("event.key !== \"Tab\"");
+    expect(source).toContain("!dialogRef.current?.contains(document.activeElement)");
     expect(source).toContain("openerRef.current?.focus()");
   });
 });
