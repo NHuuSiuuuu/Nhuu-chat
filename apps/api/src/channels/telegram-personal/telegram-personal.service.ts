@@ -11,7 +11,7 @@ import { ConversationModel } from "../../models/conversation.model.js";
 import { CustomerModel } from "../../models/customer.model.js";
 import { MessageModel } from "../../models/message.model.js";
 import { TelegramPersonalSessionModel } from "./telegram-personal.model.js";
-import { emitChatEvent, emitInboxEvent } from "../../realtime/socket.js";
+import { emitChatEvent, emitInboxEventToRecipients } from "../../realtime/socket.js";
 import { toConversation } from "../../conversations/conversation.service.js";
 import { toMessage } from "../../messages/message.service.js";
 import { createPasswordPrompt, isRetryableTelegramPasswordError, shouldReusePendingQr, type PasswordPrompt } from "./telegram-personal.auth.js";
@@ -220,7 +220,7 @@ function attachPersonalMessageSync(userId: string, client: TelegramClient): void
       const storedMessage = await MessageModel.create({ conversationId: conversation._id, platform: "telegram_personal", externalMessageId: String(message.id), senderType: "customer", senderId, type: "text", content, deliveryStatus: "delivered" });
       const conversationPayload = toConversation(conversation.toObject());
       emitChatEvent("chat:message_received", String(conversation._id), toMessage(storedMessage.toObject()));
-      emitInboxEvent("chat:conversation_updated", userId, conversationPayload);
+      emitInboxEventToRecipients("chat:conversation_updated", [userId, conversation.assignedAgentId ? String(conversation.assignedAgentId) : ""], conversationPayload);
     } catch (error) {
       if (!isDuplicateKey(error)) throw error;
     }

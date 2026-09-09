@@ -57,8 +57,8 @@ export function emitInboxEvent(event: string, ownerId: string | null, payload: u
 
 export function emitInboxEventToRecipients(event: string, recipientIds: string[], payload: unknown): void {
   if (!activeServer) return;
-  activeServer.to("inbox:admins").emit(event, payload);
-  for (const recipientId of new Set(recipientIds.filter(Boolean))) activeServer.to(`inbox:${recipientId}`).emit(event, payload);
+  const rooms = ["inbox:admins", ...new Set(recipientIds.filter(Boolean).map((recipientId) => `inbox:${recipientId}`))];
+  activeServer.to(rooms).emit(event, payload);
 }
 
 export async function closeRealtimeServer(io: Server): Promise<void> {

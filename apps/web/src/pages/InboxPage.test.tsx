@@ -26,6 +26,7 @@ describe("Inbox Tailwind migration", () => {
     expect(source).toContain("message.conversationId === activeId");
     expect(source).toContain("readStateRef");
     expect(source).toContain("generation");
+    expect(source).toContain("confirmedGeneration");
     const avatar = readFileSync(new URL("../components/conversations/ConversationAvatar.tsx", import.meta.url), "utf8");
     expect(avatar).toContain("onError");
   });

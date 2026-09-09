@@ -6,7 +6,7 @@ import { normalizeTelegramUpdate } from "./telegram.normalizer.js";
 import { TelegramClient } from "./telegram.client.js";
 import { telegramChannelConfigSchema, telegramUpdateSchema } from "./telegram.schemas.js";
 import { isBotPaused } from "../../orchestration/bot-pause.service.js";
-import { emitChatEvent, emitInboxEvent } from "../../realtime/socket.js";
+import { emitChatEvent, emitInboxEventToRecipients } from "../../realtime/socket.js";
 import { toConversation } from "../../conversations/conversation.service.js";
 import { toMessage } from "../../messages/message.service.js";
 
@@ -70,7 +70,7 @@ export async function ingestTelegramUpdate(input: unknown): Promise<void> {
     const updatedConversation = await ConversationModel.findById(conversation._id).populate("customerId", "name avatarUrl").lean();
     if (updatedConversation) {
       emitChatEvent("chat:message_received", String(conversation._id), toMessage(storedMessage.toObject()));
-      emitInboxEvent("chat:conversation_updated", null, toConversation(updatedConversation));
+      emitInboxEventToRecipients("chat:conversation_updated", [updatedConversation.ownerId ? String(updatedConversation.ownerId) : "", updatedConversation.assignedAgentId ? String(updatedConversation.assignedAgentId) : ""], toConversation(updatedConversation));
     }
   } catch (error) {
     if (isDuplicateKey(error)) return;

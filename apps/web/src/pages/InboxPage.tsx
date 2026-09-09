@@ -16,14 +16,15 @@ export function InboxPage({ token, refresh, onBack }: { token: string; refresh?:
   const [conversations, setConversations] = useState<ConversationContract[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageContract[]>([]);
-  const readStateRef = React.useRef(new Map<string, { generation: number; baseline: number }>());
+  const nextReadGenerationRef = React.useRef(0);
+  const readStateRef = React.useRef(new Map<string, { generation: number; baseline: number; confirmedGeneration?: number }>());
   const active = conversations.find((item) => item.id === activeId) ?? null;
   const [readRequestKey, setReadRequestKey] = useState(0);
   async function markActiveRead(id: string) {
     const previousReadState = readStateRef.current.get(id);
     const currentUnread = previousReadState?.baseline ?? conversations.find((item) => item.id === id)?.unreadCount ?? 0;
-    const generation = (previousReadState?.generation ?? 0) + 1;
-    readStateRef.current.set(id, { generation, baseline: previousReadState?.baseline ?? currentUnread });
+    const generation = ++nextReadGenerationRef.current;
+    readStateRef.current.set(id, { generation, baseline: previousReadState?.confirmedGeneration === previousReadState?.generation ? currentUnread : previousReadState?.baseline ?? currentUnread });
     setConversations((current) => current.map((item) => {
       if (item.id !== id) return item;
       return markConversationRead(item);
@@ -35,7 +36,8 @@ export function InboxPage({ token, refresh, onBack }: { token: string; refresh?:
         setConversations((current) => current.map((item) => item.id === id ? { ...item, ...result, unreadCount: 0 } : item));
       }
     } catch {
-      if (readStateRef.current.get(id)?.generation === generation) {
+      const readState = readStateRef.current.get(id);
+      if (readState?.generation === generation && readState.confirmedGeneration !== generation) {
         const baseline = readStateRef.current.get(id)?.baseline ?? currentUnread;
         readStateRef.current.delete(id);
         setConversations((current) => current.map((item) => item.id === id && item.unreadCount === 0 ? { ...item, unreadCount: baseline } : item));
@@ -61,7 +63,8 @@ export function InboxPage({ token, refresh, onBack }: { token: string; refresh?:
     socket.on("connect", joinActiveRoom);
     socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => { if (message.conversationId === activeId) { setMessages((current) => appendUniqueMessage(current, message)); void markActiveRead(activeId); } });
     socket.on(chatEvents.conversationUpdated, (conversation: ConversationContract) => {
-      if (conversation.unreadCount === 0) readStateRef.current.delete(conversation.id);
+      const readState = readStateRef.current.get(conversation.id);
+      if (conversation.unreadCount === 0 && readState) readStateRef.current.set(conversation.id, { ...readState, confirmedGeneration: readState.generation });
       setConversations((current) => upsertConversation(current, conversation));
       setActiveId((current) => current ?? conversation.id);
     });
