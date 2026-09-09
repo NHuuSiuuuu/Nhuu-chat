@@ -5,7 +5,7 @@ import { Api, TelegramClient } from "telegram";
 import { NewMessage } from "telegram/events/index.js";
 import { StringSession } from "telegram/sessions/index.js";
 
-import { encryptSecret } from "../../common/crypto.js";
+import { decryptSecret, encryptSecret } from "../../common/crypto.js";
 import { AppError } from "../../common/errors.js";
 import { ConversationModel } from "../../models/conversation.model.js";
 import { CustomerModel } from "../../models/customer.model.js";
@@ -153,8 +153,28 @@ export async function getPersonalSessionStatus(userId: string) {
     : { connected: false, displayName: null, username: null };
 }
 
-export function getActivePersonalClient(userId: string): TelegramClient | undefined {
-  return activePersonalClients.get(userId);
+export async function getActivePersonalClient(userId: string): Promise<TelegramClient | undefined> {
+  const activeClient = activePersonalClients.get(userId);
+  if (activeClient) return activeClient;
+
+  const session = await TelegramPersonalSessionModel.findOne({ userId, status: "active" })
+    .select("+encryptedSession")
+    .lean();
+  if (!session) return undefined;
+
+  const credentials = telegramCredentials();
+  const client = new TelegramClient(new StringSession(decryptSecret(session.encryptedSession)), credentials.apiId, credentials.apiHash, {
+    connectionRetries: 3
+  });
+  await client.connect();
+  if (!(await client.checkAuthorization())) {
+    await client.disconnect().catch(() => undefined);
+    return undefined;
+  }
+
+  activePersonalClients.set(userId, client);
+  attachPersonalMessageSync(userId, client);
+  return client;
 }
 
 function attachPersonalMessageSync(userId: string, client: TelegramClient): void {

@@ -43,3 +43,4 @@ Các ghi chú nâng cấp được viết rõ ràng để cả team dễ theo d�
 ### Đã sửa
 
 - Sửa lỗi GramJS biến yêu cầu mật khẩu 2FA thành `AUTH_USER_CANCEL`.
+- Sửa lỗi gửi tin Telegram cá nhân trả `409 TELEGRAM_PERSONAL_DISCONNECTED` sau khi API restart bằng cách khôi phục session đã mã hóa từ MongoDB trước khi gửi.

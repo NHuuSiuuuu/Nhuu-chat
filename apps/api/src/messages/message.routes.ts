@@ -22,7 +22,7 @@ messageRouter.post("/send", requireRole(...inboxAccessRoles), async (req, res, n
     if (conversation.platform === "telegram_personal") {
       const userId = (req as import("../auth/auth.middleware.js").AuthenticatedRequest).auth?.id;
       if (!userId || String(conversation.ownerId) !== userId) throw new AppError(403, "FORBIDDEN", "You do not own this Telegram connection");
-      const client = getActivePersonalClient(userId);
+      const client = await getActivePersonalClient(userId);
       if (!client) throw new AppError(409, "TELEGRAM_PERSONAL_DISCONNECTED", "Telegram personal session is not active");
       const sent = await client.sendMessage(conversation.channelId, { message: content });
       externalMessageId = String(sent.id);
