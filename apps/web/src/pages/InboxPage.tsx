@@ -18,39 +18,72 @@ export function InboxPage({ token, refresh, onBack }: { token: string; refresh?:
   const [messages, setMessages] = useState<ChatMessageContract[]>([]);
   const nextReadGenerationRef = React.useRef(0);
   const conversationRevisionRef = React.useRef(new Map<string, number>());
+  const conversationsRef = React.useRef<ConversationContract[]>([]);
   const readStateRef = React.useRef(new Map<string, { generation: number; baseline: number; revision: number; confirmedGeneration?: number; confirmedRevision?: number }>());
   const active = conversations.find((item) => item.id === activeId) ?? null;
   const [readRequestKey, setReadRequestKey] = useState(0);
   async function markActiveRead(id: string) {
     const previousReadState = readStateRef.current.get(id);
     const currentRevision = conversationRevisionRef.current.get(id) ?? 0;
-    const currentUnread = conversations.find((item) => item.id === id)?.unreadCount ?? 0;
+    const currentUnread = conversationsRef.current.find((item) => item.id === id)?.unreadCount ?? 0;
     const generation = ++nextReadGenerationRef.current;
+    const readRevision = currentRevision + 1;
+    conversationRevisionRef.current.set(id, readRevision);
     let baseline = currentUnread;
-    if (previousReadState && previousReadState.confirmedGeneration === previousReadState.generation && previousReadState.confirmedRevision === currentRevision) baseline = previousReadState.baseline;
-    else if (previousReadState && previousReadState.confirmedGeneration === undefined) baseline = previousReadState.baseline;
-    readStateRef.current.set(id, { generation, baseline, revision: currentRevision });
-    setConversations((current) => current.map((item) => {
-      if (item.id !== id) return item;
-      return markConversationRead(item);
-    }));
+    if (previousReadState && previousReadState.confirmedGeneration === undefined && previousReadState.revision === currentRevision) baseline = previousReadState.baseline;
+    readStateRef.current.set(id, { generation, baseline, revision: readRevision });
+    setConversations((current) => {
+      const next = current.map((item) => {
+        if (item.id !== id) return item;
+        return markConversationRead(item);
+      });
+      conversationsRef.current = next;
+      return next;
+    });
     try {
       await apiRequest<ConversationContract>(API_URL, `/api/v1/conversations/${id}/read`, token, { method: "PATCH" }, refresh);
       const readState = readStateRef.current.get(id);
       if (readState?.generation === generation && readState.revision === (conversationRevisionRef.current.get(id) ?? 0)) {
         readStateRef.current.delete(id);
-        setConversations((current) => current.map((item) => item.id === id ? { ...item, unreadCount: 0 } : item));
+        setConversations((current) => {
+          const next = current.map((item) => item.id === id ? { ...item, unreadCount: 0 } : item);
+          conversationsRef.current = next;
+          return next;
+        });
       }
     } catch {
       const readState = readStateRef.current.get(id);
       if (readState?.generation === generation && readState.revision === (conversationRevisionRef.current.get(id) ?? 0) && readState.confirmedGeneration !== generation) {
         const baseline = readState.baseline;
         readStateRef.current.delete(id);
-        setConversations((current) => current.map((item) => item.id === id && item.unreadCount === 0 ? { ...item, unreadCount: baseline } : item));
+        setConversations((current) => {
+          const next = current.map((item) => item.id === id && item.unreadCount === 0 ? { ...item, unreadCount: baseline } : item);
+          conversationsRef.current = next;
+          return next;
+        });
       }
     }
   }
-  useEffect(() => { void apiRequest<{ conversations: ConversationContract[] }>(API_URL, "/api/v1/conversations", token, {}, refresh).then((result) => { setConversations(result.conversations); setActiveId((current) => current ?? result.conversations[0]?.id ?? null); }); }, [token, refresh]);
+  useEffect(() => {
+    let cancelled = false;
+    void apiRequest<{ conversations: ConversationContract[] }>(API_URL, "/api/v1/conversations", token, {}, refresh).then((result) => {
+      if (cancelled) return;
+      setConversations((current) => {
+        const currentById = new Map(current.map((item) => [item.id, item]));
+        const next = result.conversations.map((item) => {
+          const latest = currentById.get(item.id);
+          const hasNewerLocalState = (conversationRevisionRef.current.get(item.id) ?? 0) > 0 || readStateRef.current.has(item.id);
+          return latest && hasNewerLocalState ? { ...item, ...latest } : item;
+        });
+        const resultIds = new Set(result.conversations.map((item) => item.id));
+        next.push(...current.filter((item) => !resultIds.has(item.id)));
+        conversationsRef.current = next;
+        return next;
+      });
+      setActiveId((current) => current ?? result.conversations[0]?.id ?? null);
+    });
+    return () => { cancelled = true; };
+  }, [token, refresh]);
   useEffect(() => {
     if (!activeId) return;
     void markActiveRead(activeId);
@@ -73,8 +106,13 @@ export function InboxPage({ token, refresh, onBack }: { token: string; refresh?:
       conversationRevisionRef.current.set(conversation.id, revision);
       const readState = readStateRef.current.get(conversation.id);
       if (conversation.unreadCount === 0 && readState) readStateRef.current.set(conversation.id, { ...readState, baseline: 0, revision, confirmedGeneration: readState.generation, confirmedRevision: revision });
-      setConversations((current) => upsertConversation(current, conversation));
+      setConversations((current) => {
+        const next = upsertConversation(current, conversation);
+        conversationsRef.current = next;
+        return next;
+      });
       setActiveId((current) => current ?? conversation.id);
+      if (conversation.id === activeId && conversation.unreadCount > 0) void markActiveRead(conversation.id);
     });
     joinActiveRoom();
     return () => { socket.off("connect", joinActiveRoom); socket.disconnect(); };
