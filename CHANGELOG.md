@@ -8,6 +8,7 @@
 - Bổ sung kiểm tra quyền room theo agent được gán, Redis adapter cho Socket.IO, phát event realtime và gửi outbound Telegram qua bot token đã mã hóa.
 - Bổ sung lõi knowledge ingestion và RAG grounded: chunk có metadata nguồn, vector store/provider thay thế được, và handoff rõ ràng khi không đủ context.
 - Bổ sung Bot Pause 30 phút và retry policy outbound deterministic với các mốc 0 giây, 1 giây và 4 giây.
+- Bổ sung inbox React tối thiểu: danh sách hội thoại, timeline tin nhắn, composer và cập nhật Socket.IO realtime.
 
 - Bổ sung thiết kế kiến trúc MVP cho Nhuu-chat.
 - Bổ sung implementation plan cho Telegram connector, inbox realtime, RAG, Bot Pause, bảo mật và kiểm thử.
