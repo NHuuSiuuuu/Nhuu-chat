@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useState } from "react";
+import { InboxIcon } from "./InboxIcon.js";
 export function MessageComposer({ onSend, disabled = false }: { onSend: (content: string) => Promise<void>; disabled?: boolean }) {
   const [content, setContent] = useState("");
-  return <form onSubmit={async (event) => { event.preventDefault(); if (!content.trim()) return; await onSend(content); setContent(""); }}><input aria-label="Tin nhắn" value={content} onChange={(event) => setContent(event.target.value)} disabled={disabled} /><button type="submit" disabled={disabled}>Gửi</button></form>;
+  return <form className="message-composer mx-6 mb-5 mt-4 flex items-center gap-2 rounded-lg border border-gray-200 bg-white p-2" onSubmit={async (event) => { event.preventDefault(); if (!content.trim()) return; await onSend(content); setContent(""); }}><button className="composer-attachment grid size-[34px] place-items-center rounded-md text-gray-500 hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Đính kèm tệp"><InboxIcon name="paperclip" /></button><input className="min-w-0 flex-1 border-0 bg-transparent text-sm text-gray-800 outline-none" aria-label="Tin nhắn" value={content} onChange={(event) => setContent(event.target.value)} placeholder="Nhập tin nhắn..." disabled={disabled} /><button className="composer-send grid size-[34px] place-items-center rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="submit" aria-label="Gửi tin nhắn" disabled={disabled}><InboxIcon name="send" /></button></form>;
 }
