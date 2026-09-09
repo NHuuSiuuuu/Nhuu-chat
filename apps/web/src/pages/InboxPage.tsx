@@ -16,22 +16,30 @@ export function InboxPage({ token, refresh, onBack }: { token: string; refresh?:
   const [conversations, setConversations] = useState<ConversationContract[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageContract[]>([]);
-  const readSequenceRef = React.useRef(0);
+  const readStateRef = React.useRef(new Map<string, { generation: number; baseline: number }>());
   const active = conversations.find((item) => item.id === activeId) ?? null;
   const [readRequestKey, setReadRequestKey] = useState(0);
   async function markActiveRead(id: string) {
-    const sequence = ++readSequenceRef.current;
-    let previousUnread: number | undefined;
+    const previousReadState = readStateRef.current.get(id);
+    const currentUnread = previousReadState?.baseline ?? conversations.find((item) => item.id === id)?.unreadCount ?? 0;
+    const generation = (previousReadState?.generation ?? 0) + 1;
+    readStateRef.current.set(id, { generation, baseline: previousReadState?.baseline ?? currentUnread });
     setConversations((current) => current.map((item) => {
       if (item.id !== id) return item;
-      previousUnread = item.unreadCount;
       return markConversationRead(item);
     }));
     try {
       const result = await apiRequest<ConversationContract>(API_URL, `/api/v1/conversations/${id}/read`, token, { method: "PATCH" }, refresh);
-      if (sequence === readSequenceRef.current) setConversations((current) => current.map((item) => item.id === id ? { ...item, ...result, unreadCount: 0 } : item));
+      if (readStateRef.current.get(id)?.generation === generation) {
+        readStateRef.current.delete(id);
+        setConversations((current) => current.map((item) => item.id === id ? { ...item, ...result, unreadCount: 0 } : item));
+      }
     } catch {
-      if (sequence === readSequenceRef.current && previousUnread !== undefined) setConversations((current) => current.map((item) => item.id === id && item.unreadCount === 0 ? { ...item, unreadCount: previousUnread ?? item.unreadCount } : item));
+      if (readStateRef.current.get(id)?.generation === generation) {
+        const baseline = readStateRef.current.get(id)?.baseline ?? currentUnread;
+        readStateRef.current.delete(id);
+        setConversations((current) => current.map((item) => item.id === id && item.unreadCount === 0 ? { ...item, unreadCount: baseline } : item));
+      }
     }
   }
   useEffect(() => { void apiRequest<{ conversations: ConversationContract[] }>(API_URL, "/api/v1/conversations", token, {}, refresh).then((result) => { setConversations(result.conversations); setActiveId((current) => current ?? result.conversations[0]?.id ?? null); }); }, [token, refresh]);
@@ -53,6 +61,7 @@ export function InboxPage({ token, refresh, onBack }: { token: string; refresh?:
     socket.on("connect", joinActiveRoom);
     socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => { if (message.conversationId === activeId) { setMessages((current) => appendUniqueMessage(current, message)); void markActiveRead(activeId); } });
     socket.on(chatEvents.conversationUpdated, (conversation: ConversationContract) => {
+      if (conversation.unreadCount === 0) readStateRef.current.delete(conversation.id);
       setConversations((current) => upsertConversation(current, conversation));
       setActiveId((current) => current ?? conversation.id);
     });

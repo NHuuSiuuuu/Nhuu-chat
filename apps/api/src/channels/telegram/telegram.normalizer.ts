@@ -22,7 +22,8 @@ export function normalizeTelegramUpdate(
     sentAt: new Date(message.date * 1_000),
     metadata: {
       updateId: update.update_id,
-      chatType: message.chat.type
+      chatType: message.chat.type,
+      ...(message.chat.title ? { chatTitle: message.chat.title } : {})
     }
   };
 }

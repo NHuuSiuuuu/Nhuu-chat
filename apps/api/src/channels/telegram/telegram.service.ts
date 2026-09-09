@@ -39,6 +39,7 @@ export async function ingestTelegramUpdate(input: unknown): Promise<void> {
       $set: {
         customerId: customer._id,
         conversationType: normalized.metadata.chatType === "private" ? "private" : "group",
+        ...(normalized.metadata.chatTitle ? { conversationName: normalized.metadata.chatTitle } : {}),
         lastMessageAt: normalized.sentAt,
         lastMessageSnippet: normalized.content
       },

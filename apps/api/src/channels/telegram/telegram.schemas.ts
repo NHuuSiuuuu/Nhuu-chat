@@ -10,7 +10,8 @@ const telegramUserSchema = z.object({
 
 const telegramChatSchema = z.object({
   id: z.number().int(),
-  type: z.enum(["private", "group", "supergroup", "channel"])
+  type: z.enum(["private", "group", "supergroup", "channel"]),
+  title: z.string().optional()
 });
 
 const telegramMessageSchema = z.object({
@@ -49,5 +50,6 @@ export interface NormalizedInboundMessage {
   metadata: {
     updateId: number;
     chatType: "private" | "group" | "supergroup" | "channel";
+    chatTitle?: string;
   };
 }

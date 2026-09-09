@@ -55,6 +55,12 @@ export function emitInboxEvent(event: string, ownerId: string | null, payload: u
   if (ownerId) activeServer.to(`inbox:${ownerId}`).emit(event, payload);
 }
 
+export function emitInboxEventToRecipients(event: string, recipientIds: string[], payload: unknown): void {
+  if (!activeServer) return;
+  activeServer.to("inbox:admins").emit(event, payload);
+  for (const recipientId of new Set(recipientIds.filter(Boolean))) activeServer.to(`inbox:${recipientId}`).emit(event, payload);
+}
+
 export async function closeRealtimeServer(io: Server): Promise<void> {
   const clients = redisClients.get(io);
   if (clients?.pub.isOpen) await clients.pub.quit();

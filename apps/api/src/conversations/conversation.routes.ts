@@ -6,7 +6,7 @@ import { listMessages } from "../messages/message.service.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { emitChatEvent } from "../realtime/socket.js";
 import { inboxAccessRoles } from "../auth/inbox-access.js";
-import { emitInboxEvent } from "../realtime/socket.js";
+import { emitInboxEventToRecipients } from "../realtime/socket.js";
 
 export const conversationRouter = Router();
 
@@ -43,9 +43,7 @@ conversationRouter.patch("/:id/read", requireRole(...inboxAccessRoles), async (r
     const conversationId = conversationIdParam(req.params.id);
     const target = await ConversationModel.findById(conversationId).lean();
     const result = await markConversationRead(conversationId, auth);
-    const recipients = new Set([target?.ownerId ? String(target.ownerId) : "", target?.assignedAgentId ? String(target.assignedAgentId) : ""]);
-    for (const recipient of recipients) if (recipient) emitInboxEvent("chat:conversation_updated", recipient, result);
-    if (recipients.size === 1 || !recipients.has(auth.id)) emitInboxEvent("chat:conversation_updated", null, result);
+    emitInboxEventToRecipients("chat:conversation_updated", [target?.ownerId ? String(target.ownerId) : "", target?.assignedAgentId ? String(target.assignedAgentId) : ""], result);
     res.json(result);
   } catch (e) { next(e); }
 });
