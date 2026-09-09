@@ -203,6 +203,8 @@ function attachPersonalMessageSync(userId: string, client: TelegramClient): void
     if (!channelId || !content) return;
     const sender = await message.getSender().catch(() => null) as Api.User | null;
     const senderId = sender?.id ? String(sender.id) : channelId;
+    const chat = await message.getChat().catch(() => null) as { title?: string } | null;
+    const isGroup = (message as unknown as { isGroup?: boolean }).isGroup === true;
     const customer = await CustomerModel.findOneAndUpdate(
       { platform: "telegram_personal", platformId: senderId },
       { $set: { name: [sender?.firstName, sender?.lastName].filter(Boolean).join(" ") || "Telegram user" }, $setOnInsert: { platform: "telegram_personal", platformId: senderId } },
@@ -210,7 +212,7 @@ function attachPersonalMessageSync(userId: string, client: TelegramClient): void
     );
     const conversation = await ConversationModel.findOneAndUpdate(
       { platform: "telegram_personal", channelId, ownerId: userId },
-      { $set: { customerId: customer._id, ownerId: userId, conversationType: "private", lastMessageAt: new Date(message.date * 1000), lastMessageSnippet: content }, $inc: { unreadCount: 1 }, $setOnInsert: { platform: "telegram_personal", channelId } },
+      { $set: { customerId: customer._id, ownerId: userId, conversationType: isGroup ? "group" : "private", conversationName: isGroup ? (chat?.title ?? null) : null, lastMessageAt: new Date(message.date * 1000), lastMessageSnippet: content }, $inc: { unreadCount: 1 }, $setOnInsert: { platform: "telegram_personal", channelId } },
       { upsert: true, new: true }
     );
     try {

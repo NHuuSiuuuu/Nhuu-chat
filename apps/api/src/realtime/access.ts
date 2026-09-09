@@ -6,3 +6,7 @@ export function canJoinConversation(auth: RealtimeAuth, conversation: Conversati
   if (auth.role === "agent") return String(conversation.assignedAgentId ?? "") === auth.id;
   return String(conversation.ownerId ?? "") === auth.id;
 }
+
+export function canMarkConversationRead(auth: RealtimeAuth, conversation: ConversationAccess): boolean {
+  return canJoinConversation(auth, conversation);
+}

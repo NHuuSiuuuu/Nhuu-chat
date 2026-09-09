@@ -40,4 +40,9 @@ describe("inbox realtime state", () => {
 
     expect(mergeMessages([realtimeMessage], [message])).toEqual([message, realtimeMessage]);
   });
+
+  it("preserves identity metadata when a realtime payload is partial", () => {
+    const updated = upsertConversation([{ ...conversation, customerName: "Nguyễn Văn Hữu", customerAvatarUrl: "avatar.png" }], { ...conversation, lastMessageSnippet: "Mới" });
+    expect(updated[0]).toMatchObject({ customerName: "Nguyễn Văn Hữu", customerAvatarUrl: "avatar.png", lastMessageSnippet: "Mới" });
+  });
 });

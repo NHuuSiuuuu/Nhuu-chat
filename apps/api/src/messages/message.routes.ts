@@ -15,7 +15,7 @@ messageRouter.post("/send", requireRole(...inboxAccessRoles), async (req, res, n
   try {
     const { conversationId, type, content } = req.body ?? {};
     if (typeof conversationId !== "string" || type !== "text" || typeof content !== "string") throw new AppError(400, "INVALID_REQUEST", "conversationId, type and content are required");
-    const conversation = await ConversationModel.findById(conversationId).lean();
+    const conversation = await ConversationModel.findById(conversationId).populate("customerId", "name avatarUrl").lean();
     if (!conversation) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
     let deliveryStatus: "pending" | "sent" | "failed" = "sent";
     let externalMessageId: string | undefined;

@@ -9,6 +9,7 @@ import { conversationDisplayName, conversationPlatformLabel, formatConversationT
 export function ChatWindow({ conversation, messages, onSend }: { conversation: ConversationContract | null; messages: ChatMessageContract[]; onSend: (content: string) => Promise<void> }) {
   const messagesRef = useRef<HTMLDivElement>(null);
   const stickToLatestRef = useRef(true);
+  const scrollFrameRef = useRef<number | null>(null);
   const [showLatestButton, setShowLatestButton] = useState(false);
 
   function scrollToLatest(behavior: ScrollBehavior = "smooth") {
@@ -19,14 +20,24 @@ export function ChatWindow({ conversation, messages, onSend }: { conversation: C
     element.scrollTo({ top: element.scrollHeight, behavior });
   }
 
+  function scheduleScrollToLatest(behavior: ScrollBehavior) {
+    if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current);
+    scrollFrameRef.current = requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      if (stickToLatestRef.current) scrollToLatest(behavior);
+    });
+  }
+
   useEffect(() => {
     stickToLatestRef.current = true;
     setShowLatestButton(false);
-    requestAnimationFrame(() => scrollToLatest("auto"));
+    scheduleScrollToLatest("auto");
+    return () => { if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current); };
   }, [conversation?.id]);
 
   useEffect(() => {
-    if (stickToLatestRef.current) requestAnimationFrame(() => scrollToLatest("auto"));
+    if (stickToLatestRef.current) scheduleScrollToLatest("auto");
+    return () => { if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current); };
   }, [messages]);
 
   function handleScroll() {

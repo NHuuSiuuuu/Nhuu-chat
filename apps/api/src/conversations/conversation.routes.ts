@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { AppError } from "../common/errors.js";
-import { requireRole } from "../auth/auth.middleware.js";
+import { requireRole, type AuthenticatedRequest } from "../auth/auth.middleware.js";
 import { listConversations, markConversationRead, updateAssignment, updateStatus } from "./conversation.service.js";
 import { listMessages } from "../messages/message.service.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { emitChatEvent } from "../realtime/socket.js";
 import { inboxAccessRoles } from "../auth/inbox-access.js";
+import { emitInboxEvent } from "../realtime/socket.js";
 
 export const conversationRouter = Router();
 
@@ -31,7 +32,13 @@ conversationRouter.get("/:id/messages", requireRole(...inboxAccessRoles), async 
   } catch (e) { next(e); }
 });
 conversationRouter.patch("/:id/read", requireRole(...inboxAccessRoles), async (req, res, next) => {
-  try { res.json(await markConversationRead(conversationIdParam(req.params.id))); } catch (e) { next(e); }
+  try {
+    const auth = (req as AuthenticatedRequest).auth;
+    if (!auth) throw new AppError(401, "AUTHENTICATION_REQUIRED", "Authentication is required");
+    const result = await markConversationRead(conversationIdParam(req.params.id), auth);
+    emitInboxEvent("chat:conversation_updated", auth.role === "customer" ? auth.id : null, result);
+    res.json(result);
+  } catch (e) { next(e); }
 });
 conversationRouter.patch("/:id/assignment", requireRole("admin", "agent"), async (req, res, next) => {
   try {

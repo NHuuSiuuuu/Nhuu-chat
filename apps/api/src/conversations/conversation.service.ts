@@ -2,6 +2,7 @@ import { AppError } from "../common/errors.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { UserModel } from "../models/user.model.js";
 import { isValidObjectId } from "mongoose";
+import type { AuthUser } from "../auth/auth.service.js";
 
 export async function listConversations(query: {
   page?: string;
@@ -25,7 +26,7 @@ export async function updateAssignment(id: string, assignedAgentId: string | nul
   if (assignedAgentId !== null && (!isValidObjectId(assignedAgentId) || !(await UserModel.exists({ _id: assignedAgentId, role: "agent" })))) {
     throw new AppError(400, "INVALID_AGENT", "assignedAgentId must identify an agent");
   }
-  const row = await ConversationModel.findByIdAndUpdate(id, { assignedAgentId }, { new: true }).lean();
+  const row = await ConversationModel.findByIdAndUpdate(id, { assignedAgentId }, { new: true }).populate("customerId", "name avatarUrl").lean();
   if (!row) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
   return toConversation(row);
 }
@@ -37,13 +38,14 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
 }
 
 export async function updateStatus(id: string, status: "open" | "pending" | "closed") {
-  const row = await ConversationModel.findByIdAndUpdate(id, { status }, { new: true }).lean();
+  const row = await ConversationModel.findByIdAndUpdate(id, { status }, { new: true }).populate("customerId", "name avatarUrl").lean();
   if (!row) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
   return toConversation(row);
 }
 
-export async function markConversationRead(id: string) {
-  const row = await ConversationModel.findByIdAndUpdate(id, { unreadCount: 0 }, { new: true }).populate("customerId", "name avatarUrl").lean();
+export async function markConversationRead(id: string, auth: AuthUser) {
+  const accessFilter = auth.role === "admin" ? {} : auth.role === "agent" ? { assignedAgentId: auth.id } : { ownerId: auth.id };
+  const row = await ConversationModel.findOneAndUpdate({ _id: id, ...accessFilter }, { unreadCount: 0 }, { new: true }).populate("customerId", "name avatarUrl").lean();
   if (!row) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
   return toConversation(row);
 }

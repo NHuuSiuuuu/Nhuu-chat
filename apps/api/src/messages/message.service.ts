@@ -6,10 +6,10 @@ export async function listMessages(conversationId: string, query: { page?: strin
   const limit = Math.min(100, parsePositiveInt(query.limit, 50));
   const filter = { conversationId };
   const [rows, total] = await Promise.all([
-    MessageModel.find(filter).sort({ createdAt: 1, _id: 1 }).skip((page - 1) * limit).limit(limit).lean(),
+    MessageModel.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
     MessageModel.countDocuments(filter)
   ]);
-  return { messages: rows.map(toMessage), total };
+  return { messages: rows.reverse().map(toMessage), total };
 }
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {

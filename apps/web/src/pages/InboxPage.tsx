@@ -19,6 +19,14 @@ export function InboxPage({ token, refresh, onBack }: { token: string; refresh?:
   const active = conversations.find((item) => item.id === activeId) ?? null;
   useEffect(() => { void apiRequest<{ conversations: ConversationContract[] }>(API_URL, "/api/v1/conversations", token, {}, refresh).then((result) => { setConversations(result.conversations); setActiveId((current) => current ?? result.conversations[0]?.id ?? null); }); }, [token, refresh]);
   useEffect(() => {
+    if (!activeId) return;
+    setConversations((current) => current.map((item) => item.id === activeId ? markConversationRead(item) : item));
+    void apiRequest(API_URL, `/api/v1/conversations/${activeId}/read`, token, { method: "PATCH" }, refresh).catch(async () => {
+      const result = await apiRequest<{ conversations: ConversationContract[] }>(API_URL, "/api/v1/conversations", token, {}, refresh).catch(() => null);
+      if (result) setConversations(result.conversations);
+    });
+  }, [activeId, token, refresh]);
+  useEffect(() => {
     if (!activeId) { setMessages([]); return; }
     let cancelled = false;
     setMessages([]);
@@ -38,7 +46,7 @@ export function InboxPage({ token, refresh, onBack }: { token: string; refresh?:
     joinActiveRoom();
     return () => { socket.off("connect", joinActiveRoom); socket.disconnect(); };
   }, [token, activeId]);
-  function selectConversation(id: string) { setActiveId(id); setConversations((current) => current.map((item) => item.id === id ? markConversationRead(item) : item)); void apiRequest(API_URL, `/api/v1/conversations/${id}/read`, token, { method: "PATCH" }, refresh).catch(() => undefined); }
+  function selectConversation(id: string) { setActiveId(id); }
   async function sendText(content: string) { if (!activeId) return; const message = await apiRequest<ChatMessageContract>(API_URL, "/api/v1/messages/send", token, { method: "POST", body: JSON.stringify({ conversationId: activeId, type: "text", content }) }, refresh); setMessages((current) => appendUniqueMessage(current, message)); }
   return <main className="inbox-shell"><div className="flex h-screen min-h-0 flex-col overflow-hidden bg-slate-100"><DashboardTopbar /><div className="inbox-page grid min-h-0 flex-1 grid-cols-[44px_395px_minmax(0,1fr)] overflow-hidden bg-slate-100 text-gray-800 max-[900px]:grid-cols-[44px_minmax(300px,35vw)_minmax(0,1fr)] max-[680px]:grid-cols-[44px_minmax(0,1fr)]"><aside className="inbox-nav flex flex-col items-center gap-3 bg-blue-600 px-1 py-3" aria-label="Thanh điều hướng"><div className="inbox-nav-logo mb-2 grid size-[30px] place-items-center rounded-lg border border-white/70 text-[17px] font-bold text-white">H</div><button className="inbox-nav-item grid size-9 place-items-center rounded-lg bg-black/15 text-white transition-colors hover:bg-black/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hội thoại"><InboxIcon name="chat" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hộp thư"><InboxIcon name="inbox" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Khách hàng"><InboxIcon name="users" /></button><div className="inbox-nav-spacer flex-1" /><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Trợ giúp"><InboxIcon name="help" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Cài đặt"><InboxIcon name="settings" /></button>{onBack && <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Về Dashboard" onClick={onBack}>←</button>}</aside><ConversationList items={conversations} activeId={activeId} onSelect={(id) => void selectConversation(id)} /><ChatWindow conversation={active} messages={messages} onSend={sendText} /></div></div></main>;
 }

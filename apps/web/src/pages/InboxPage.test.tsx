@@ -20,5 +20,7 @@ describe("Inbox Tailwind migration", () => {
     expect(chat).toContain("Tin mới nhất");
     expect(list).toContain("conversationPlatformLabel");
     expect(list).toContain("ConversationAvatar");
+    expect(chat).toContain("cancelAnimationFrame");
+    expect(chat).toContain("scrollFrameRef");
   });
 });
