@@ -33,7 +33,7 @@ export function App() {
   if (!canAccessInbox(auth.user.role)) {
     return <main><h1>Nhuu Chat</h1><p>Tài khoản của anh đã đăng nhập nhưng chưa có quyền mở inbox. Hãy nhờ admin cấp role agent.</p><button onClick={() => { clearAuth(); setAuth(null); }}>Đăng xuất</button></main>;
   }
-  return <ProtectedRoute token={auth.accessToken}>{page === "dashboard" ? <DashboardPage token={auth.accessToken} refresh={refresh} onOpenTelegram={() => setPage("telegram")} onOpenInbox={() => setPage("inbox")} /> : page === "telegram" ? <TelegramPersonalPage token={auth.accessToken} refresh={refresh} onBack={() => setPage("dashboard")} /> : <><button onClick={() => setPage("dashboard")}>← Dashboard</button><InboxPage token={auth.accessToken} refresh={refresh} /></>}</ProtectedRoute>;
+  return <ProtectedRoute token={auth.accessToken}>{page === "dashboard" ? <DashboardPage token={auth.accessToken} refresh={refresh} onOpenInbox={() => setPage("inbox")} /> : page === "telegram" ? <TelegramPersonalPage token={auth.accessToken} refresh={refresh} onBack={() => setPage("dashboard")} /> : <InboxPage token={auth.accessToken} refresh={refresh} onBack={() => setPage("dashboard")} />}</ProtectedRoute>;
 }
 
 function AuthPage({ onAuthenticated }: { onAuthenticated: (auth: AuthResponse) => void }) {

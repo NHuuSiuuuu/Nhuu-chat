@@ -39,6 +39,12 @@ pnpm --filter web dev
 
 API mặc định chạy ở `http://localhost:3000`, còn Vite web chạy ở `http://localhost:5173`.
 
+### Styling frontend
+
+Frontend sử dụng Tailwind CSS v4 với plugin Vite chính thức. Toàn bộ style được khai báo bằng utility classes; entry CSS duy nhất là `apps/web/src/styles/tailwind.css` và không cần chạy PostCSS riêng.
+
+Khi phát triển giao diện, chạy web bằng `pnpm --filter web dev`. Build production dùng `pnpm --filter web build`.
+
 ### Auth MVP
 
 - `POST /api/v1/auth/register` nhận `name`, `email` và password từ 8 ký tự; tài khoản mới luôn có role `customer`.
