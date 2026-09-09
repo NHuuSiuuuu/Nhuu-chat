@@ -17,28 +17,34 @@ export function InboxPage({ token, refresh, onBack }: { token: string; refresh?:
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageContract[]>([]);
   const nextReadGenerationRef = React.useRef(0);
-  const readStateRef = React.useRef(new Map<string, { generation: number; baseline: number; confirmedGeneration?: number }>());
+  const conversationRevisionRef = React.useRef(new Map<string, number>());
+  const readStateRef = React.useRef(new Map<string, { generation: number; baseline: number; revision: number; confirmedGeneration?: number; confirmedRevision?: number }>());
   const active = conversations.find((item) => item.id === activeId) ?? null;
   const [readRequestKey, setReadRequestKey] = useState(0);
   async function markActiveRead(id: string) {
     const previousReadState = readStateRef.current.get(id);
-    const currentUnread = previousReadState?.baseline ?? conversations.find((item) => item.id === id)?.unreadCount ?? 0;
+    const currentRevision = conversationRevisionRef.current.get(id) ?? 0;
+    const currentUnread = conversations.find((item) => item.id === id)?.unreadCount ?? 0;
     const generation = ++nextReadGenerationRef.current;
-    readStateRef.current.set(id, { generation, baseline: previousReadState?.confirmedGeneration === previousReadState?.generation ? currentUnread : previousReadState?.baseline ?? currentUnread });
+    let baseline = currentUnread;
+    if (previousReadState && previousReadState.confirmedGeneration === previousReadState.generation && previousReadState.confirmedRevision === currentRevision) baseline = previousReadState.baseline;
+    else if (previousReadState && previousReadState.confirmedGeneration === undefined) baseline = previousReadState.baseline;
+    readStateRef.current.set(id, { generation, baseline, revision: currentRevision });
     setConversations((current) => current.map((item) => {
       if (item.id !== id) return item;
       return markConversationRead(item);
     }));
     try {
       await apiRequest<ConversationContract>(API_URL, `/api/v1/conversations/${id}/read`, token, { method: "PATCH" }, refresh);
-      if (readStateRef.current.get(id)?.generation === generation) {
+      const readState = readStateRef.current.get(id);
+      if (readState?.generation === generation && readState.revision === (conversationRevisionRef.current.get(id) ?? 0)) {
         readStateRef.current.delete(id);
         setConversations((current) => current.map((item) => item.id === id ? { ...item, unreadCount: 0 } : item));
       }
     } catch {
       const readState = readStateRef.current.get(id);
-      if (readState?.generation === generation && readState.confirmedGeneration !== generation) {
-        const baseline = readStateRef.current.get(id)?.baseline ?? currentUnread;
+      if (readState?.generation === generation && readState.revision === (conversationRevisionRef.current.get(id) ?? 0) && readState.confirmedGeneration !== generation) {
+        const baseline = readState.baseline;
         readStateRef.current.delete(id);
         setConversations((current) => current.map((item) => item.id === id && item.unreadCount === 0 ? { ...item, unreadCount: baseline } : item));
       }
@@ -61,10 +67,12 @@ export function InboxPage({ token, refresh, onBack }: { token: string; refresh?:
     const socket = createChatSocket(API_URL, token);
     const joinActiveRoom = () => { if (activeId) socket.emit(chatEvents.joinRoom, activeId); };
     socket.on("connect", joinActiveRoom);
-    socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => { if (message.conversationId === activeId) { setMessages((current) => appendUniqueMessage(current, message)); void markActiveRead(activeId); } });
+    socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => { const revision = (conversationRevisionRef.current.get(message.conversationId) ?? 0) + 1; conversationRevisionRef.current.set(message.conversationId, revision); if (message.conversationId === activeId) { setMessages((current) => appendUniqueMessage(current, message)); void markActiveRead(activeId); } });
     socket.on(chatEvents.conversationUpdated, (conversation: ConversationContract) => {
+      const revision = (conversationRevisionRef.current.get(conversation.id) ?? 0) + 1;
+      conversationRevisionRef.current.set(conversation.id, revision);
       const readState = readStateRef.current.get(conversation.id);
-      if (conversation.unreadCount === 0 && readState) readStateRef.current.set(conversation.id, { generation: readState.generation, baseline: 0, confirmedGeneration: readState.generation });
+      if (conversation.unreadCount === 0 && readState) readStateRef.current.set(conversation.id, { ...readState, baseline: 0, revision, confirmedGeneration: readState.generation, confirmedRevision: revision });
       setConversations((current) => upsertConversation(current, conversation));
       setActiveId((current) => current ?? conversation.id);
     });

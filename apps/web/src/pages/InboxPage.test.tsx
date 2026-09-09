@@ -29,6 +29,8 @@ describe("Inbox Tailwind migration", () => {
     expect(source).toContain("confirmedGeneration");
     expect(source).toContain("baseline: 0");
     expect(source).toContain("{ ...item, unreadCount: 0 }");
+    expect(source).toContain("conversationRevisionRef");
+    expect(source).toContain("readState.revision");
     const avatar = readFileSync(new URL("../components/conversations/ConversationAvatar.tsx", import.meta.url), "utf8");
     expect(avatar).toContain("onError");
   });
