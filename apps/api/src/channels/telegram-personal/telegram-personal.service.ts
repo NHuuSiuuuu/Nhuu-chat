@@ -210,10 +210,11 @@ function attachPersonalMessageSync(userId: string, client: TelegramClient): void
     );
     const conversation = await ConversationModel.findOneAndUpdate(
       { platform: "telegram_personal", channelId, ownerId: userId },
-      { $set: { customerId: customer._id, ownerId: userId, lastMessageAt: new Date(message.date * 1000), lastMessageSnippet: content }, $inc: { unreadCount: 1 }, $setOnInsert: { platform: "telegram_personal", channelId } },
+      { $set: { customerId: customer._id, ownerId: userId, conversationType: "private", lastMessageAt: new Date(message.date * 1000), lastMessageSnippet: content }, $inc: { unreadCount: 1 }, $setOnInsert: { platform: "telegram_personal", channelId } },
       { upsert: true, new: true }
     );
     try {
+      await conversation.populate("customerId", "name avatarUrl");
       const storedMessage = await MessageModel.create({ conversationId: conversation._id, platform: "telegram_personal", externalMessageId: String(message.id), senderType: "customer", senderId, type: "text", content, deliveryStatus: "delivered" });
       const conversationPayload = toConversation(conversation.toObject());
       emitChatEvent("chat:message_received", String(conversation._id), toMessage(storedMessage.toObject()));

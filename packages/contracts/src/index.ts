@@ -28,6 +28,10 @@ export interface ConversationContract {
   status: ConversationStatus;
   lastMessageAt: string;
   lastMessageSnippet: string;
+  customerName?: string;
+  customerAvatarUrl?: string;
+  conversationName?: string | null;
+  conversationType?: "private" | "group";
 }
 
 export const chatEvents = {

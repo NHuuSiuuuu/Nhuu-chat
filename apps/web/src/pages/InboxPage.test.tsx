@@ -15,5 +15,10 @@ describe("Inbox Tailwind migration", () => {
     expect(chat).toContain('${message.senderType === "customer" ? "bg-white" : "bg-blue-100"}');
     expect(list).not.toContain('bg-white px-3 py-3.5 text-left text-gray-800');
     expect(chat).not.toContain('rounded-lg bg-white px-3 py-2.5 ${message.senderType === "customer" ? "" : "bg-blue-100"}');
+    expect(source).toContain("/read");
+    expect(chat).toContain("scrollToLatest(\"smooth\")");
+    expect(chat).toContain("Tin mới nhất");
+    expect(list).toContain("conversationPlatformLabel");
+    expect(list).toContain("ConversationAvatar");
   });
 });

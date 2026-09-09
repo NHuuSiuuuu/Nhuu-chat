@@ -1,4 +1,15 @@
-export function conversationDisplayName({ channelId }: { channelId: string; platform: string }): string {
+interface ConversationPresentationInput {
+  channelId: string;
+  platform: string;
+  customerName?: string;
+  conversationName?: string | null;
+  conversationType?: "private" | "group";
+}
+
+export function conversationDisplayName({ channelId, customerName, conversationName, conversationType }: ConversationPresentationInput): string {
+  if (conversationName?.trim()) return conversationName.trim();
+  if (conversationType === "group") return "Nhóm hội thoại";
+  if (customerName?.trim()) return customerName.trim();
   return `Khách hàng ${channelId.slice(-4)}`;
 }
 
@@ -8,4 +19,17 @@ export function conversationInitials(name: string): string {
 
 export function formatConversationTime(value: string): string {
   return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
+}
+
+export function conversationPlatformLabel(platform: string): string {
+  const labels: Record<string, string> = { telegram_personal: "Telegram", telegram: "Telegram", zalo: "Zalo", facebook: "Facebook", instagram: "Instagram" };
+  return labels[platform] ?? platform;
+}
+
+export function isNearLatestMessage(metrics: { scrollTop: number; clientHeight: number; scrollHeight: number }, threshold = 120): boolean {
+  return metrics.scrollHeight - (metrics.scrollTop + metrics.clientHeight) <= threshold;
+}
+
+export function markConversationRead<T extends { id: string; unreadCount: number }>(conversation: T): T {
+  return { ...conversation, unreadCount: 0 };
 }

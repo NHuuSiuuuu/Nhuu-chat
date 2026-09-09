@@ -15,7 +15,7 @@ export async function listConversations(query: {
   if (query.platform) filter.platform = query.platform;
   if (query.status) filter.status = query.status;
   const [rows, total] = await Promise.all([
-    ConversationModel.find(filter).sort({ lastMessageAt: -1, _id: 1 }).skip((page - 1) * limit).limit(limit).lean(),
+    ConversationModel.find(filter).populate("customerId", "name avatarUrl").sort({ lastMessageAt: -1, _id: 1 }).skip((page - 1) * limit).limit(limit).lean(),
     ConversationModel.countDocuments(filter)
   ]);
   return { conversations: rows.map(toConversation), total };
@@ -42,11 +42,22 @@ export async function updateStatus(id: string, status: "open" | "pending" | "clo
   return toConversation(row);
 }
 
+export async function markConversationRead(id: string) {
+  const row = await ConversationModel.findByIdAndUpdate(id, { unreadCount: 0 }, { new: true }).populate("customerId", "name avatarUrl").lean();
+  if (!row) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
+  return toConversation(row);
+}
+
 export function toConversation(row: any) {
+  const customer = row.customerId && typeof row.customerId === "object" ? row.customerId : null;
   return {
-    id: String(row._id), customerId: String(row.customerId), platform: row.platform,
+    id: String(row._id), customerId: String(customer?._id ?? row.customerId), platform: row.platform,
     channelId: row.channelId, assignedAgentId: row.assignedAgentId ? String(row.assignedAgentId) : null,
     unreadCount: row.unreadCount, status: row.status,
-    lastMessageAt: new Date(row.lastMessageAt).toISOString(), lastMessageSnippet: row.lastMessageSnippet
+    lastMessageAt: new Date(row.lastMessageAt).toISOString(), lastMessageSnippet: row.lastMessageSnippet,
+    customerName: customer?.name ?? row.customerName ?? undefined,
+    customerAvatarUrl: customer?.avatarUrl ?? row.customerAvatarUrl ?? undefined,
+    conversationName: row.conversationName ?? null,
+    conversationType: row.conversationType ?? "private"
   };
 }

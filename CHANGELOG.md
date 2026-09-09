@@ -41,6 +41,8 @@ Các ghi chú nâng cấp được viết rõ ràng để cả team dễ theo d�
 - Trạng thái QR Telegram cá nhân bổ sung `password_required` và endpoint xác minh mật khẩu theo đúng session của người dùng.
 - Chuyển toàn bộ styling frontend sang Tailwind CSS v4, loại bỏ các file CSS giao diện cũ và giữ lại duy nhất entry `apps/web/src/styles/tailwind.css`.
 - Sửa các chi tiết hậu kiểm Tailwind: loại bỏ class nền xung đột, bổ sung accessibility cho modal/composer, giới hạn viewport modal và áp dụng utility classes cho form đăng nhập.
+- Cải thiện Inbox: tự cuộn tới tin nhắn mới nhất khi mở hội thoại, thêm nút cuộn mượt khi người dùng xem tin cũ, xóa badge chưa đọc khi mở và hiển thị badge nền tảng.
+- Bổ sung tên thật, avatar, nhận diện hội thoại nhóm và metadata nền tảng trong conversation contract.
 
 ### Đã sửa
 

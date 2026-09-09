@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { AppError } from "../common/errors.js";
 import { requireRole } from "../auth/auth.middleware.js";
-import { listConversations, updateAssignment, updateStatus } from "./conversation.service.js";
+import { listConversations, markConversationRead, updateAssignment, updateStatus } from "./conversation.service.js";
 import { listMessages } from "../messages/message.service.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { emitChatEvent } from "../realtime/socket.js";
@@ -29,6 +29,9 @@ conversationRouter.get("/:id/messages", requireRole(...inboxAccessRoles), async 
     const query = req.query as Record<string, unknown>;
     res.json(await listMessages(conversationId, { page: typeof query.page === "string" ? query.page : undefined, limit: typeof query.limit === "string" ? query.limit : undefined }));
   } catch (e) { next(e); }
+});
+conversationRouter.patch("/:id/read", requireRole(...inboxAccessRoles), async (req, res, next) => {
+  try { res.json(await markConversationRead(conversationIdParam(req.params.id))); } catch (e) { next(e); }
 });
 conversationRouter.patch("/:id/assignment", requireRole("admin", "agent"), async (req, res, next) => {
   try {

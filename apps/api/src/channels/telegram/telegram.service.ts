@@ -38,6 +38,7 @@ export async function ingestTelegramUpdate(input: unknown): Promise<void> {
     {
       $set: {
         customerId: customer._id,
+        conversationType: normalized.metadata.chatType === "private" ? "private" : "group",
         lastMessageAt: normalized.sentAt,
         lastMessageSnippet: normalized.content
       },
@@ -65,7 +66,7 @@ export async function ingestTelegramUpdate(input: unknown): Promise<void> {
       { _id: conversation._id },
       { $inc: { unreadCount: 1 } }
     );
-    const updatedConversation = await ConversationModel.findById(conversation._id).lean();
+    const updatedConversation = await ConversationModel.findById(conversation._id).populate("customerId", "name avatarUrl").lean();
     if (updatedConversation) {
       emitChatEvent("chat:message_received", String(conversation._id), toMessage(storedMessage.toObject()));
       emitInboxEvent("chat:conversation_updated", null, toConversation(updatedConversation));

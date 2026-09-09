@@ -9,6 +9,8 @@ const conversationSchema = new Schema(
       required: true
     },
     channelId: { type: String, required: true },
+    conversationName: { type: String, default: null },
+    conversationType: { type: String, enum: ["private", "group"], default: "private" },
     ownerId: { type: Schema.Types.ObjectId, ref: "User", default: null, index: true },
     assignedAgentId: { type: Schema.Types.ObjectId, ref: "User", default: null, index: true },
     unreadCount: { type: Number, default: 0, min: 0 },

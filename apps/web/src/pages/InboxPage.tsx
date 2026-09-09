@@ -7,6 +7,7 @@ import { resolveApiBaseUrl } from "../lib/api-url.js";
 import { ConversationList } from "../components/conversations/ConversationList.js";
 import { ChatWindow } from "../components/conversations/ChatWindow.js";
 import { appendUniqueMessage, mergeMessages, upsertConversation } from "../state/inbox-realtime.js";
+import { markConversationRead } from "../state/inbox-ui.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
 import { DashboardTopbar } from "../components/dashboard/DashboardTopbar.js";
 
@@ -31,13 +32,13 @@ export function InboxPage({ token, refresh, onBack }: { token: string; refresh?:
     socket.on("connect", joinActiveRoom);
     socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => { if (message.conversationId === activeId) setMessages((current) => appendUniqueMessage(current, message)); });
     socket.on(chatEvents.conversationUpdated, (conversation: ConversationContract) => {
-      setConversations((current) => upsertConversation(current, conversation));
+      setConversations((current) => upsertConversation(current, conversation.id === activeId ? markConversationRead(conversation) : conversation));
       setActiveId((current) => current ?? conversation.id);
     });
     joinActiveRoom();
     return () => { socket.off("connect", joinActiveRoom); socket.disconnect(); };
   }, [token, activeId]);
-  function selectConversation(id: string) { setActiveId(id); }
+  function selectConversation(id: string) { setActiveId(id); setConversations((current) => current.map((item) => item.id === id ? markConversationRead(item) : item)); void apiRequest(API_URL, `/api/v1/conversations/${id}/read`, token, { method: "PATCH" }, refresh).catch(() => undefined); }
   async function sendText(content: string) { if (!activeId) return; const message = await apiRequest<ChatMessageContract>(API_URL, "/api/v1/messages/send", token, { method: "POST", body: JSON.stringify({ conversationId: activeId, type: "text", content }) }, refresh); setMessages((current) => appendUniqueMessage(current, message)); }
   return <main className="inbox-shell"><div className="flex h-screen min-h-0 flex-col overflow-hidden bg-slate-100"><DashboardTopbar /><div className="inbox-page grid min-h-0 flex-1 grid-cols-[44px_395px_minmax(0,1fr)] overflow-hidden bg-slate-100 text-gray-800 max-[900px]:grid-cols-[44px_minmax(300px,35vw)_minmax(0,1fr)] max-[680px]:grid-cols-[44px_minmax(0,1fr)]"><aside className="inbox-nav flex flex-col items-center gap-3 bg-blue-600 px-1 py-3" aria-label="Thanh điều hướng"><div className="inbox-nav-logo mb-2 grid size-[30px] place-items-center rounded-lg border border-white/70 text-[17px] font-bold text-white">H</div><button className="inbox-nav-item grid size-9 place-items-center rounded-lg bg-black/15 text-white transition-colors hover:bg-black/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hội thoại"><InboxIcon name="chat" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hộp thư"><InboxIcon name="inbox" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Khách hàng"><InboxIcon name="users" /></button><div className="inbox-nav-spacer flex-1" /><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Trợ giúp"><InboxIcon name="help" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Cài đặt"><InboxIcon name="settings" /></button>{onBack && <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Về Dashboard" onClick={onBack}>←</button>}</aside><ConversationList items={conversations} activeId={activeId} onSelect={(id) => void selectConversation(id)} /><ChatWindow conversation={active} messages={messages} onSend={sendText} /></div></div></main>;
 }
