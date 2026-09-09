@@ -8,6 +8,7 @@ import { telegramRouter } from "./channels/telegram/telegram.routes.js";
 import { conversationRouter } from "./conversations/conversation.routes.js";
 import { messageRouter } from "./messages/message.routes.js";
 import { customerRouter } from "./customers/customer.routes.js";
+import { knowledgeRouter } from "./knowledge/knowledge.routes.js";
 
 export function createApp(): Express {
   const app = express();
@@ -23,6 +24,7 @@ export function createApp(): Express {
   app.use("/api/v1/conversations", conversationRouter);
   app.use("/api/v1/messages", messageRouter);
   app.use("/api/v1/customers", customerRouter);
+  app.use("/api/v1/knowledge", knowledgeRouter);
   app.use(errorHandler);
 
   return app;
