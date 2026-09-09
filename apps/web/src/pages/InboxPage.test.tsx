@@ -4,10 +4,16 @@ import { describe, expect, it } from "vitest";
 describe("Inbox Tailwind migration", () => {
   it("uses the shared shell without handwritten Inbox CSS", () => {
     const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+    const list = readFileSync(new URL("../components/conversations/ConversationList.tsx", import.meta.url), "utf8");
+    const chat = readFileSync(new URL("../components/conversations/ChatWindow.tsx", import.meta.url), "utf8");
 
     expect(source).not.toMatch(/InboxPage\.css/);
     expect(source).toContain("DashboardTopbar");
     expect(source).toContain('className="inbox-shell"');
     expect(source).toContain('aria-label="Thanh điều hướng"');
+    expect(list).toContain('${item.id === activeId ? "bg-blue-50" : "bg-white"}');
+    expect(chat).toContain('${message.senderType === "customer" ? "bg-white" : "bg-blue-100"}');
+    expect(list).not.toContain('bg-white px-3 py-3.5 text-left text-gray-800');
+    expect(chat).not.toContain('rounded-lg bg-white px-3 py-2.5 ${message.senderType === "customer" ? "" : "bg-blue-100"}');
   });
 });

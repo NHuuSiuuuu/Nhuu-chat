@@ -16,5 +16,11 @@ describe("ConnectModal Tailwind migration", () => {
     expect(source).toContain('qr?.status === "failed"');
     expect(source).toContain("qr.error");
     expect(source).toContain("onClick={onStart}");
+    expect(source).toContain('qr.error && <p className="text-xs text-rose-600" role="alert">{qr.error}</p>');
+    expect(source).toContain("max-h-[calc(100vh-2rem)]");
+    expect(source).toContain("overflow-y-auto");
+    expect(source).toContain("KeyboardEvent");
+    expect(source).toContain("autoFocus");
+    expect(source).toContain("closeButtonRef");
   });
 });

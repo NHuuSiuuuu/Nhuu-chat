@@ -64,18 +64,19 @@ function AuthPage({ onAuthenticated }: { onAuthenticated: (auth: AuthResponse) =
     }
   }
 
-  return <main aria-labelledby="auth-title">
-    <h1 id="auth-title">Nhuu Chat</h1>
-    <p>{mode === "login" ? "Đăng nhập để mở inbox." : "Tạo tài khoản mới để sử dụng hệ thống."}</p>
-    <form onSubmit={submit}>
-      {mode === "register" && <label>Tên hiển thị<input value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" /></label>}
-      <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label>
-      <label>Mật khẩu<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>
-      {error && <p role="alert">{error}</p>}
-      <button type="submit" disabled={submitting}>{submitting ? "Đang xử lý..." : mode === "login" ? "Đăng nhập" : "Đăng ký"}</button>
+  return <main className="grid min-h-screen place-items-center bg-slate-100 px-4 py-10 text-slate-800" aria-labelledby="auth-title">
+    <section className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg sm:p-8">
+      <h1 id="auth-title" className="text-2xl font-bold text-slate-900">Nhuu Chat</h1>
+      <p className="mt-2 text-sm text-slate-500">{mode === "login" ? "Đăng nhập để mở inbox." : "Tạo tài khoản mới để sử dụng hệ thống."}</p>
+      <form className="mt-6 grid gap-4" onSubmit={submit}>
+      {mode === "register" && <label className="grid gap-1.5 text-sm font-medium text-slate-700">Tên hiển thị<input className="rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100" value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" /></label>}
+      <label className="grid gap-1.5 text-sm font-medium text-slate-700">Email<input className="rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label>
+      <label className="grid gap-1.5 text-sm font-medium text-slate-700">Mật khẩu<input className="rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>
+      {error && <p className="text-sm text-rose-600" role="alert">{error}</p>}
+      <button className="rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500" type="submit" disabled={submitting}>{submitting ? "Đang xử lý..." : mode === "login" ? "Đăng nhập" : "Đăng ký"}</button>
     </form>
-    <button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}>
+    <button className="mt-5 text-sm font-medium text-sky-600 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500" type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}>
       {mode === "login" ? "Chưa có tài khoản? Đăng ký" : "Đã có tài khoản? Đăng nhập"}
-    </button>
+    </button></section>
   </main>;
 }
