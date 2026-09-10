@@ -32,7 +32,7 @@ describe("normalizeTelegramUpdate", () => {
       type: "text",
       content: "Xin chào",
       sentAt: new Date("2024-09-08T13:13:20.000Z"),
-      metadata: { updateId: 7001, chatType: "private" }
+      metadata: { updateId: 7001, chatType: "private", senderName: "Nhuu Tester" }
     });
   });
 

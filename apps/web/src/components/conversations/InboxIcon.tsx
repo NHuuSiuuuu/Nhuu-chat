@@ -1,6 +1,6 @@
 import * as React from "react";
 
-type IconName = "inbox" | "chat" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close";
+type IconName = "inbox" | "chat" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more";
 
 export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -20,7 +20,10 @@ export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }
     note: <><path d="M5 4h14v16H5z" /><path d="M8 8h8M8 12h6M8 16h4" /></>,
     image: <><rect x="4" y="5" width="16" height="14" rx="2" /><circle cx="9" cy="10" r="1.3" /><path d="m5 17 4-4 3 3 2-2 5 4" /></>,
     template: <><path d="M5 5h14v14H5z" /><path d="M8 9h8M8 12h6M8 15h4" /></>,
-    close: <><path d="m7 7 10 10M17 7 7 17" /></>
+    close: <><path d="m7 7 10 10M17 7 7 17" /></>,
+    smile: <><circle cx="12" cy="12" r="9" /><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0M9 9h.01M15 9h.01" /></>,
+    reply: <path d="m9 17-5-5 5-5M4 12h10a6 6 0 0 1 6 6" />,
+    more: <><circle cx="5" cy="12" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /><circle cx="19" cy="12" r="1" fill="currentColor" /></>
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }

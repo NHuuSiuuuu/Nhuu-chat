@@ -12,6 +12,7 @@ export interface ChatMessageContract {
   platform: ChatPlatform;
   senderType: "customer" | "agent" | "bot";
   senderId: string;
+  senderName?: string;
   type: "text" | "image" | "video" | "audio" | "file" | "template";
   content: string;
   deliveryStatus: "pending" | "sent" | "delivered" | "failed";

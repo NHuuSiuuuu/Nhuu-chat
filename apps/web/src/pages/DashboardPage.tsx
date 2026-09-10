@@ -8,7 +8,7 @@ import { PlatformIcon } from "../components/dashboard/PlatformIcon.js";
 
 interface TelegramStatus { connected: boolean; displayName: string | null; username: string | null; }
 
-export function DashboardPage({ token, refresh, onOpenInbox }: { token: string; refresh?: () => Promise<string | null>; onOpenInbox: () => void; onOpenTelegram?: () => void }) {
+export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavigate }: { token: string; refresh?: () => Promise<string | null>; onOpenInbox: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hội thoại" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void }) {
   const [status, setStatus] = useState<TelegramStatus | null>(null);
   const [showConnect, setShowConnect] = useState(false);
   const [search, setSearch] = useState("");
@@ -21,7 +21,7 @@ export function DashboardPage({ token, refresh, onOpenInbox }: { token: string; 
   const openModal = () => setShowConnect(true);
 
   return <main className="min-h-screen bg-[#f2f5f9] text-[#273348] max-[700px]:px-[34px] " aria-labelledby="dashboard-title">
-    <DashboardTopbar />
+     <DashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} />
     <div className="mx-auto w-full max-w-[954px]">
       <header className="mb-2 flex items-end justify-between gap-6 rounded-[14px] bg-white px-[17px] pb-4 pt-[19px] max-[700px]:items-stretch max-[700px]:flex-col">
         <div><h1 id="dashboard-title" className="mb-[18px] text-[21px] tracking-[-.02em]">Bảng điều khiển</h1><label className="flex w-[430px] max-w-[48vw] items-center gap-[9px] rounded-[9px] border border-[#e0e6ee] bg-white px-[14px] py-[11px] text-[#a3afbf] shadow-[0_1px_2px_rgba(42,55,74,.03)] max-[700px]:w-auto max-[700px]:max-w-none"><span className="text-[25px] leading-[15px]" aria-hidden="true">⌕</span><input className="w-full bg-transparent text-[13px] text-[#354258] outline-none placeholder:text-[#a0abbb]" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm kiếm..." aria-label="Tìm kiếm tài khoản" /></label></div>

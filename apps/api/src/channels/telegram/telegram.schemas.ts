@@ -44,6 +44,7 @@ export interface NormalizedInboundMessage {
   metadata: {
     updateId: number;
     chatType: "private" | "group" | "supergroup" | "channel";
+    senderName: string;
     chatTitle?: string;
   };
 }

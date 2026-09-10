@@ -23,6 +23,7 @@ export function normalizeTelegramUpdate(
     metadata: {
       updateId: update.update_id,
       chatType: message.chat.type,
+      senderName,
       ...(message.chat.title ? { chatTitle: message.chat.title } : {})
     }
   };

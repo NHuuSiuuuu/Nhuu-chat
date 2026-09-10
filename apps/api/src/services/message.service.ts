@@ -27,7 +27,7 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
 export function toMessage(row: any) {
   return {
     id: String(row._id), conversationId: String(row.conversationId), platform: row.platform,
-    senderType: row.senderType, senderId: row.senderId, type: row.type, content: row.content,
+    senderType: row.senderType, senderId: row.senderId, senderName: row.metadata?.senderName, type: row.type, content: row.content,
     deliveryStatus: row.deliveryStatus, createdAt: new Date(row.createdAt).toISOString()
   };
 }

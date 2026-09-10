@@ -5,6 +5,9 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Cập nhật UI message theo `DEVELOPMENT_PROMPT.md`: avatar, tên người gửi thực tế, timestamp, mention `@All` và nhóm thao tác khi hover.
+- Bổ sung `senderName` tùy chọn cho message contract và mapper Telegram để hiển thị đúng người gửi trong hội thoại nhóm.
+- Kết nối điều hướng header: bấm logo `NhuuChat` về Dashboard và bấm `Hội thoại` mở Inbox.
 - Cập nhật `docs/wiki/README.md` thành tài liệu Wiki chi tiết về trạng thái MVP, luồng Inbox responsive, cách cài đặt, kiểm thử, giới hạn và roadmap.
 - Thêm sidebar thông tin bổ trợ bên phải khung chat với tab `Thông tin`/`Tạo đơn`, khu vực ghi chú, đơn hàng và responsive drawer cho màn hình nhỏ.
 - Cải thiện responsive Inbox: ẩn danh sách hội thoại trái dưới breakpoint hẹp, thêm drawer danh sách và nút mở danh sách cạnh avatar trong khung chat.

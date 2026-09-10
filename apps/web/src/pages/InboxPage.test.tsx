@@ -12,7 +12,7 @@ describe("Inbox Tailwind migration", () => {
     expect(source).toContain('className="inbox-shell"');
     expect(source).toContain('aria-label="Thanh điều hướng"');
     expect(list).toContain('${item.id === activeId ? "bg-blue-50" : "bg-white"}');
-    expect(chat).toContain('${message.senderType === "customer" ? "bg-white" : "bg-blue-100"}');
+    expect(chat).toContain("rounded-2xl");
     expect(list).not.toContain('bg-white px-3 py-3.5 text-left text-gray-800');
     expect(chat).not.toContain('rounded-lg bg-white px-3 py-2.5 ${message.senderType === "customer" ? "" : "bg-blue-100"}');
     expect(source).toContain("/read");
@@ -28,6 +28,11 @@ describe("Inbox Tailwind migration", () => {
     expect(source).toContain("max-[899px]:hidden");
     expect(source).toContain("isConversationListOpen");
     expect(chat).toContain('aria-label="Danh sách hội thoại"');
+    expect(chat).toContain("message.senderName");
+    expect(chat).toContain("rounded-2xl");
+    expect(chat).toContain("group-hover:opacity-100");
+    expect(chat).toContain("@All");
+    expect(chat).toContain("conversation.customerName?.trim()");
     expect(source).toContain("readStateRef");
     expect(source).toContain("generation");
     expect(source).toContain("confirmedGeneration");

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { DashboardTopbar } from "./DashboardTopbar.js";
 
@@ -21,5 +22,13 @@ describe("DashboardTopbar", () => {
     expect(collectText(element)).toContain("nhuusiuu");
     expect(collectText(element)).toContain("OWNER");
     expect(collectText(element)).toContain("Hội thoại");
+  });
+
+  it("exposes clickable brand and conversation navigation callbacks", () => {
+    const source = readFileSync(new URL("./DashboardTopbar.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("onLogoClick");
+    expect(source).toContain("onNavigate");
+    expect(source).toContain("onNavigate?.(item)");
   });
 });
