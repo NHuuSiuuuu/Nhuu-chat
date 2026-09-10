@@ -73,6 +73,9 @@
 - Important: validation status/error behavior diverged from the pre-refactor handlers for some malformed requests; customer/knowledge endpoint behavior tests were missing.
 - Ruling: one final fix wave will preserve the pre-refactor HTTP behavior as the higher-priority user constraint, and add focused customer/knowledge controller tests. Any intentional validation normalization must not be silently introduced by this structural refactor.
 - Deferred minors: mixed Express import guard, source-text message ordering test, and limited route-prefix registration coverage.
+- Final fix wave: validation contracts reconciled against baseline and 13 customer/knowledge behavior tests added; commit 8217f9f..9a960b9.
+- Final scoped re-review: both Important findings addressed; no new Critical/Important breakage.
+- Task 6: complete (full fresh run 38 passed files / 165 tests, 4 environment-blocked Mongo files / 17 skipped tests; TypeScript and diff hygiene pass)
 
 ## Final fix wave — 2026-09-10
 
