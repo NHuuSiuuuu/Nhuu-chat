@@ -40,4 +40,14 @@ describe("MessageComposer accessibility", () => {
     expect(source).toContain("rows={1}");
     expect(source).toContain("min-h-12");
   });
+
+  it("renders local AI suggestion chips and rotates their text", () => {
+    const source = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("aiSuggestionSets");
+    expect(source).toContain("aiSuggestionSetIndex");
+    expect(source).toContain("setAiSuggestionSetIndex");
+    expect(source).toContain('aria-label="Gợi ý AI"');
+    expect(source).toContain("AI gợi ý");
+  });
 });

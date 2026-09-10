@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm chip gợi ý AI cục bộ trong form nhập tin nhắn; bấm để điền nội dung và làm mới để đổi bộ gợi ý.
 - Giảm cỡ chữ nội dung tin nhắn trong khung hội thoại xuống `text-sm` để phù hợp mật độ giao diện.
 - Căn giữa avatar 16px và tên tài khoản nền tảng trên cùng một dòng trong danh sách hội thoại.
 - Giữ icon nền tảng trong dòng hội thoại ở dạng logo phẳng, không bọc circle hoặc border.

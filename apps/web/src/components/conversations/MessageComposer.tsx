@@ -9,13 +9,28 @@ const quickReplies = [
 
 const members = ["Nguyễn Văn Hữu", "Đội hỗ trợ"];
 
+const aiSuggestionSets = [
+  [
+    "Dạ, em chào anh/chị, em có thể hỗ trợ gì ạ?",
+    "Shop nhận được file rồi ạ, em kiểm tra ngay nhé.",
+    "Dạ em nghe ạ, mình cần hỗ trợ thêm thông tin gì không ạ?"
+  ],
+  [
+    "Dạ, em đã kiểm tra thông tin của mình rồi ạ.",
+    "Anh/chị đợi em một chút để em xác nhận lại nhé.",
+    "Em sẽ phản hồi lại anh/chị trong ít phút ạ."
+  ]
+];
+
 export function MessageComposer({ onSend, disabled = false }: { onSend: (content: string) => Promise<void>; disabled?: boolean }) {
   const [content, setContent] = useState("");
   const [isShortcutModalOpen, setIsShortcutModalOpen] = useState(false);
   const [suggestionKind, setSuggestionKind] = useState<"quick-reply" | "members" | null>(null);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
+  const [aiSuggestionSetIndex, setAiSuggestionSetIndex] = useState(0);
 
   const suggestions = suggestionKind === "quick-reply" ? quickReplies : members;
+  const aiSuggestions = aiSuggestionSets[aiSuggestionSetIndex] ?? aiSuggestionSets[0];
 
   async function submitMessage() {
     if (disabled || !content.trim()) return;
@@ -69,7 +84,10 @@ export function MessageComposer({ onSend, disabled = false }: { onSend: (content
       </div>
       <div className="flex items-center justify-between px-3 pt-1.5 text-xs text-gray-400">
         <span className="inline-flex items-center gap-1.5 font-medium"><InboxIcon name="sparkles" size={14} /> AI gợi ý</span>
-        <button className="rounded p-1.5 transition hover:bg-gray-100 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Làm mới gợi ý AI"><InboxIcon name="refresh" size={15} /></button>
+        <button className="rounded p-1.5 transition hover:bg-gray-100 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Làm mới gợi ý AI" onClick={() => setAiSuggestionSetIndex((current) => (current + 1) % aiSuggestionSets.length)}><InboxIcon name="refresh" size={15} /></button>
+      </div>
+      <div className="flex gap-2 overflow-x-auto px-3 pb-1.5 pt-1" role="group" aria-label="Gợi ý AI">
+        {aiSuggestions.map((suggestion) => <button className="min-w-[190px] max-w-[250px] shrink-0 truncate rounded-full border border-violet-200 bg-violet-50 px-4 py-2 text-left text-xs font-semibold text-violet-700 transition hover:border-violet-300 hover:bg-violet-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-300" type="button" key={suggestion} onClick={() => selectSuggestion(suggestion)} title={suggestion}>{suggestion}</button>)}
       </div>
       <div className="relative px-3 py-1.5">
         {suggestionKind && <div className="absolute bottom-full left-3 right-3 z-20 mb-2 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl" role="listbox" aria-label={suggestionKind === "quick-reply" ? "Mẫu trả lời nhanh" : "Gợi ý thành viên"}>
