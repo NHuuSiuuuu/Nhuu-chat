@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { InboxPage } from "./pages/InboxPage.js";
 import { DashboardPage } from "./pages/DashboardPage.js";
 import { TelegramPersonalPage } from "./pages/TelegramPersonalPage.js";
@@ -16,9 +16,32 @@ interface AuthResponse {
   user: { id: string; email: string; role: AuthRole };
 }
 
+type AppPage = "dashboard" | "telegram" | "inbox";
+
+function pageFromPath(pathname: string): AppPage {
+  if (pathname === "/inbox") return "inbox";
+  if (pathname === "/telegram") return "telegram";
+  return "dashboard";
+}
+
+function pathForPage(page: AppPage): string {
+  if (page === "inbox") return "/inbox";
+  if (page === "telegram") return "/telegram";
+  return "/dashboard";
+}
+
 export function App() {
   const [auth, setAuth] = useState(loadAuth());
-  const [page, setPage] = useState<"dashboard" | "telegram" | "inbox">("dashboard");
+  const [page, setPage] = useState<AppPage>(() => pageFromPath(window.location.pathname));
+  const navigate = useCallback((nextPage: AppPage) => {
+    setPage(nextPage);
+    if (window.location.pathname !== pathForPage(nextPage)) window.history.pushState({}, "", pathForPage(nextPage));
+  }, []);
+  useEffect(() => {
+    const handlePopState = () => setPage(pageFromPath(window.location.pathname));
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
   const refresh = useCallback(async () => {
     if (!auth) return null;
     const response = await fetch(`${API_URL}/api/v1/auth/refresh`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ refreshToken: auth.refreshToken }) });
@@ -33,7 +56,7 @@ export function App() {
   if (!canAccessInbox(auth.user.role)) {
     return <main><h1>Nhuu Chat</h1><p>Tài khoản của anh đã đăng nhập nhưng chưa có quyền mở inbox. Hãy nhờ admin cấp role agent.</p><button onClick={() => { clearAuth(); setAuth(null); }}>Đăng xuất</button></main>;
   }
-  return <ProtectedRoute token={auth.accessToken}>{page === "dashboard" ? <DashboardPage token={auth.accessToken} refresh={refresh} onOpenInbox={() => setPage("inbox")} onLogoClick={() => setPage("dashboard")} onNavigate={(item) => setPage(item === "Hội thoại" ? "inbox" : "dashboard")} /> : page === "telegram" ? <TelegramPersonalPage token={auth.accessToken} refresh={refresh} onBack={() => setPage("dashboard")} /> : <InboxPage token={auth.accessToken} refresh={refresh} onBack={() => setPage("dashboard")} onLogoClick={() => setPage("dashboard")} onNavigate={(item) => setPage(item === "Hội thoại" ? "inbox" : "dashboard")} />}</ProtectedRoute>;
+  return <ProtectedRoute token={auth.accessToken}>{page === "dashboard" ? <DashboardPage token={auth.accessToken} refresh={refresh} onOpenInbox={() => navigate("inbox")} onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : "dashboard")} /> : page === "telegram" ? <TelegramPersonalPage token={auth.accessToken} refresh={refresh} onBack={() => navigate("dashboard")} /> : <InboxPage token={auth.accessToken} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : "dashboard")} />}</ProtectedRoute>;
 }
 
 function AuthPage({ onAuthenticated }: { onAuthenticated: (auth: AuthResponse) => void }) {

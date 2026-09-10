@@ -30,5 +30,6 @@ describe("DashboardTopbar", () => {
     expect(source).toContain("onLogoClick");
     expect(source).toContain("onNavigate");
     expect(source).toContain("onNavigate?.(item)");
+    expect(source).toContain('item === "Hội thoại" ? "/inbox" : "#"');
   });
 });
