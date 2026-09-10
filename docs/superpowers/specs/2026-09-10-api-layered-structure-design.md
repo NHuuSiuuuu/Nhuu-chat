@@ -80,7 +80,9 @@ Services own business operations and data persistence orchestration. They must n
 
 ## Migration scope
 
-Move and split the HTTP-facing modules for auth, conversations, messages, customers, knowledge, Telegram bot, and Telegram personal. Update `app.ts`, `server.ts`, internal imports, and tests affected by moved modules. Keep AI, jobs, realtime, common, database, and orchestration structure unchanged unless an import must be updated.
+Move and split every current HTTP-facing module into the global layers: `auth`, `conversations`, `messages`, `customers`, `knowledge`, Telegram bot, and Telegram personal. No HTTP module is left behind as a feature-local `*.routes.ts` file. Update `app.ts`, `server.ts`, internal imports, and tests affected by moved modules. Keep AI, jobs, realtime, common, database, and orchestration structure unchanged unless an import must be updated.
+
+The final route entry points are grouped under `routes/` by API area, the corresponding handlers under `controllers/`, the corresponding application operations under `services/`, and request validation under `schemas/`. Platform-specific Telegram implementation files that are not HTTP entry points stay under `channels/telegram*` and are imported by the Telegram service/controller as needed.
 
 The migration must not change:
 
