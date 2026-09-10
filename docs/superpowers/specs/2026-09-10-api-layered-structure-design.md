@@ -94,7 +94,9 @@ The migration must not change:
 
 ## Error handling
 
-Controllers pass caught errors to the existing `errorHandler`. Zod validation errors must be converted to the existing `AppError`/error response convention at the HTTP boundary. Services continue to throw domain errors and do not format HTTP responses.
+Controllers pass caught errors to the existing `errorHandler` and preserve each endpoint's error conventions from baseline commit `1e05c33`. New schemas must not introduce blanket 400 normalization: only checks that already returned `AppError` retain their existing status, code, and message. Previously generic Zod/Error failures continue to use the generic `500 INTERNAL_ERROR` response. Services continue to throw domain errors and do not format HTTP responses.
+
+Auth's explicit manual checks retain `400 INVALID_REQUEST`; a missing body still fails before those checks and returns 500. Invalid Telegram bot registration/webhook input retains its Zod failure and generic 500 response. A missing Telegram-personal QR-status id retains its generic Error/500, while the password endpoint retains `400 INVALID_REQUEST` with `Telegram 2FA password is required` for a missing id or invalid password. Preserve first-element normalization for array-valued QR route ids and pass passwords unchanged.
 
 ## Testing and acceptance criteria
 

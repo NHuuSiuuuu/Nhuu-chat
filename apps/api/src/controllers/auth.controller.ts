@@ -10,7 +10,9 @@ import { loginSchema, refreshSchema, registerSchema } from "../schemas/auth.sche
 
 export const register: RequestHandler = async (request, response, next) => {
   try {
-    const result = registerSchema.safeParse(request.body);
+    // Preserve the baseline failure before validation when no body was parsed.
+    const { name, email, password } = request.body as Record<string, unknown>;
+    const result = registerSchema.safeParse({ name, email, password });
     if (!result.success) {
       throw new AppError(
         400,
@@ -19,8 +21,7 @@ export const register: RequestHandler = async (request, response, next) => {
       );
     }
 
-    const { name, email, password } = result.data;
-    const { user, tokens } = await registerUser(name, email, password);
+    const { user, tokens } = await registerUser(result.data.name, result.data.email, result.data.password);
     response.status(201).json({ user, ...tokens });
   } catch (error) {
     next(error);
@@ -29,13 +30,13 @@ export const register: RequestHandler = async (request, response, next) => {
 
 export const login: RequestHandler = async (request, response, next) => {
   try {
-    const result = loginSchema.safeParse(request.body);
+    const { email, password } = request.body as Record<string, unknown>;
+    const result = loginSchema.safeParse({ email, password });
     if (!result.success) {
       throw new AppError(400, "INVALID_REQUEST", "Email and password are required");
     }
 
-    const { email, password } = result.data;
-    const { user, tokens } = await loginUser(email, password);
+    const { user, tokens } = await loginUser(result.data.email, result.data.password);
     response.status(200).json({ user, ...tokens });
   } catch (error) {
     next(error);
@@ -44,7 +45,8 @@ export const login: RequestHandler = async (request, response, next) => {
 
 export const refresh: RequestHandler = async (request, response, next) => {
   try {
-    const result = refreshSchema.safeParse(request.body);
+    const { refreshToken } = request.body as Record<string, unknown>;
+    const result = refreshSchema.safeParse({ refreshToken });
     if (!result.success) {
       throw new AppError(400, "INVALID_REQUEST", "Refresh token is required");
     }

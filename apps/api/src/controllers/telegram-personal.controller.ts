@@ -22,7 +22,7 @@ function authenticatedUserId(request: AuthenticatedRequest): string {
 function qrLoginId(params: unknown): string {
   const result = telegramPersonalQrIdSchema.safeParse(params);
   if (!result.success) {
-    throw new AppError(400, "INVALID_REQUEST", "QR login id is missing");
+    throw new Error("QR login id is missing");
   }
   return result.data.id;
 }
@@ -55,12 +55,13 @@ export const getQrLoginStatus: RequestHandler = (request, response, next) => {
 export const submitQrPassword: RequestHandler = (request, response, next) => {
   try {
     const userId = authenticatedUserId(request);
-    const id = qrLoginId(request.params);
+    const id = telegramPersonalQrIdSchema.safeParse(request.params);
     const password = telegramPersonalQrPasswordSchema.safeParse(request.body);
-    if (!password.success) {
+    // This endpoint already mapped both missing IDs and passwords to AppError 400.
+    if (!id.success || !password.success) {
       throw new AppError(400, "INVALID_REQUEST", "Telegram 2FA password is required");
     }
-    response.json(submitPersonalQrPassword(id, userId, password.data.password));
+    response.json(submitPersonalQrPassword(id.data.id, userId, password.data.password));
   } catch (error) {
     next(error);
   }

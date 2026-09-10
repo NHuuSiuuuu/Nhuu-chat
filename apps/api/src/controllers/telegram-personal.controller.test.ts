@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { errorHandler } from "../common/errors.js";
 
 const serviceMocks = vi.hoisted(() => ({
   getPersonalQrLoginStatus: vi.fn(),
@@ -117,18 +118,58 @@ describe("Telegram personal controller", () => {
     expect(serviceMocks.submitPersonalQrPassword).not.toHaveBeenCalled();
   });
 
-  it("converts an invalid QR login id to an invalid-request error", async () => {
-    const { response } = responseRecorder();
+  it.each([undefined, "", []])("preserves the generic failure for a missing QR status id (%j)", async (id) => {
+    const { response, state } = responseRecorder();
     const next = vi.fn();
 
-    await getQrLoginStatus({ auth, params: { id: 123 } } as never, response as never, next);
+    await getQrLoginStatus({ auth, params: { id } } as never, response as never, next);
 
     expect(next.mock.calls[0]?.[0]).toMatchObject({
-      statusCode: 400,
-      code: "INVALID_REQUEST",
+      name: "Error",
       message: "QR login id is missing"
     });
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      errorHandler(next.mock.calls[0]?.[0], {} as never, response as never, vi.fn());
+    } finally {
+      log.mockRestore();
+    }
+    expect(state.statusCode).toBe(500);
+    expect(state.body).toEqual({
+      error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred" }
+    });
     expect(serviceMocks.getPersonalQrLoginStatus).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, "", []])("preserves the password endpoint's 400 and message for a missing id (%j)", async (id) => {
+    const { response, state } = responseRecorder();
+    const next = vi.fn();
+
+    await submitQrPassword({ auth, params: { id }, body: { password: "password" } } as never, response as never, next);
+
+    errorHandler(next.mock.calls[0]?.[0], {} as never, response as never, vi.fn());
+    expect(state.statusCode).toBe(400);
+    expect(state.body).toEqual({
+      error: { code: "INVALID_REQUEST", message: "Telegram 2FA password is required" }
+    });
+    expect(serviceMocks.submitPersonalQrPassword).not.toHaveBeenCalled();
+  });
+
+  it.each([getQrLoginStatus, submitQrPassword])("uses the first QR id when Express supplies an array (%#)", async (handler) => {
+    serviceMocks.getPersonalQrLoginStatus.mockReturnValue({ id: "qr-1", status: "waiting" });
+    serviceMocks.submitPersonalQrPassword.mockReturnValue({ id: "qr-1", status: "waiting" });
+    const { response, state } = responseRecorder();
+    const next = vi.fn();
+
+    await handler({ auth, params: { id: ["qr-1", "qr-2"] }, body: { password: "password" } } as never, response as never, next);
+
+    expect(state.body).toEqual({ id: "qr-1", status: "waiting" });
+    expect(next).not.toHaveBeenCalled();
+    if (handler === getQrLoginStatus) {
+      expect(serviceMocks.getPersonalQrLoginStatus).toHaveBeenCalledWith("qr-1", "user-1");
+    } else {
+      expect(serviceMocks.submitPersonalQrPassword).toHaveBeenCalledWith("qr-1", "user-1", "password");
+    }
   });
 
   it("preserves the missing-authentication failure without calling a service", async () => {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ZodError } from "zod";
 
 const serviceMocks = vi.hoisted(() => ({
   ingestTelegramUpdate: vi.fn(),
@@ -90,13 +91,10 @@ describe("Telegram controller", () => {
     await registerChannel({ body: { botToken: "", webhookBaseUrl: "not-a-url" } } as never, response as never, next);
 
     expect(serviceMocks.registerTelegramChannel).not.toHaveBeenCalled();
-    expect(next.mock.calls[0]?.[0]).toMatchObject({
-      statusCode: 400,
-      code: "INVALID_REQUEST"
-    });
+    expect(next.mock.calls[0]?.[0]).toBeInstanceOf(ZodError);
   });
 
-  it("converts invalid webhook updates to an invalid-request error", async () => {
+  it("forwards the baseline Zod error for invalid webhook updates", async () => {
     const { response } = responseRecorder();
     const next = vi.fn();
 
@@ -106,9 +104,6 @@ describe("Telegram controller", () => {
     } as never, response as never, next);
 
     expect(serviceMocks.ingestTelegramUpdate).not.toHaveBeenCalled();
-    expect(next.mock.calls[0]?.[0]).toMatchObject({
-      statusCode: 400,
-      code: "INVALID_REQUEST"
-    });
+    expect(next.mock.calls[0]?.[0]).toBeInstanceOf(ZodError);
   });
 });

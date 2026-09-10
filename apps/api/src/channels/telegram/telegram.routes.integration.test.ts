@@ -1,5 +1,5 @@
 import request from "supertest";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { createApp } from "../../app.js";
 import { issueTokens } from "../../services/auth.service.js";
@@ -11,6 +11,8 @@ let adminAccessToken: string;
 let customerAccessToken: string;
 
 describe("Telegram route authentication and validation", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   beforeAll(async () => {
     [adminAccessToken, customerAccessToken] = await Promise.all([
       issueTokens({ id: "admin-1", email: "admin@example.com", role: "admin" }).then(
@@ -57,23 +59,29 @@ describe("Telegram route authentication and validation", () => {
     expect(response.body.error?.code).toBe("AUTHENTICATION_REQUIRED");
   });
 
-  it("returns INVALID_REQUEST for an invalid Telegram registration body", async () => {
+  it("preserves INTERNAL_ERROR for an invalid Telegram registration body", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const response = await request(createApp())
       .post("/api/v1/channels/telegram")
       .set("Authorization", `Bearer ${adminAccessToken}`)
       .send({ botToken: "", webhookBaseUrl: "not-a-url" });
 
-    expect(response.status).toBe(400);
-    expect(response.body.error?.code).toBe("INVALID_REQUEST");
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({
+      error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred" }
+    });
   });
 
-  it("returns INVALID_REQUEST for an invalid Telegram webhook update", async () => {
+  it("preserves INTERNAL_ERROR for an invalid Telegram webhook update", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const response = await request(createApp())
       .post("/api/v1/channels/telegram/webhook/telegram-webhook-secret-value")
       .send({ update_id: "not-a-number" });
 
-    expect(response.status).toBe(400);
-    expect(response.body.error?.code).toBe("INVALID_REQUEST");
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({
+      error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred" }
+    });
   });
 
   it("allows an authenticated personal role to reach password validation", async () => {

@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Khôi phục quy ước lỗi validation trước refactor (`1e05c33`): giữ lỗi 400 có sẵn của auth/Telegram 2FA và lỗi 500 có sẵn của Telegram bot, QR-status thiếu id, auth thiếu body; không chuẩn hóa toàn bộ lỗi schema thành 400.
+- Bổ sung kiểm thử không cần Mongo cho chuẩn hóa/loại trùng tag khách hàng, phản hồi và chuyển tiếp lỗi customer/knowledge, cùng vòng đời lưu/xóa knowledge.
 - Chuyển toàn bộ xử lý gửi tin outbound vào message service; bổ sung kiểm thử hành vi gửi Telegram bot/cá nhân, lưu tin, phân quyền, lỗi và event controller.
 
 ## [Chưa phát hành] - 2026-09-09

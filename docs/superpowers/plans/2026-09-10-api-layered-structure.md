@@ -149,7 +149,7 @@ Move implementations without changing exported function signatures. Extract the 
 
 - [ ] **Step 4: Implement controllers and routes**
 
-Routes should only compose `Router`, `requireRole`, schema/controller middleware, and controller handlers. Controllers should call `safeParse`/`parse`, convert validation failures to `AppError(400, "INVALID_REQUEST", ...)`, call services, and send the same status and JSON body as the existing handlers.
+Routes should only compose `Router`, `requireRole`, schema/controller middleware, and controller handlers. Controllers should call `safeParse`/`parse`, preserve each existing validation status/code/message (including generic 500 failures), call services, and send the same status and JSON body as the existing handlers. Only pre-existing `AppError` checks retain their corresponding mappings; do not normalize all schema failures to 400.
 
 - [ ] **Step 5: Update auth middleware and application wiring**
 

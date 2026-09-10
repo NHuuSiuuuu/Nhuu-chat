@@ -1,6 +1,5 @@
 import type { RequestHandler } from "express";
 
-import { AppError } from "../common/errors.js";
 import {
   telegramChannelConfigSchema,
   telegramWebhookUpdateSchema
@@ -22,12 +21,10 @@ export const ingestWebhook: RequestHandler = async (request, response, next) => 
       return;
     }
 
-    const update = telegramWebhookUpdateSchema.safeParse(request.body);
-    if (!update.success) {
-      throw new AppError(400, "INVALID_REQUEST", "Telegram update is invalid");
-    }
+    // Baseline Zod failures use the existing generic error response.
+    const update = telegramWebhookUpdateSchema.parse(request.body);
 
-    await ingestTelegramUpdate(update.data);
+    await ingestTelegramUpdate(update);
     response.status(204).send();
   } catch (error) {
     next(error);
@@ -36,16 +33,9 @@ export const ingestWebhook: RequestHandler = async (request, response, next) => 
 
 export const registerChannel: RequestHandler = async (request, response, next) => {
   try {
-    const input = telegramChannelConfigSchema.safeParse(request.body);
-    if (!input.success) {
-      throw new AppError(
-        400,
-        "INVALID_REQUEST",
-        "Bot token and a valid webhook base URL are required"
-      );
-    }
+    const input = telegramChannelConfigSchema.parse(request.body);
 
-    response.status(201).json(await registerTelegramChannel(input.data));
+    response.status(201).json(await registerTelegramChannel(input));
   } catch (error) {
     next(error);
   }
