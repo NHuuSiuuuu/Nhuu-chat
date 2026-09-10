@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Cải thiện UI danh sách hội thoại theo `DEVELOPMENT_PROMPT.md`: dòng hội thoại thoáng hơn, avatar 48px, tên/thời gian rõ, preview có tag badge tùy chọn và nhận diện nền tảng bằng icon/label.
 - Kết nối tab `Thẻ hội thoại` với API CRUD: tải danh sách từ backend, thêm, sửa và xóa tag thật trong database, kèm trạng thái loading/lỗi trên Settings.
 - Thêm backend CRUD thẻ hội thoại dùng chung cho admin/agent qua `/api/v1/conversation-tags`, hỗ trợ tạo, sửa, xóa và kiểm tra tên/màu hex hợp lệ.
 - Sửa routing header bằng History API: logo điều hướng tới `/dashboard`, mục `Hội thoại` tới `/inbox`, đồng thời hỗ trợ back/forward của trình duyệt.

@@ -39,6 +39,7 @@ export interface ConversationContract {
   customerAvatarUrl?: string;
   conversationName?: string | null;
   conversationType?: "private" | "group";
+  tags?: ConversationTagContract[];
 }
 
 export const chatEvents = {

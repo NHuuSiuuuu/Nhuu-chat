@@ -67,4 +67,14 @@ describe("Inbox Tailwind migration", () => {
     expect(list).toContain("Kéo để thay đổi kích thước danh sách hội thoại");
     expect(list).not.toContain("Thu gọn danh sách");
   });
+
+  it("renders the conversation row with platform identity and optional tag badges", () => {
+    const list = readFileSync(new URL("../components/conversations/ConversationList.tsx", import.meta.url), "utf8");
+
+    expect(list).toContain("PlatformIcon");
+    expect(list).toContain("item.tags");
+    expect(list).toContain("conversation-tag");
+    expect(list).toContain("truncate");
+    expect(list).toContain("min-h-[88px]");
+  });
 });
