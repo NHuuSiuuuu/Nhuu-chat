@@ -177,10 +177,46 @@ describe("Inbox Tailwind migration", () => {
     expect(applied).toEqual(["current suggestion"]);
     expect(isLoading).toBe(false);
   });
+
+  it("ignores an older request error after the active conversation changes", async () => {
+    const guard = createAiSuggestionsRequestGuard();
+    const first = deferred<string>();
+    const second = deferred<string>();
+    let error: string | null = null;
+    let isLoading = false;
+
+    guard.setActiveConversation("conversation-a");
+    const isFirstCurrent = guard.start("conversation-a");
+    isLoading = true;
+    const firstResult = first.promise.catch((reason: string) => {
+      if (isFirstCurrent()) {
+        error = reason;
+        isLoading = false;
+      }
+    });
+
+    guard.setActiveConversation("conversation-b");
+    const isSecondCurrent = guard.start("conversation-b");
+    error = null;
+    isLoading = true;
+    const secondResult = second.promise.then(() => {
+      if (isSecondCurrent()) isLoading = false;
+    });
+
+    first.reject("stale error");
+    await firstResult;
+    expect(error).toBeNull();
+    expect(isLoading).toBe(true);
+
+    second.resolve("current suggestion");
+    await secondResult;
+    expect(isLoading).toBe(false);
+  });
 });
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((complete) => { resolve = complete; });
-  return { promise, resolve };
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((complete, fail) => { resolve = complete; reject = fail; });
+  return { promise, resolve, reject };
 }
