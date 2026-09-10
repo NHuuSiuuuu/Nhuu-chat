@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "../common/errors.js";
 
 const serviceMocks = vi.hoisted(() => ({
-  createOutboundMessage: vi.fn(),
   listConversations: vi.fn(),
   listMessages: vi.fn(),
   markConversationRead: vi.fn(),
+  sendOutboundMessage: vi.fn(),
   updateAssignment: vi.fn(),
   updateStatus: vi.fn()
 }));
@@ -29,10 +29,9 @@ vi.mock("../services/conversation.service.js", async (importOriginal) => ({
   updateStatus: serviceMocks.updateStatus
 }));
 
-vi.mock("../services/message.service.js", async (importOriginal) => ({
-  ...await importOriginal<typeof import("../services/message.service.js")>(),
-  createOutboundMessage: serviceMocks.createOutboundMessage,
-  listMessages: serviceMocks.listMessages
+vi.mock("../services/message.service.js", () => ({
+  listMessages: serviceMocks.listMessages,
+  sendOutboundMessage: serviceMocks.sendOutboundMessage
 }));
 
 vi.mock("../models/conversation.model.js", () => ({
@@ -68,7 +67,7 @@ const adminAuth = { id: "admin-1", email: "admin@example.com", role: "admin" } a
 
 describe("conversation controller", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it("returns the conversation list from the service", async () => {
@@ -81,6 +80,47 @@ describe("conversation controller", () => {
 
     expect(state.body).toEqual(expected);
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid conversation pagination before calling the service", async () => {
+    const { response } = responseRecorder();
+    const next = vi.fn();
+
+    await listConversations({ auth: adminAuth, query: { page: "0" } } as never, response as never, next);
+
+    expect(next.mock.calls[0]?.[0]).toMatchObject({
+      statusCode: 400,
+      code: "INVALID_PAGINATION"
+    });
+    expect(serviceMocks.listConversations).not.toHaveBeenCalled();
+    expect(socketMocks.emitChatEvent).not.toHaveBeenCalled();
+    expect(socketMocks.emitInboxEventToRecipients).not.toHaveBeenCalled();
+  });
+
+  it("requires authentication before listing conversations", async () => {
+    const { response } = responseRecorder();
+    const next = vi.fn();
+
+    await listConversations({ query: {} } as never, response as never, next);
+
+    expect(next.mock.calls[0]?.[0]).toMatchObject({
+      statusCode: 401,
+      code: "AUTHENTICATION_REQUIRED"
+    });
+    expect(serviceMocks.listConversations).not.toHaveBeenCalled();
+  });
+
+  it("forwards conversation-list service errors without emitting", async () => {
+    const failure = new Error("list failed");
+    serviceMocks.listConversations.mockRejectedValue(failure);
+    const { response } = responseRecorder();
+    const next = vi.fn();
+
+    await listConversations({ auth: adminAuth, query: {} } as never, response as never, next);
+
+    expect(next).toHaveBeenCalledWith(failure);
+    expect(socketMocks.emitChatEvent).not.toHaveBeenCalled();
+    expect(socketMocks.emitInboxEventToRecipients).not.toHaveBeenCalled();
   });
 
   it("scopes an agent's message lookup to assigned conversations", async () => {
@@ -101,6 +141,43 @@ describe("conversation controller", () => {
     });
     expect(state.body).toEqual({ messages: [], total: 0 });
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid message pagination before listing messages", async () => {
+    conversationModelMocks.exists.mockResolvedValue(true);
+    const { response } = responseRecorder();
+    const next = vi.fn();
+
+    await listMessages({
+      auth: adminAuth,
+      params: { id: "conversation-1" },
+      query: { limit: "0" }
+    } as never, response as never, next);
+
+    expect(next.mock.calls[0]?.[0]).toMatchObject({
+      statusCode: 400,
+      code: "INVALID_PAGINATION"
+    });
+    expect(serviceMocks.listMessages).not.toHaveBeenCalled();
+    expect(socketMocks.emitChatEvent).not.toHaveBeenCalled();
+    expect(socketMocks.emitInboxEventToRecipients).not.toHaveBeenCalled();
+  });
+
+  it("requires authentication before listing messages", async () => {
+    const { response } = responseRecorder();
+    const next = vi.fn();
+
+    await listMessages({
+      params: { id: "conversation-1" },
+      query: {}
+    } as never, response as never, next);
+
+    expect(next.mock.calls[0]?.[0]).toMatchObject({
+      statusCode: 401,
+      code: "AUTHENTICATION_REQUIRED"
+    });
+    expect(conversationModelMocks.exists).not.toHaveBeenCalled();
+    expect(serviceMocks.listMessages).not.toHaveBeenCalled();
   });
 
   it("marks a visible conversation as read and emits its update", async () => {
@@ -126,6 +203,58 @@ describe("conversation controller", () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it("does not emit when marking a conversation read fails", async () => {
+    conversationModelMocks.findById.mockReturnValue({
+      lean: vi.fn().mockResolvedValue({ ownerId: "customer-1", assignedAgentId: "agent-1" })
+    });
+    const failure = new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
+    serviceMocks.markConversationRead.mockRejectedValue(failure);
+    const { response, state } = responseRecorder();
+    const next = vi.fn();
+
+    await markConversationRead({
+      auth: adminAuth,
+      params: { id: "conversation-1" }
+    } as never, response as never, next);
+
+    expect(next).toHaveBeenCalledWith(failure);
+    expect(state.body).toBeUndefined();
+    expect(socketMocks.emitChatEvent).not.toHaveBeenCalled();
+    expect(socketMocks.emitInboxEventToRecipients).not.toHaveBeenCalled();
+  });
+
+  it("forwards a mark-read lookup failure without updating or emitting", async () => {
+    const failure = new Error("database unavailable");
+    conversationModelMocks.findById.mockReturnValue({ lean: vi.fn().mockRejectedValue(failure) });
+    const { response, state } = responseRecorder();
+    const next = vi.fn();
+
+    await markConversationRead({ auth: adminAuth, params: { id: "conversation-1" } } as never, response as never, next);
+
+    expect(next).toHaveBeenCalledWith(failure);
+    expect(serviceMocks.markConversationRead).not.toHaveBeenCalled();
+    expect(socketMocks.emitChatEvent).not.toHaveBeenCalled();
+    expect(socketMocks.emitInboxEventToRecipients).not.toHaveBeenCalled();
+    expect(state.body).toBeUndefined();
+  });
+
+  it.each([markConversationRead, updateAssignment, updateStatus])(
+    "rejects a missing conversation id without mutations or events (%s)", async (handler) => {
+      const { response, state } = responseRecorder();
+      const next = vi.fn();
+
+      await handler({ auth: adminAuth, params: {}, body: {} } as never, response as never, next);
+
+      expect(next.mock.calls[0]?.[0]).toMatchObject({ statusCode: 400, code: "INVALID_REQUEST" });
+      expect(serviceMocks.markConversationRead).not.toHaveBeenCalled();
+      expect(serviceMocks.updateAssignment).not.toHaveBeenCalled();
+      expect(serviceMocks.updateStatus).not.toHaveBeenCalled();
+      expect(socketMocks.emitChatEvent).not.toHaveBeenCalled();
+      expect(socketMocks.emitInboxEventToRecipients).not.toHaveBeenCalled();
+      expect(state.body).toBeUndefined();
+    }
+  );
+
   it("updates assignment and emits the conversation update", async () => {
     const expected = { id: "conversation-1", assignedAgentId: "agent-1" };
     serviceMocks.updateAssignment.mockResolvedValue(expected);
@@ -144,6 +273,37 @@ describe("conversation controller", () => {
     );
     expect(state.body).toEqual(expected);
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid assignment body without calling the service or emitting", async () => {
+    const { response } = responseRecorder();
+    const next = vi.fn();
+
+    await updateAssignment({
+      params: { id: "conversation-1" },
+      body: { assignedAgentId: 7 }
+    } as never, response as never, next);
+
+    expect(next.mock.calls[0]?.[0]).toMatchObject({ statusCode: 400, code: "INVALID_REQUEST" });
+    expect(serviceMocks.updateAssignment).not.toHaveBeenCalled();
+    expect(socketMocks.emitChatEvent).not.toHaveBeenCalled();
+  });
+
+  it("does not emit when assignment service update fails", async () => {
+    const failure = new Error("assignment failed");
+    serviceMocks.updateAssignment.mockRejectedValue(failure);
+    const { response, state } = responseRecorder();
+    const next = vi.fn();
+
+    await updateAssignment({
+      params: { id: "conversation-1" },
+      body: { assignedAgentId: "agent-1" }
+    } as never, response as never, next);
+
+    expect(next).toHaveBeenCalledWith(failure);
+    expect(socketMocks.emitChatEvent).not.toHaveBeenCalled();
+    expect(socketMocks.emitInboxEventToRecipients).not.toHaveBeenCalled();
+    expect(state.body).toBeUndefined();
   });
 
   it("updates status and emits the conversation update", async () => {
@@ -165,11 +325,42 @@ describe("conversation controller", () => {
     expect(state.body).toEqual(expected);
     expect(next).not.toHaveBeenCalled();
   });
+
+  it("rejects an invalid status body without calling the service or emitting", async () => {
+    const { response } = responseRecorder();
+    const next = vi.fn();
+
+    await updateStatus({
+      params: { id: "conversation-1" },
+      body: { status: "archived" }
+    } as never, response as never, next);
+
+    expect(next.mock.calls[0]?.[0]).toMatchObject({ statusCode: 400, code: "INVALID_REQUEST" });
+    expect(serviceMocks.updateStatus).not.toHaveBeenCalled();
+    expect(socketMocks.emitChatEvent).not.toHaveBeenCalled();
+  });
+
+  it("does not emit when status service update fails", async () => {
+    const failure = new Error("status failed");
+    serviceMocks.updateStatus.mockRejectedValue(failure);
+    const { response, state } = responseRecorder();
+    const next = vi.fn();
+
+    await updateStatus({
+      params: { id: "conversation-1" },
+      body: { status: "closed" }
+    } as never, response as never, next);
+
+    expect(next).toHaveBeenCalledWith(failure);
+    expect(socketMocks.emitChatEvent).not.toHaveBeenCalled();
+    expect(socketMocks.emitInboxEventToRecipients).not.toHaveBeenCalled();
+    expect(state.body).toBeUndefined();
+  });
 });
 
 describe("message controller", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it("rejects malformed outbound input before persistence", async () => {
@@ -181,55 +372,95 @@ describe("message controller", () => {
     const error = next.mock.calls[0]?.[0];
     expect(error).toBeInstanceOf(AppError);
     expect(error).toMatchObject({ statusCode: 400, code: "INVALID_REQUEST" });
-    expect(serviceMocks.createOutboundMessage).not.toHaveBeenCalled();
+    expect(serviceMocks.sendOutboundMessage).not.toHaveBeenCalled();
+    expect(socketMocks.emitChatEvent).not.toHaveBeenCalled();
+    expect(socketMocks.emitInboxEventToRecipients).not.toHaveBeenCalled();
   });
 
-  it("creates an outbound message with the existing response contract", async () => {
-    conversationModelMocks.findById.mockReturnValue({
-      populate: vi.fn().mockReturnValue({
-        lean: vi.fn().mockResolvedValue({
-          _id: "conversation-1",
-          platform: "email",
-          channelId: "channel-1",
-          ownerId: "customer-1",
-          assignedAgentId: null,
-          customerId: "customer-1",
-          unreadCount: 0,
-          status: "open",
-          lastMessageAt: "2026-09-10T00:00:00.000Z",
-          lastMessageSnippet: "Previous"
-        })
-      })
-    });
-    serviceMocks.createOutboundMessage.mockResolvedValue({
-      toObject: () => ({
-        _id: "message-1",
-        conversationId: "conversation-1",
-        platform: "email",
-        senderType: "agent",
-        senderId: "agent",
-        type: "text",
-        content: "Hello",
-        deliveryStatus: "pending",
-        createdAt: "2026-09-10T00:00:01.000Z"
-      })
+  it.each([
+    ["facebook", "pending"],
+    ["telegram", "sent"],
+    ["telegram_personal", "sent"]
+  ])("emits all outbound updates and returns HTTP 201 for %s", async (platform, deliveryStatus) => {
+    const message = {
+      id: "message-1",
+      conversationId: "conversation-1",
+      platform,
+      senderType: "agent",
+      senderId: "agent",
+      type: "text",
+      content: "Hello",
+      deliveryStatus,
+      createdAt: "2026-09-10T00:00:01.000Z"
+    };
+    const conversation = {
+      id: "conversation-1",
+      lastMessageAt: "2026-09-10T00:00:01.000Z",
+      lastMessageSnippet: "Hello"
+    };
+    serviceMocks.sendOutboundMessage.mockResolvedValue({
+      message,
+      conversation,
+      recipients: ["customer-1", "agent-1"]
     });
     const { response, state } = responseRecorder();
     const next = vi.fn();
 
+    const auth = { id: "customer-1", email: "customer@example.com", role: "customer" } as const;
+
     await sendMessage({
-      auth: { id: "customer-1", email: "customer@example.com", role: "customer" },
+      auth,
       body: { conversationId: "conversation-1", type: "text", content: "Hello" }
     } as never, response as never, next);
 
+    expect(serviceMocks.sendOutboundMessage).toHaveBeenCalledWith(
+      { conversationId: "conversation-1", content: "Hello" },
+      auth
+    );
+    expect(socketMocks.emitChatEvent).toHaveBeenNthCalledWith(
+      1,
+      "chat:message_received",
+      "conversation-1",
+      message
+    );
+    expect(socketMocks.emitChatEvent).toHaveBeenNthCalledWith(
+      2,
+      "chat:delivery_updated",
+      "conversation-1",
+      message
+    );
+    expect(socketMocks.emitInboxEventToRecipients).toHaveBeenCalledWith(
+      "chat:conversation_updated",
+      ["customer-1", "agent-1"],
+      conversation
+    );
+    expect(socketMocks.emitChatEvent).toHaveBeenCalledTimes(2);
+    expect(socketMocks.emitInboxEventToRecipients).toHaveBeenCalledTimes(1);
     expect(state.statusCode).toBe(201);
-    expect(state.body).toMatchObject({
-      id: "message-1",
-      conversationId: "conversation-1",
-      type: "text",
-      content: "Hello",
-      deliveryStatus: "pending"
-    });
+    expect(state.body).toEqual(message);
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    new AppError(403, "FORBIDDEN", "You do not have access to this conversation"),
+    new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found"),
+    new AppError(409, "TELEGRAM_PERSONAL_DISCONNECTED", "Telegram personal session is not active"),
+    new Error("delivery failed"),
+    new Error("persistence failed")
+  ])("forwards outbound failure %s without emitting or responding", async (failure) => {
+    serviceMocks.sendOutboundMessage.mockRejectedValue(failure);
+    const { response, state } = responseRecorder();
+    const next = vi.fn();
+
+    await sendMessage({
+      auth: adminAuth,
+      body: { conversationId: "conversation-1", type: "text", content: "Hello" }
+    } as never, response as never, next);
+
+    expect(next).toHaveBeenCalledWith(failure);
+    expect(socketMocks.emitChatEvent).not.toHaveBeenCalled();
+    expect(socketMocks.emitInboxEventToRecipients).not.toHaveBeenCalled();
+    expect(state.statusCode).toBe(200);
+    expect(state.body).toBeUndefined();
   });
 });

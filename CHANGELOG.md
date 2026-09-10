@@ -3,6 +3,10 @@
 Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong file này.
 Định dạng dựa trên Keep a Changelog và project tuân theo Semantic Versioning.
 
+## [Unreleased]
+
+- Chuyển toàn bộ xử lý gửi tin outbound vào message service; bổ sung kiểm thử hành vi gửi Telegram bot/cá nhân, lưu tin, phân quyền, lỗi và event controller.
+
 ## [Chưa phát hành] - 2026-09-09
 
 Các ghi chú nâng cấp được viết rõ ràng để cả team dễ theo dõi và thực hiện.
