@@ -7,6 +7,7 @@ import { clearAuth, loadAuth, saveAuth, type AuthRole } from "./state/auth.store
 import { ProtectedRoute } from "./components/common/ProtectedRoute.js";
 import { resolveApiBaseUrl } from "./lib/api-url.js";
 import { canAccessInbox } from "./state/inbox-access.js";
+import { SettingsPage } from "./pages/SettingsPage.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 
@@ -16,17 +17,19 @@ interface AuthResponse {
   user: { id: string; email: string; role: AuthRole };
 }
 
-type AppPage = "dashboard" | "telegram" | "inbox";
+type AppPage = "dashboard" | "telegram" | "inbox" | "settings";
 
 function pageFromPath(pathname: string): AppPage {
   if (pathname === "/inbox") return "inbox";
   if (pathname === "/telegram") return "telegram";
+  if (pathname === "/settings") return "settings";
   return "dashboard";
 }
 
 function pathForPage(page: AppPage): string {
   if (page === "inbox") return "/inbox";
   if (page === "telegram") return "/telegram";
+  if (page === "settings") return "/settings";
   return "/dashboard";
 }
 
@@ -56,7 +59,7 @@ export function App() {
   if (!canAccessInbox(auth.user.role)) {
     return <main><h1>Nhuu Chat</h1><p>Tài khoản của anh đã đăng nhập nhưng chưa có quyền mở inbox. Hãy nhờ admin cấp role agent.</p><button onClick={() => { clearAuth(); setAuth(null); }}>Đăng xuất</button></main>;
   }
-  return <ProtectedRoute token={auth.accessToken}>{page === "dashboard" ? <DashboardPage token={auth.accessToken} refresh={refresh} onOpenInbox={() => navigate("inbox")} onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : "dashboard")} /> : page === "telegram" ? <TelegramPersonalPage token={auth.accessToken} refresh={refresh} onBack={() => navigate("dashboard")} /> : <InboxPage token={auth.accessToken} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : "dashboard")} />}</ProtectedRoute>;
+  return <ProtectedRoute token={auth.accessToken}>{page === "dashboard" ? <DashboardPage token={auth.accessToken} refresh={refresh} onOpenInbox={() => navigate("inbox")} onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : item === "Cài đặt" ? "settings" : "dashboard")} /> : page === "telegram" ? <TelegramPersonalPage token={auth.accessToken} refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : item === "Cài đặt" ? "settings" : "dashboard")} /> : <InboxPage token={auth.accessToken} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : item === "Cài đặt" ? "settings" : "dashboard")} />}</ProtectedRoute>;
 }
 
 function AuthPage({ onAuthenticated }: { onAuthenticated: (auth: AuthResponse) => void }) {

@@ -6,10 +6,21 @@ describe("App navigation", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("onLogoClick={() => navigate(\"dashboard\")}");
-    expect(source).toContain("onNavigate={(item) => navigate(item === \"Hội thoại\" ? \"inbox\" : \"dashboard\")}");
+    expect(source).toContain('item === "Hội thoại" ? "inbox"');
+    expect(source).toContain('item === "Cài đặt" ? "settings"');
     expect(source).toContain("window.history.pushState");
     expect(source).toContain("window.addEventListener(\"popstate\"");
     expect(source).toContain("/inbox");
     expect(source).toContain("/dashboard");
+  });
+
+  it("routes the settings header item to /settings and renders it below the shared header", () => {
+    const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('type AppPage = "dashboard" | "telegram" | "inbox" | "settings"');
+    expect(source).toContain('if (pathname === "/settings") return "settings"');
+    expect(source).toContain('if (page === "settings") return "/settings"');
+    expect(source).toContain('item === "Cài đặt" ? "settings"');
+    expect(source).toContain("<SettingsPage");
   });
 });
