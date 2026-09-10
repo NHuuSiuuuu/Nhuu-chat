@@ -35,11 +35,11 @@
 - Produces `AiSuggestionsResponse` with `{ suggestions: string[]; source: "gemini" | "fallback" }`.
 - Produces `GeminiReplySuggestionProvider.suggest(input: { latestCustomerMessage: string }): Promise<string[]>`.
 
-- [ ] **Step 1: Add failing provider and environment tests**
+- [x] **Step 1: Add failing provider and environment tests**
 
   Test that a provider response containing `{ suggestions: [...] }` is normalized to 3 non-empty strings, and that invalid JSON/provider errors are rejected. Extend environment tests to accept optional `GEMINI_API_KEY` and `GEMINI_CHAT_MODEL` without making them mandatory.
 
-- [ ] **Step 2: Run focused tests and verify the new tests fail**
+- [x] **Step 2: Run focused tests and verify the new tests fail**
 
   Run:
 
@@ -49,7 +49,7 @@
 
   Expected: provider module/types are missing and the new assertions fail.
 
-- [ ] **Step 3: Add the SDK, config fields, contract and provider**
+- [x] **Step 3: Add the SDK, config fields, contract and provider**
 
   Add `@google/genai` to `apps/api` and instantiate `GoogleGenAI` only inside the backend provider. Use `GEMINI_API_KEY` and configurable `GEMINI_CHAT_MODEL` with a documented default. Call `models.generateContent` with a JSON object schema containing a string array, then validate/normalize the response and enforce the 3-item/240-character limits. Use a bounded timeout and do not log prompt content or secrets.
 
@@ -62,7 +62,7 @@
   }
   ```
 
-- [ ] **Step 4: Run provider/config tests and commit**
+- [x] **Step 4: Run provider/config tests and commit**
 
   Run the focused command again; expected result is all provider and environment tests passing. Commit:
 
@@ -84,23 +84,23 @@
 - Produces `getConversationReplySuggestions(id: string, auth: AuthUser): Promise<AiSuggestionsResponse>`.
 - Consumes `GeminiReplySuggestionProvider.suggest()` and existing `conversationAccessFilter`/`ConversationModel`/`MessageModel` access patterns.
 
-- [ ] **Step 1: Write failing service/controller tests**
+- [x] **Step 1: Write failing service/controller tests**
 
   Cover: admin receives 3 Gemini suggestions from the newest customer message; an unassigned agent receives `404 CONVERSATION_NOT_FOUND`; missing Gemini configuration/provider failure returns local fallback; controller rejects unauthenticated requests and returns `{ suggestions, source }`.
 
-- [ ] **Step 2: Run focused API tests and verify failure**
+- [x] **Step 2: Run focused API tests and verify failure**
 
   ```bash
   pnpm exec vitest run apps/api/src/services/conversation-suggestion.service.test.ts apps/api/src/controllers/conversation-message.controller.test.ts
   ```
 
-- [ ] **Step 3: Implement the service and route**
+- [x] **Step 3: Implement the service and route**
 
   In the service, first query the conversation with `conversationAccessFilter(auth)`; then query only the newest `senderType: "customer"` message sorted by `createdAt` and `_id` descending. If no usable message exists, return local fallback. Catch provider/configuration/timeout errors and return fallback without exposing provider details. Add `POST /:id/ai-suggestions` protected by `requireRole("admin", "agent")`, authenticate in the controller, and return the service result.
 
   Add concise comments explaining the access-first lookup and why provider failures are converted to fallback.
 
-- [ ] **Step 4: Run focused API tests and commit**
+- [x] **Step 4: Run focused API tests and commit**
 
   Expected: service and controller tests pass, including authorization and fallback paths.
 
@@ -123,21 +123,21 @@
 - `ChatWindow` passes `aiSuggestions`, `isAiSuggestionsLoading`, `aiSuggestionsError`, and `onRefreshAiSuggestions` to `MessageComposer`.
 - `MessageComposer` keeps the existing local suggestions as fallback and calls `onSelect` behavior by setting textarea content only.
 
-- [ ] **Step 1: Add failing source/UI tests**
+- [x] **Step 1: Add failing source/UI tests**
 
   Assert that Inbox calls `/ai-suggestions` with the conversation id and token, composer renders loading/error state, and selecting a Gemini chip fills the textarea without invoking `onSend`.
 
-- [ ] **Step 2: Run focused web tests and verify failure**
+- [x] **Step 2: Run focused web tests and verify failure**
 
   ```bash
   pnpm exec vitest run apps/web/src/pages/InboxPage.test.tsx apps/web/src/components/conversations/MessageComposer.test.tsx
   ```
 
-- [ ] **Step 3: Implement the integration**
+- [x] **Step 3: Implement the integration**
 
   Add an active-conversation suggestion state in `InboxPage`; reset it when `activeId` changes, call the API on refresh, and preserve local fallback when the request fails. Pass the state through `ChatWindow`. Update `MessageComposer` so Gemini chips use the same compact visual style as the approved local chips, show a spinner/disabled refresh state while loading, and show a non-blocking error label. Keep Enter/Shift+Enter, `/`, `@`, existing tag controls and outbound send behavior unchanged.
 
-- [ ] **Step 4: Run focused web tests and commit**
+- [x] **Step 4: Run focused web tests and commit**
 
   ```bash
   git add apps/web/src/pages/InboxPage.tsx apps/web/src/components/conversations/ChatWindow.tsx apps/web/src/components/conversations/MessageComposer.tsx apps/web/src/pages/InboxPage.test.tsx apps/web/src/components/conversations/MessageComposer.test.tsx
@@ -151,15 +151,15 @@
 - Modify: `docs/wiki/README.md`
 - Modify: `CHANGELOG.md`
 
-- [ ] **Step 1: Document setup and limitations**
+- [x] **Step 1: Document setup and limitations**
 
   Add `GEMINI_API_KEY` and optional `GEMINI_CHAT_MODEL` to the backend setup instructions, state that the key must remain in `apps/api/.env`, describe the endpoint behavior and fallback, and note that prompt/response data is not persisted.
 
-- [ ] **Step 2: Update changelog and verify documentation diff**
+- [x] **Step 2: Update changelog and verify documentation diff**
 
   Add one Vietnamese Unreleased entry and run `git diff --check`.
 
-- [ ] **Step 3: Commit documentation**
+- [x] **Step 3: Commit documentation**
 
   ```bash
   git add README.md docs/wiki/README.md CHANGELOG.md
@@ -171,7 +171,7 @@
 **Files:**
 - No new source files; update the plan checkboxes after each verified task.
 
-- [ ] **Step 1: Run focused backend and frontend tests**
+- [x] **Step 1: Run focused backend and frontend tests**
 
   ```bash
   pnpm exec vitest run apps/api/src/ai/reply-suggestion.provider.test.ts apps/api/src/services/conversation-suggestion.service.test.ts apps/api/src/controllers/conversation-message.controller.test.ts apps/web/src/pages/InboxPage.test.tsx apps/web/src/components/conversations/MessageComposer.test.tsx
@@ -184,7 +184,7 @@
   pnpm --filter web build
   ```
 
-- [ ] **Step 3: Check final diff and environment safety**
+- [x] **Step 3: Check final diff and environment safety**
 
   Run `git diff --check`, confirm no `.env` or secret is staged, and confirm `DEVELOPMENT_PROMPT.md` remains untouched/untracked.
 
