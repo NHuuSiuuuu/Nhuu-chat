@@ -76,41 +76,26 @@ describe("getConversationReplySuggestions", () => {
     expect(messageModelMocks.findOne).not.toHaveBeenCalled();
   });
 
-  it("returns local fallback when Gemini is unavailable", async () => {
+  it("returns an empty fallback when Gemini is unavailable", async () => {
     providerMocks.suggest.mockRejectedValue(new Error("GEMINI_API_KEY is not configured"));
 
     const result = await getConversationReplySuggestions("conversation-1", adminAuth);
 
     expect(result.source).toBe("fallback");
-    expect(result.suggestions).toHaveLength(3);
+    expect(result.suggestions).toEqual([]);
   });
 
-  it("builds different fallback suggestions from different latest customer messages", async () => {
-    providerMocks.suggest.mockRejectedValue(new Error("GEMINI_API_KEY is not configured"));
-
-    const orderResult = await getConversationReplySuggestions("conversation-1", adminAuth);
-
-    messageModelMocks.findOne.mockReturnValue(messageQuery({ content: "Tôi muốn đổi địa chỉ nhận hàng" }));
-    const addressResult = await getConversationReplySuggestions("conversation-1", adminAuth);
-
-    expect(orderResult.source).toBe("fallback");
-    expect(addressResult.source).toBe("fallback");
-    expect(orderResult.suggestions).toHaveLength(3);
-    expect(addressResult.suggestions).toHaveLength(3);
-    expect(addressResult.suggestions).not.toEqual(orderResult.suggestions);
-  });
-
-  it("returns local fallback when no customer message is available", async () => {
+  it("returns an empty fallback when no customer message is available", async () => {
     messageModelMocks.findOne.mockReturnValue(messageQuery(null));
 
     const result = await getConversationReplySuggestions("conversation-1", adminAuth);
 
     expect(result.source).toBe("fallback");
-    expect(result.suggestions).toHaveLength(3);
+    expect(result.suggestions).toEqual([]);
     expect(providerMocks.suggest).not.toHaveBeenCalled();
   });
 
-  it("returns local fallback when Gemini configuration fails during provider creation", async () => {
+  it("returns an empty fallback when Gemini configuration fails during provider creation", async () => {
     providerMocks.constructor.mockImplementation(() => {
       throw new Error("GEMINI_API_KEY is not configured");
     });
@@ -118,6 +103,6 @@ describe("getConversationReplySuggestions", () => {
     const result = await getConversationReplySuggestions("conversation-1", adminAuth);
 
     expect(result.source).toBe("fallback");
-    expect(result.suggestions).toHaveLength(3);
+    expect(result.suggestions).toEqual([]);
   });
 });

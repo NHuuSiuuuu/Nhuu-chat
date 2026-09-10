@@ -95,39 +95,16 @@ export async function getConversationReplySuggestions(id: string, auth: AuthUser
     .sort({ createdAt: -1, _id: -1 })
     .lean();
   const content = typeof latestCustomerMessage?.content === "string" ? latestCustomerMessage.content.trim() : "";
-  if (!content) return localReplySuggestions();
+  if (!content) return { suggestions: [], source: "fallback" };
 
   try {
     const { GeminiReplySuggestionProvider } = await import("../ai/reply-suggestion.provider.js");
     const suggestions = await new GeminiReplySuggestionProvider().suggest({ latestCustomerMessage: content });
     return { suggestions: suggestions.slice(0, 3), source: "gemini" };
   } catch {
-    // Provider and configuration failures stay internal so agents always receive usable replies.
-    return localReplySuggestions(content);
+    // Provider and configuration failures stay internal while preserving an empty fallback response.
+    return { suggestions: [], source: "fallback" };
   }
-}
-
-// Keeps fallback replies useful when Gemini is unavailable by matching the latest customer topic in memory only.
-function localReplySuggestions(latestCustomerMessage = ""): AiSuggestionsResponse {
-  const normalizedMessage = latestCustomerMessage.toLocaleLowerCase();
-  const suggestions = normalizedMessage.includes("địa chỉ") || normalizedMessage.includes("dia chi")
-    ? [
-        "Dạ, em hỗ trợ cập nhật địa chỉ nhận hàng cho anh/chị ạ.",
-        "Anh/chị gửi giúp em địa chỉ mới đầy đủ để em kiểm tra nhé.",
-        "Em sẽ xác nhận lại thông tin giao hàng ngay ạ."
-      ]
-    : normalizedMessage.includes("đơn") || normalizedMessage.includes("order")
-      ? [
-          "Dạ, em kiểm tra tình trạng đơn hàng cho anh/chị ngay ạ.",
-          "Anh/chị gửi giúp em mã đơn hàng để em tra cứu nhé.",
-          "Em sẽ phản hồi tiến độ đơn hàng trong ít phút ạ."
-        ]
-      : [
-          "Dạ, em đã nhận được thông tin của anh/chị ạ.",
-          "Anh/chị đợi em một chút để em kiểm tra lại nhé.",
-          "Em sẽ phản hồi lại anh/chị trong ít phút ạ."
-        ];
-  return { suggestions, source: "fallback" };
 }
 
 // Normalizes populated and unpopulated Mongo documents into the frontend conversation contract.

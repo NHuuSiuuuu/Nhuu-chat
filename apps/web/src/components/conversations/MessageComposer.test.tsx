@@ -66,7 +66,14 @@ describe("MessageComposer accessibility", () => {
     if (typeof composerModule.getDisplayedAiSuggestions === "function") {
       expect(composerModule.getDisplayedAiSuggestions(["stale suggestion"], true)).toEqual([]);
       expect(composerModule.getDisplayedAiSuggestions(null, false)).toEqual([]);
+      expect(composerModule.getDisplayedAiSuggestions([], false)).toEqual([]);
     }
+  });
+
+  it("renders AI chips only when API suggestions are available", () => {
+    const source = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("displayedAiSuggestions.length > 0");
   });
 
   it("returns API suggestions after loading resolves", () => {
