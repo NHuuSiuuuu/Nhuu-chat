@@ -28,7 +28,10 @@ const appEnvSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   TELEGRAM_WEBHOOK_SECRET: z.string().min(16),
   TELEGRAM_API_ID: z.coerce.number().int().positive().optional(),
-  TELEGRAM_API_HASH: z.string().min(1).optional()
+  TELEGRAM_API_HASH: z.string().min(1).optional(),
+  GEMINI_API_KEY: z.string().min(1).optional(),
+  // Gemini 2.5 Flash is the default low-latency model for reply suggestions.
+  GEMINI_CHAT_MODEL: z.string().min(1).default("gemini-2.5-flash")
 });
 
 export type AppEnv = z.infer<typeof appEnvSchema>;

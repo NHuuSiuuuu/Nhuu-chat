@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@google/genai": "^1.21.0",
     "@nhuu-chat/config": "workspace:*",
     "@nhuu-chat/contracts": "workspace:*",
     "@socket.io/redis-adapter": "^8.3.0",

@@ -3,6 +3,11 @@ export interface HealthResponse {
   service: "nhuu-chat";
 }
 
+export interface AiSuggestionsResponse {
+  suggestions: string[];
+  source: "gemini" | "fallback";
+}
+
 export type ChatPlatform = "facebook" | "instagram" | "zalo" | "telegram" | "telegram_personal";
 export type ConversationStatus = "open" | "pending" | "closed";
 

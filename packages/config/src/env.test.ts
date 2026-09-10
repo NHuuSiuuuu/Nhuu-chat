@@ -29,7 +29,11 @@ describe("environment configuration", () => {
   it("parses a complete environment into typed values", async () => {
     const { env } = await importEnv();
 
-    expect(env).toEqual({ ...validEnvironment, PORT: 3000 });
+    expect(env).toEqual({
+      ...validEnvironment,
+      PORT: 3000,
+      GEMINI_CHAT_MODEL: "gemini-2.5-flash"
+    });
   });
 
   it("accepts the supported secure database protocols", async () => {
@@ -40,6 +44,16 @@ describe("environment configuration", () => {
 
     expect(env.MONGODB_URI).toBe("mongodb+srv://cluster.example.com/nhuu-chat");
     expect(env.REDIS_URL).toBe("rediss://cache.example.com:6380");
+  });
+
+  it("accepts optional Gemini configuration", async () => {
+    const { env } = await importEnv({
+      GEMINI_API_KEY: "gemini-test-key",
+      GEMINI_CHAT_MODEL: "gemini-test-model"
+    });
+
+    expect(env.GEMINI_API_KEY).toBe("gemini-test-key");
+    expect(env.GEMINI_CHAT_MODEL).toBe("gemini-test-model");
   });
 
   it.each([
