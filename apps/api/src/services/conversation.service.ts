@@ -4,6 +4,7 @@ import { UserModel } from "../models/user.model.js";
 import { isValidObjectId } from "mongoose";
 import type { AuthUser } from "./auth.service.js";
 import { conversationAccessFilter } from "../realtime/access.js";
+import { TelegramPersonalSessionModel } from "../channels/telegram-personal/telegram-personal.model.js";
 
 export async function listConversations(query: {
   page?: string;
@@ -21,7 +22,17 @@ export async function listConversations(query: {
     ConversationModel.find(filter).populate("customerId", "name avatarUrl").sort({ lastMessageAt: -1, _id: 1 }).skip((page - 1) * limit).limit(limit).lean(),
     ConversationModel.countDocuments(filter)
   ]);
-  return { conversations: rows.map(toConversation), total };
+  const ownerIds = rows
+    .filter((row) => row.platform === "telegram_personal" && row.ownerId)
+    .map((row) => String(row.ownerId));
+  const sessions = ownerIds.length > 0
+    ? await TelegramPersonalSessionModel.find({ userId: { $in: ownerIds }, status: "active" }).lean()
+    : [];
+  const accountByOwnerId = new Map(sessions.map((session) => [String(session.userId), { name: session.displayName, avatarUrl: undefined }]));
+  return {
+    conversations: rows.map((row) => toConversation(row, row.ownerId ? accountByOwnerId.get(String(row.ownerId)) : undefined)),
+    total
+  };
 }
 
 export async function updateAssignment(id: string, assignedAgentId: string | null) {
@@ -54,7 +65,7 @@ export async function markConversationRead(id: string, auth: AuthUser) {
 }
 
 // Normalizes populated and unpopulated Mongo documents into the frontend conversation contract.
-export function toConversation(row: any) {
+export function toConversation(row: any, account?: { name?: string; avatarUrl?: string }) {
   const customer = row.customerId && typeof row.customerId === "object" ? row.customerId : null;
   return {
     id: String(row._id), customerId: String(customer?._id ?? row.customerId), platform: row.platform,
@@ -63,6 +74,8 @@ export function toConversation(row: any) {
     lastMessageAt: new Date(row.lastMessageAt).toISOString(), lastMessageSnippet: row.lastMessageSnippet,
     customerName: customer?.name ?? row.customerName ?? undefined,
     customerAvatarUrl: customer?.avatarUrl ?? row.customerAvatarUrl ?? undefined,
+    accountName: account?.name ?? row.accountName ?? undefined,
+    accountAvatarUrl: account?.avatarUrl ?? row.accountAvatarUrl ?? undefined,
     conversationName: row.conversationName ?? null,
     conversationType: row.conversationType ?? "private"
   };

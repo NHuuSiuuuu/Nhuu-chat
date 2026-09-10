@@ -37,6 +37,8 @@ export interface ConversationContract {
   lastMessageSnippet: string;
   customerName?: string;
   customerAvatarUrl?: string;
+  accountName?: string;
+  accountAvatarUrl?: string;
   conversationName?: string | null;
   conversationType?: "private" | "group";
   tags?: ConversationTagContract[];

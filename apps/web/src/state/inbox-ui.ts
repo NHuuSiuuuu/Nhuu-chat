@@ -6,6 +6,10 @@ interface ConversationPresentationInput {
   conversationType?: "private" | "group";
 }
 
+export function conversationAccountName({ accountName, platform }: { accountName?: string; platform: string }): string {
+  return accountName?.trim() || conversationPlatformLabel(platform);
+}
+
 export const CONVERSATION_LIST_MIN_WIDTH = 72;
 export const CONVERSATION_LIST_MAX_WIDTH = 395;
 

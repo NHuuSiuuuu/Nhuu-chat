@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMemo, useState } from "react";
 import type { ConversationContract } from "@nhuu-chat/contracts";
-import { conversationDisplayName, formatConversationTime, conversationPlatformLabel } from "../../state/inbox-ui.js";
+import { conversationAccountName, conversationDisplayName, formatConversationTime, conversationPlatformLabel } from "../../state/inbox-ui.js";
 import { InboxIcon } from "./InboxIcon.js";
 import { ConversationAvatar } from "./ConversationAvatar.js";
 import { PlatformIcon } from "../dashboard/PlatformIcon.js";
@@ -32,6 +32,7 @@ export function ConversationList({ items, activeId, onSelect, collapsed = false,
     <div className={`conversation-items min-h-0 overflow-y-auto ${collapsed ? "py-2" : ""}`}>
       {filtered.length === 0 ? <div className="conversation-list-empty px-4 py-10 text-center text-[13px] text-gray-400">{collapsed ? "" : "Chưa có hội thoại"}</div> : filtered.map((item) => {
         const name = conversationDisplayName(item);
+        const accountName = conversationAccountName({ accountName: item.accountName, platform: item.platform });
         const platform = platformIconProvider(item.platform);
         return <button className={`conversation-item relative flex min-h-[88px] w-full items-start gap-3 border-0 border-b border-gray-100 text-left text-gray-800 transition-colors hover:bg-slate-50 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 ${collapsed ? "justify-center px-2 py-3" : "px-3 py-3.5"} ${item.id === activeId ? "bg-blue-50" : "bg-white"}`} key={item.id} onClick={() => onSelect(item.id)} aria-current={item.id === activeId} title={collapsed ? name : undefined}>
           <ConversationAvatar name={name} avatarUrl={item.customerAvatarUrl} isGroup={item.conversationType === "group"} size={collapsed ? "size-[42px]" : "size-[48px]"} />
@@ -42,9 +43,8 @@ export function ConversationList({ items, activeId, onSelect, collapsed = false,
             </span>
             <span className="flex min-w-0 items-center gap-2">
               <span className="conversation-preview min-w-0 flex-1 truncate text-xs text-gray-500">{item.lastMessageSnippet || "Hội thoại mới"}</span>
-              {item.tags?.length ? <span className="flex shrink-0 items-center gap-1">{item.tags.slice(0, 2).map((tag) => <span className="conversation-tag max-w-[88px] truncate rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: tag.color }} key={tag.id}>{tag.name}</span>)}</span> : null}
             </span>
-            <span className="conversation-platform flex items-center gap-1.5 truncate text-[11px] font-medium text-gray-400"><PlatformIcon provider={platform} size={15} /><span>{conversationPlatformLabel(item.platform)}</span></span>
+              <span className="conversation-account flex min-w-0 items-center gap-1.5 text-[11px] text-gray-400"><ConversationAvatar name={accountName} avatarUrl={item.accountAvatarUrl} size="size-4" /><span className="min-w-0 truncate">{accountName}</span>{item.tags?.length ? <span className="flex min-w-0 items-center gap-1">{item.tags.slice(0, 2).map((tag) => <span className="conversation-tag max-w-[88px] truncate rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: tag.color }} key={tag.id}>{tag.name}</span>)}</span> : null}<span className="ml-auto shrink-0" title={conversationPlatformLabel(item.platform)}><PlatformIcon provider={platform} size={15} /></span></span>
           </span>
           {item.unreadCount > 0 && <span className={`conversation-unread grid size-5 shrink-0 place-items-center rounded-full bg-red-500 text-[11px] font-bold text-white ${collapsed ? "absolute right-1 top-1" : ""}`}>{item.unreadCount > 99 ? "99+" : item.unreadCount}</span>}
         </button>;

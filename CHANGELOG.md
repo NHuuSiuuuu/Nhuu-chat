@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Hiển thị tài khoản mạng xã hội đã kết nối (avatar/tên) ở dòng người phụ trách của từng hội thoại; giữ tag cạnh tên và icon nền tảng ở mép phải.
 - Cải thiện UI danh sách hội thoại theo `DEVELOPMENT_PROMPT.md`: dòng hội thoại thoáng hơn, avatar 48px, tên/thời gian rõ, preview có tag badge tùy chọn và nhận diện nền tảng bằng icon/label.
 - Kết nối tab `Thẻ hội thoại` với API CRUD: tải danh sách từ backend, thêm, sửa và xóa tag thật trong database, kèm trạng thái loading/lỗi trên Settings.
 - Thêm backend CRUD thẻ hội thoại dùng chung cho admin/agent qua `/api/v1/conversation-tags`, hỗ trợ tạo, sửa, xóa và kiểm tra tên/màu hex hợp lệ.

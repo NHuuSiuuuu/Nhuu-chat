@@ -12,6 +12,12 @@ export function mergeMessages(current: ChatMessageContract[], incoming: ChatMess
 
 export function upsertConversation(conversations: ConversationContract[], conversation: ConversationContract): ConversationContract[] {
   const existing = conversations.find((item) => item.id === conversation.id);
-  return [{ ...existing, ...conversation }, ...conversations.filter((item) => item.id !== conversation.id)]
+  const merged = {
+    ...existing,
+    ...conversation,
+    accountName: conversation.accountName ?? existing?.accountName,
+    accountAvatarUrl: conversation.accountAvatarUrl ?? existing?.accountAvatarUrl
+  };
+  return [merged, ...conversations.filter((item) => item.id !== conversation.id)]
     .sort((left, right) => right.lastMessageAt.localeCompare(left.lastMessageAt));
 }

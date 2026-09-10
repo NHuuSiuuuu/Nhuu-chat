@@ -11,6 +11,8 @@ describe("conversation presentation contract", () => {
       channelId: "group-1",
       conversationName: "Nhóm sân bóng",
       conversationType: "group",
+      accountName: "Nhuu Telegram",
+      accountAvatarUrl: "https://cdn.example/account.png",
       assignedAgentId: null,
       unreadCount: 3,
       status: "open",
@@ -23,7 +25,9 @@ describe("conversation presentation contract", () => {
       customerName: "Nguyễn Văn Hữu",
       customerAvatarUrl: "https://cdn.example/avatar.png",
       conversationName: "Nhóm sân bóng",
-      conversationType: "group"
+      conversationType: "group",
+      accountName: "Nhuu Telegram",
+      accountAvatarUrl: "https://cdn.example/account.png"
     });
   });
 });

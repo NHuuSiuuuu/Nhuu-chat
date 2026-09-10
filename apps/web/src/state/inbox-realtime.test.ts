@@ -42,7 +42,7 @@ describe("inbox realtime state", () => {
   });
 
   it("preserves identity metadata when a realtime payload is partial", () => {
-    const updated = upsertConversation([{ ...conversation, customerName: "Nguyễn Văn Hữu", customerAvatarUrl: "avatar.png" }], { ...conversation, lastMessageSnippet: "Mới" });
-    expect(updated[0]).toMatchObject({ customerName: "Nguyễn Văn Hữu", customerAvatarUrl: "avatar.png", lastMessageSnippet: "Mới" });
+    const updated = upsertConversation([{ ...conversation, customerName: "Nguyễn Văn Hữu", customerAvatarUrl: "avatar.png", accountName: "Nhuu Telegram", accountAvatarUrl: "account.png" }], { ...conversation, lastMessageSnippet: "Mới" });
+    expect(updated[0]).toMatchObject({ customerName: "Nguyễn Văn Hữu", customerAvatarUrl: "avatar.png", accountName: "Nhuu Telegram", accountAvatarUrl: "account.png", lastMessageSnippet: "Mới" });
   });
 });

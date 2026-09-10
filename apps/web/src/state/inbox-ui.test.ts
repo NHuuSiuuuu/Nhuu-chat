@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { clampConversationListWidth, conversationDisplayName, conversationInitials, formatConversationTime, conversationPlatformLabel, isNearLatestMessage, markConversationRead } from "./inbox-ui.js";
+import { clampConversationListWidth, conversationAccountName, conversationDisplayName, conversationInitials, formatConversationTime, conversationPlatformLabel, isNearLatestMessage, markConversationRead } from "./inbox-ui.js";
 
 describe("inbox presentation", () => {
   it("builds a stable customer label and initials without extra API fields", () => {
@@ -17,6 +17,11 @@ describe("inbox presentation", () => {
     expect(conversationDisplayName({ channelId: "8863142234", platform: "telegram_personal", conversationType: "group" })).toBe("Nhóm hội thoại");
     expect(conversationPlatformLabel("telegram_personal")).toBe("Telegram");
     expect(conversationPlatformLabel("zalo")).toBe("Zalo");
+  });
+
+  it("uses the connected social account name for the assignee row", () => {
+    expect(conversationAccountName({ accountName: "Nhuu Telegram", platform: "telegram_personal" })).toBe("Nhuu Telegram");
+    expect(conversationAccountName({ platform: "zalo" })).toBe("Zalo");
   });
 
   it("shows the latest-message button only after scrolling past the threshold", () => {

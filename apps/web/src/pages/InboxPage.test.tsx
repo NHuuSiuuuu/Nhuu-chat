@@ -74,6 +74,9 @@ describe("Inbox Tailwind migration", () => {
     expect(list).toContain("PlatformIcon");
     expect(list).toContain("item.tags");
     expect(list).toContain("conversation-tag");
+    expect(list).toContain("item.accountName");
+    expect(list).toContain("item.accountAvatarUrl");
+    expect(list).toContain("conversationAccountName");
     expect(list).toContain("truncate");
     expect(list).toContain("min-h-[88px]");
   });

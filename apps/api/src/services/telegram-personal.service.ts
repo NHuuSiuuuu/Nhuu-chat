@@ -223,7 +223,8 @@ function attachPersonalMessageSync(userId: string, client: TelegramClient): void
       await conversation.populate("customerId", "name avatarUrl");
       const senderName = [sender?.firstName, sender?.lastName].filter(Boolean).join(" ") || "Telegram user";
       const storedMessage = await MessageModel.create({ conversationId: conversation._id, platform: "telegram_personal", externalMessageId: String(message.id), senderType: "customer", senderId, type: "text", content, deliveryStatus: "delivered", metadata: { senderName } });
-      const conversationPayload = toConversation(conversation.toObject());
+      const account = await TelegramPersonalSessionModel.findOne({ userId, status: "active" }).lean();
+      const conversationPayload = toConversation(conversation.toObject(), account ? { name: account.displayName } : undefined);
       emitChatEvent("chat:message_received", String(conversation._id), toMessage(storedMessage.toObject()));
       emitInboxEventToRecipients("chat:conversation_updated", [userId, conversation.assignedAgentId ? String(conversation.assignedAgentId) : ""], conversationPayload);
     } catch (error) {
