@@ -6,10 +6,22 @@ const MAX_SUGGESTION_LENGTH = 240;
 const REQUEST_TIMEOUT_MS = 10_000;
 
 type SuggestionsPayload = {
-  suggestions?: unknown;
+  suggestions: unknown;
 };
 
-function normalizeSuggestions(payload: SuggestionsPayload): string[] {
+function isSuggestionsPayload(payload: unknown): payload is SuggestionsPayload {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    "suggestions" in payload
+  );
+}
+
+function normalizeSuggestions(payload: unknown): string[] {
+  if (!isSuggestionsPayload(payload)) {
+    throw new Error("Gemini response did not contain suggestions");
+  }
+
   if (!Array.isArray(payload.suggestions)) {
     throw new Error("Gemini response did not contain suggestions");
   }
@@ -40,45 +52,57 @@ export class GeminiReplySuggestionProvider {
 
   // Generates short customer-service replies and bounds the external provider call.
   async suggest(input: { latestCustomerMessage: string }): Promise<string[]> {
-    const request = this.client.models.generateContent({
-      model: env.GEMINI_CHAT_MODEL,
-      contents: input.latestCustomerMessage,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            suggestions: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
-            }
-          },
-          required: ["suggestions"]
-        }
-      }
-    });
+    const abortController = new AbortController();
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-    const response = await Promise.race([
-      request,
-      new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("Gemini request timed out")), REQUEST_TIMEOUT_MS);
-      })
-    ]);
-
-    let payload: unknown;
     try {
+      const timeout = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          abortController.abort();
+          reject(new Error("Gemini request timed out"));
+        }, REQUEST_TIMEOUT_MS);
+      });
+      const request = this.client.models.generateContent({
+        model: env.GEMINI_CHAT_MODEL,
+        contents: `Generate short Vietnamese customer-service replies.\n\nLatest customer message:\n${input.latestCustomerMessage}`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              suggestions: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
+              }
+            },
+            required: ["suggestions"]
+          },
+          abortSignal: abortController.signal,
+          httpOptions: { timeout: REQUEST_TIMEOUT_MS }
+        }
+      });
+      const response = await Promise.race([request, timeout]);
+
+      let payload: unknown;
       if (typeof response.text !== "string") {
         throw new Error("Gemini response did not contain text");
       }
       payload = JSON.parse(response.text);
-    } catch {
-      throw new Error("Gemini response was not valid JSON");
-    }
 
-    if (typeof payload !== "object" || payload === null) {
-      throw new Error("Gemini response was not a JSON object");
-    }
+      if (typeof payload !== "object" || payload === null) {
+        throw new Error("Gemini response was not a JSON object");
+      }
 
-    return normalizeSuggestions(payload as SuggestionsPayload);
+      return normalizeSuggestions(payload);
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        throw new Error("Gemini response was not valid JSON");
+      }
+      throw error;
+    } finally {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
+    }
   }
 }

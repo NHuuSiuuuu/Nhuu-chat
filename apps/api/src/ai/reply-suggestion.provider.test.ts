@@ -65,6 +65,77 @@ describe("Gemini reply suggestion provider", () => {
     ]);
   });
 
+  it("sends the Vietnamese reply prompt and JSON schema grounded on the customer message", async () => {
+    const { GeminiReplySuggestionProvider } = await importProvider();
+    const provider = new GeminiReplySuggestionProvider();
+
+    await provider.suggest({ latestCustomerMessage: "Tôi muốn đổi sản phẩm." });
+
+    expect(generateContent).toHaveBeenCalledWith({
+      model: "gemini-2.5-flash-lite",
+      contents: expect.stringContaining("Tôi muốn đổi sản phẩm."),
+      config: expect.objectContaining({
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            suggestions: {
+              type: "ARRAY",
+              items: { type: "STRING" }
+            }
+          },
+          required: ["suggestions"]
+        },
+        abortSignal: expect.any(AbortSignal),
+        httpOptions: { timeout: 10_000 }
+      })
+    });
+
+    expect(generateContent.mock.calls[0][0].contents).toContain(
+      "short Vietnamese customer-service replies"
+    );
+  });
+
+  it("filters non-strings and empty values and caps suggestions at 240 characters", async () => {
+    generateContent.mockResolvedValue({
+      text: JSON.stringify({
+        suggestions: [
+          " ",
+          42,
+          "A".repeat(241),
+          "Useful reply",
+          "Another useful reply",
+          "Third useful reply",
+          "Fourth useful reply"
+        ]
+      })
+    });
+    const { GeminiReplySuggestionProvider } = await importProvider();
+    const provider = new GeminiReplySuggestionProvider();
+
+    await expect(
+      provider.suggest({ latestCustomerMessage: "Cần hỗ trợ" })
+    ).resolves.toEqual(["A".repeat(240), "Useful reply", "Another useful reply"]);
+  });
+
+  it("aborts the Gemini request when the timeout expires", async () => {
+    vi.useFakeTimers();
+    generateContent.mockImplementation(() => new Promise(() => undefined));
+    const { GeminiReplySuggestionProvider } = await importProvider();
+    const provider = new GeminiReplySuggestionProvider();
+    const suggestionRequest = provider
+      .suggest({ latestCustomerMessage: "Xin chào" })
+      .catch((error: unknown) => error);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    await expect(suggestionRequest).resolves.toMatchObject({
+      message: "Gemini request timed out"
+    });
+    expect(generateContent.mock.calls[0][0].config.abortSignal.aborted).toBe(true);
+    vi.useRealTimers();
+  });
+
   it("rejects invalid JSON responses", async () => {
     generateContent.mockResolvedValue({ text: "not-json" });
     const { GeminiReplySuggestionProvider } = await importProvider();
