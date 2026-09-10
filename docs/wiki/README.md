@@ -134,8 +134,12 @@ cp .env.example apps/api/.env
 - `TELEGRAM_API_ID` và `TELEGRAM_API_HASH` cho Telegram cá nhân.
 - `TELEGRAM_BOT_TOKEN`/webhook secret nếu dùng Telegram Bot.
 - `MONGODB_TEST_URI` nếu muốn chạy integration test Mongo ổn định.
+- `GEMINI_API_KEY` nếu muốn bật gợi ý trả lời Gemini.
+- `GEMINI_CHAT_MODEL` tùy chọn; mặc định là `gemini-2.5-flash-lite`.
 
 Không commit `.env`, token, secret hoặc encryption key.
+
+`GEMINI_API_KEY` chỉ được lưu ở backend trong `apps/api/.env`; không đưa key vào frontend, request của trình duyệt hoặc repository. Endpoint `POST /api/v1/conversations/:id/ai-suggestions` chỉ cho `admin` và `agent`, đọc tin nhắn mới nhất của khách trong hội thoại và trả tối đa 3 gợi ý kèm `source` là `gemini` hoặc `fallback`. Khi thiếu key, không có tin nhắn phù hợp, Gemini timeout/lỗi quota hoặc trả dữ liệu không hợp lệ, backend trả gợi ý cục bộ để không chặn composer. Prompt và response của request Gemini không được lưu vào database.
 
 Khởi động Redis local:
 

@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Bổ sung tài liệu cấu hình `GEMINI_API_KEY`/`GEMINI_CHAT_MODEL`, endpoint gợi ý trả lời Gemini, cơ chế fallback và giới hạn lưu trữ prompt/response.
 - Thêm chip gợi ý AI cục bộ trong form nhập tin nhắn; bấm để điền nội dung và làm mới để đổi bộ gợi ý.
 - Giảm cỡ chữ nội dung tin nhắn trong khung hội thoại xuống `text-sm` để phù hợp mật độ giao diện.
 - Căn giữa avatar 16px và tên tài khoản nền tảng trên cùng một dòng trong danh sách hội thoại.
