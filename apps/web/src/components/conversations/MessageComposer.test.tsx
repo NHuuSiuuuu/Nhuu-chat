@@ -51,6 +51,14 @@ describe("MessageComposer accessibility", () => {
     expect(source).toContain("AI gợi ý");
   });
 
+  it("shows a loading spinner beside the AI suggestion label without static chips", () => {
+    const source = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('isAiSuggestionsLoading && <span className="inline-flex animate-spin" aria-hidden="true">');
+    expect(source).toContain('aria-label="Gợi ý AI"');
+    expect(source).toContain("aiSuggestions?.length ? aiSuggestions : []");
+  });
+
   it("renders server suggestions with loading and non-blocking error states", () => {
     const source = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
 
