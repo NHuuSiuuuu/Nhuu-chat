@@ -29,6 +29,10 @@ describe("Inbox Tailwind migration", () => {
     expect(source).toContain("message.conversationId === activeId");
     expect(source).toContain("max-[899px]:hidden");
     expect(source).toContain("isConversationListOpen");
+    expect(source).toContain("/api/v1/conversation-tags");
+    expect(source).toContain("/tags");
+    expect(source).toContain("tagIds");
+    expect(source).toContain("/tags`, token, { method: \"PUT\"");
     expect(chat).toContain('aria-label="Danh sách hội thoại"');
     expect(chat).toContain("message.senderName");
     expect(chat).toContain("rounded-2xl");
@@ -84,5 +88,7 @@ describe("Inbox Tailwind migration", () => {
     expect(list).toContain('className="min-w-0 truncate leading-4"');
     expect(list).toContain("truncate");
     expect(list).toContain("min-h-[88px]");
+    expect(list).toContain("availableTags");
+    expect(list).toContain("onTagsChange");
   });
 });

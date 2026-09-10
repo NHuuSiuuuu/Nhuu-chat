@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useEffect, useState } from "react";
-import { chatEvents, type ChatMessageContract, type ConversationContract } from "@nhuu-chat/contracts";
+import { chatEvents, type ChatMessageContract, type ConversationContract, type ConversationTagContract } from "@nhuu-chat/contracts";
 import { apiRequest } from "../lib/api.js";
 import { createChatSocket } from "../lib/socket.js";
 import { resolveApiBaseUrl } from "../lib/api-url.js";
@@ -12,10 +12,12 @@ import { InboxIcon } from "../components/conversations/InboxIcon.js";
 import { DashboardTopbar } from "../components/dashboard/DashboardTopbar.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
+const CONVERSATION_TAGS_API_URL = "/api/v1/conversation-tags";
 export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: { token: string; refresh?: () => Promise<string | null>; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hội thoại" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void }) {
   const [conversations, setConversations] = useState<ConversationContract[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageContract[]>([]);
+  const [availableTags, setAvailableTags] = useState<ConversationTagContract[]>([]);
   const [isConversationListOpen, setIsConversationListOpen] = useState(false);
   const [conversationListWidth, setConversationListWidth] = useState(CONVERSATION_LIST_MAX_WIDTH);
   const isConversationListCollapsed = conversationListWidth <= CONVERSATION_LIST_MIN_WIDTH;
@@ -89,6 +91,13 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
     return () => { cancelled = true; };
   }, [token, refresh]);
   useEffect(() => {
+    let cancelled = false;
+    void apiRequest<{ tags: ConversationTagContract[] }>(API_URL, CONVERSATION_TAGS_API_URL, token, {}, refresh)
+      .then((result) => { if (!cancelled) setAvailableTags(result.tags); })
+      .catch(() => { if (!cancelled) setAvailableTags([]); });
+    return () => { cancelled = true; };
+  }, [token, refresh]);
+  useEffect(() => {
     if (!activeId) return;
     void markActiveRead(activeId);
   }, [activeId, readRequestKey, token, refresh]);
@@ -122,6 +131,29 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
     return () => { socket.off("connect", joinActiveRoom); socket.disconnect(); };
   }, [token, activeId]);
   function selectConversation(id: string) { setActiveId(id); setReadRequestKey((current) => current + 1); setIsConversationListOpen(false); }
+  async function updateConversationTags(id: string, tags: ConversationTagContract[]) {
+    const previous = conversationsRef.current.find((item) => item.id === id)?.tags ?? [];
+    setConversations((current) => {
+      const next = current.map((item) => item.id === id ? { ...item, tags } : item);
+      conversationsRef.current = next;
+      return next;
+    });
+    try {
+      const result = await apiRequest<ConversationContract>(API_URL, `/api/v1/conversations/${id}/tags`, token, { method: "PUT", body: JSON.stringify({ tagIds: tags.map((tag) => tag.id) }) }, refresh);
+      setConversations((current) => {
+        const next = current.map((item) => item.id === id ? { ...item, tags: result.tags ?? tags } : item);
+        conversationsRef.current = next;
+        return next;
+      });
+    } catch (error) {
+      setConversations((current) => {
+        const next = current.map((item) => item.id === id ? { ...item, tags: previous } : item);
+        conversationsRef.current = next;
+        return next;
+      });
+      throw error;
+    }
+  }
   async function sendText(content: string) { if (!activeId) return; const message = await apiRequest<ChatMessageContract>(API_URL, "/api/v1/messages/send", token, { method: "POST", body: JSON.stringify({ conversationId: activeId, type: "text", content }) }, refresh); setMessages((current) => appendUniqueMessage(current, message)); }
   function handleConversationListResizeStart(event: React.PointerEvent<HTMLDivElement>) {
     event.preventDefault();
@@ -135,5 +167,5 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp, { once: true });
   }
-  return <main className="inbox-shell"><div className="flex h-screen min-h-0 flex-col overflow-hidden bg-slate-100"><DashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} /><div className="inbox-page grid min-h-0 flex-1 grid-cols-[44px_var(--conversation-list-width)_minmax(0,1fr)] overflow-hidden bg-slate-100 text-gray-800 transition-[grid-template-columns] duration-200 max-[900px]:grid-cols-[44px_minmax(0,1fr)]" style={{ "--conversation-list-width": `${conversationListWidth}px` } as React.CSSProperties}><aside className="inbox-nav flex flex-col items-center gap-3 bg-blue-600 px-1 py-3" aria-label="Thanh điều hướng"><div className="inbox-nav-logo mb-2 grid size-[30px] place-items-center rounded-lg border border-white/70 text-[17px] font-bold text-white">H</div><button className="inbox-nav-item grid size-9 place-items-center rounded-lg bg-black/15 text-white transition-colors hover:bg-black/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hội thoại"><InboxIcon name="chat" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hộp thư"><InboxIcon name="inbox" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Khách hàng"><InboxIcon name="users" /></button><div className="inbox-nav-spacer flex-1" /><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Trợ giúp"><InboxIcon name="help" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Cài đặt"><InboxIcon name="settings" /></button>{onBack && <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Về Dashboard" onClick={onBack}>←</button>}</aside><div className="min-h-0 max-[899px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} collapsed={isConversationListCollapsed} onResizeStart={handleConversationListResizeStart} /></div><ChatWindow conversation={active} messages={messages} onSend={sendText} onOpenConversationList={() => setIsConversationListOpen(true)} />{isConversationListOpen && <><button className="fixed inset-0 z-40 bg-slate-900/30 min-[900px]:hidden" type="button" onClick={() => setIsConversationListOpen(false)} aria-label="Đóng danh sách hội thoại" /><div className="fixed inset-y-0 left-[44px] z-50 flex w-[min(395px,calc(100vw-44px))] min-[900px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} /></div></>}</div></div></main>;
+  return <main className="inbox-shell"><div className="flex h-screen min-h-0 flex-col overflow-hidden bg-slate-100"><DashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} /><div className="inbox-page grid min-h-0 flex-1 grid-cols-[44px_var(--conversation-list-width)_minmax(0,1fr)] overflow-hidden bg-slate-100 text-gray-800 transition-[grid-template-columns] duration-200 max-[900px]:grid-cols-[44px_minmax(0,1fr)]" style={{ "--conversation-list-width": `${conversationListWidth}px` } as React.CSSProperties}><aside className="inbox-nav flex flex-col items-center gap-3 bg-blue-600 px-1 py-3" aria-label="Thanh điều hướng"><div className="inbox-nav-logo mb-2 grid size-[30px] place-items-center rounded-lg border border-white/70 text-[17px] font-bold text-white">H</div><button className="inbox-nav-item grid size-9 place-items-center rounded-lg bg-black/15 text-white transition-colors hover:bg-black/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hội thoại"><InboxIcon name="chat" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hộp thư"><InboxIcon name="inbox" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Khách hàng"><InboxIcon name="users" /></button><div className="inbox-nav-spacer flex-1" /><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Trợ giúp"><InboxIcon name="help" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Cài đặt"><InboxIcon name="settings" /></button>{onBack && <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Về Dashboard" onClick={onBack}>←</button>}</aside><div className="min-h-0 max-[899px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} availableTags={availableTags} onTagsChange={updateConversationTags} collapsed={isConversationListCollapsed} onResizeStart={handleConversationListResizeStart} /></div><ChatWindow conversation={active} messages={messages} onSend={sendText} onOpenConversationList={() => setIsConversationListOpen(true)} />{isConversationListOpen && <><button className="fixed inset-0 z-40 bg-slate-900/30 min-[900px]:hidden" type="button" onClick={() => setIsConversationListOpen(false)} aria-label="Đóng danh sách hội thoại" /><div className="fixed inset-y-0 left-[44px] z-50 flex w-[min(395px,calc(100vw-44px))] min-[900px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} availableTags={availableTags} onTagsChange={updateConversationTags} /></div></>}</div></div></main>;
 }

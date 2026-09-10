@@ -8,7 +8,8 @@ const serviceMocks = vi.hoisted(() => ({
   markConversationRead: vi.fn(),
   sendOutboundMessage: vi.fn(),
   updateAssignment: vi.fn(),
-  updateStatus: vi.fn()
+  updateStatus: vi.fn(),
+  updateConversationTags: vi.fn()
 }));
 
 const conversationModelMocks = vi.hoisted(() => ({
@@ -26,7 +27,8 @@ vi.mock("../services/conversation.service.js", async (importOriginal) => ({
   listConversations: serviceMocks.listConversations,
   markConversationRead: serviceMocks.markConversationRead,
   updateAssignment: serviceMocks.updateAssignment,
-  updateStatus: serviceMocks.updateStatus
+  updateStatus: serviceMocks.updateStatus,
+  updateConversationTags: serviceMocks.updateConversationTags
 }));
 
 vi.mock("../services/message.service.js", () => ({
@@ -44,7 +46,8 @@ import {
   listConversations,
   markConversationRead,
   updateAssignment,
-  updateStatus
+  updateStatus,
+  updateConversationTags
 } from "./conversations.controller.js";
 import { listMessages, sendMessage } from "./messages.controller.js";
 
@@ -324,6 +327,32 @@ describe("conversation controller", () => {
     );
     expect(state.body).toEqual(expected);
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it("replaces conversation tags and emits the updated conversation", async () => {
+    const expected = { id: "conversation-1", tags: [{ id: "tag-1", name: "Mua hàng", color: "#22c55e" }] };
+    serviceMocks.updateConversationTags.mockResolvedValue(expected);
+    conversationModelMocks.findById.mockReturnValue({ lean: vi.fn().mockResolvedValue({ ownerId: "owner-1", assignedAgentId: "agent-1" }) });
+    const { response, state } = responseRecorder();
+    const next = vi.fn();
+
+    await updateConversationTags({ auth: adminAuth, params: { id: "conversation-1" }, body: { tagIds: ["tag-1"] } } as never, response as never, next);
+
+    expect(serviceMocks.updateConversationTags).toHaveBeenCalledWith("conversation-1", ["tag-1"], adminAuth);
+    expect(socketMocks.emitInboxEventToRecipients).toHaveBeenCalledWith("chat:conversation_updated", ["owner-1", "agent-1"], expected);
+    expect(state.body).toEqual(expected);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid conversation tag payload", async () => {
+    const { response, state } = responseRecorder();
+    const next = vi.fn();
+
+    await updateConversationTags({ auth: adminAuth, params: { id: "conversation-1" }, body: { tagIds: [7] } } as never, response as never, next);
+
+    expect(next.mock.calls[0]?.[0]).toMatchObject({ statusCode: 400, code: "INVALID_REQUEST" });
+    expect(serviceMocks.updateConversationTags).not.toHaveBeenCalled();
+    expect(state.body).toBeUndefined();
   });
 
   it("rejects an invalid status body without calling the service or emitting", async () => {

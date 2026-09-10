@@ -31,3 +31,7 @@ export const conversationAssignmentSchema = z.object({
 export const conversationStatusSchema = z.object({
   status: z.enum(["open", "pending", "closed"])
 });
+
+export const conversationTagsSchema = z.object({
+  tagIds: z.array(z.string().min(1)).max(50)
+});

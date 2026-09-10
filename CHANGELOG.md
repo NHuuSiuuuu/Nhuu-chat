@@ -73,6 +73,7 @@ Các ghi chú nâng cấp được viết rõ ràng để cả team dễ theo d�
 - Bổ sung tùy chọn chọn màu custom khi thêm thẻ hội thoại và lưu màu đã chọn cùng tag.
 - Đặt `Cài đặt chung` làm tab hoạt động mặc định vì là mục đầu tiên trong Settings.
 - Cập nhật icon riêng tương ứng cho từng option trong sidebar Cài đặt.
+- Thêm gắn/bỏ nhiều thẻ trên từng hội thoại trong Inbox qua API có phân quyền admin/agent.
 
 ### Đã sửa
 

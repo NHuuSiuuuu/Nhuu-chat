@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMemo, useState } from "react";
-import type { ConversationContract } from "@nhuu-chat/contracts";
+import type { ConversationContract, ConversationTagContract } from "@nhuu-chat/contracts";
 import { conversationAccountName, conversationDisplayName, formatConversationTime, conversationPlatformLabel } from "../../state/inbox-ui.js";
 import { InboxIcon } from "./InboxIcon.js";
 import { ConversationAvatar } from "./ConversationAvatar.js";
@@ -10,6 +10,8 @@ interface ConversationListProps {
   items: ConversationContract[];
   activeId: string | null;
   onSelect: (id: string) => void;
+  availableTags: ConversationTagContract[];
+  onTagsChange: (id: string, tags: ConversationTagContract[]) => Promise<void>;
   collapsed?: boolean;
   onResizeStart?: (event: React.PointerEvent<HTMLDivElement>) => void;
 }
@@ -17,12 +19,29 @@ function platformIconProvider(platform: ConversationContract["platform"]) {
   return platform === "telegram_personal" ? "telegram" : platform;
 }
 
-export function ConversationList({ items, activeId, onSelect, collapsed = false, onResizeStart }: ConversationListProps) {
+export function ConversationList({ items, activeId, onSelect, availableTags, onTagsChange, collapsed = false, onResizeStart }: ConversationListProps) {
   const [search, setSearch] = useState("");
+  const [openTagId, setOpenTagId] = useState<string | null>(null);
+  const [pendingTagId, setPendingTagId] = useState<string | null>(null);
   const filtered = useMemo(
     () => items.filter((item) => `${item.channelId} ${item.lastMessageSnippet} ${item.customerName ?? ""} ${item.conversationName ?? ""} ${conversationPlatformLabel(item.platform)}`.toLowerCase().includes(search.toLowerCase())),
     [items, search]
   );
+
+  async function toggleTag(item: ConversationContract, tag: ConversationTagContract) {
+    const currentTags = item.tags ?? [];
+    const nextTags = currentTags.some((current) => current.id === tag.id)
+      ? currentTags.filter((current) => current.id !== tag.id)
+      : [...currentTags, tag];
+    setPendingTagId(`${item.id}:${tag.id}`);
+    try {
+      await onTagsChange(item.id, nextTags);
+    } catch {
+      // The parent restores the previous tag list when the API update fails.
+    } finally {
+      setPendingTagId(null);
+    }
+  }
 
   return <aside className={`relative rounded-tl-lg conversation-sidebar flex min-w-0 flex-col overflow-hidden border-r border-gray-200 bg-white transition-[width] duration-200 ${collapsed ? "w-[72px]" : "w-full"}`} aria-label="Danh sách hội thoại">
     <div className={`${collapsed ? "flex min-h-[66px] items-center justify-center p-3" : "conversation-toolbar grid grid-cols-[minmax(0,1fr)_82px_40px] gap-2 p-3 max-[680px]:grid-cols-[minmax(0,1fr)_40px]"}`}>
@@ -34,20 +53,28 @@ export function ConversationList({ items, activeId, onSelect, collapsed = false,
         const name = conversationDisplayName(item);
         const accountName = conversationAccountName({ accountName: item.accountName, platform: item.platform });
         const platform = platformIconProvider(item.platform);
-        return <button className={`conversation-item relative flex min-h-[88px] w-full items-start gap-3 border-0 border-b border-gray-100 text-left text-gray-800 transition-colors hover:bg-slate-50 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 ${collapsed ? "justify-center px-2 py-3" : "px-3 py-3.5"} ${item.id === activeId ? "bg-blue-50" : "bg-white"}`} key={item.id} onClick={() => onSelect(item.id)} aria-current={item.id === activeId} title={collapsed ? name : undefined}>
-          <ConversationAvatar name={name} avatarUrl={item.customerAvatarUrl} isGroup={item.conversationType === "group"} size={collapsed ? "size-[42px]" : "size-[48px]"} />
-          <span className={`conversation-item-content grid min-w-0 flex-1 gap-1 ${collapsed ? "hidden" : ""}`}>
-            <span className="conversation-item-top flex min-w-0 items-center justify-between gap-2">
-              <strong className="min-w-0 truncate text-sm font-semibold text-gray-900">{name}</strong>
-              <time className="shrink-0 text-[11px] text-gray-400">{formatConversationTime(item.lastMessageAt)}</time>
-            </span>
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="conversation-preview min-w-0 flex-1 truncate text-xs text-gray-500">{item.lastMessageSnippet || "Hội thoại mới"}</span>
-            </span>
+        return <div className={`conversation-item relative flex min-h-[88px] w-full border-b border-gray-100 text-gray-800 transition-colors hover:bg-slate-50 ${item.id === activeId ? "bg-blue-50" : "bg-white"}`} key={item.id}>
+          <button className={`flex min-w-0 flex-1 items-start gap-3 border-0 bg-transparent text-left focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 ${collapsed ? "justify-center px-2 py-3" : "px-3 py-3.5"}`} type="button" onClick={() => onSelect(item.id)} aria-current={item.id === activeId} title={collapsed ? name : undefined}>
+            <ConversationAvatar name={name} avatarUrl={item.customerAvatarUrl} isGroup={item.conversationType === "group"} size={collapsed ? "size-[42px]" : "size-[48px]"} />
+            <span className={`conversation-item-content grid min-w-0 flex-1 gap-1 ${collapsed ? "hidden" : ""}`}>
+              <span className="conversation-item-top flex min-w-0 items-center justify-between gap-2">
+                <strong className="min-w-0 truncate text-sm font-semibold text-gray-900">{name}</strong>
+                <time className="shrink-0 text-[11px] text-gray-400">{formatConversationTime(item.lastMessageAt)}</time>
+              </span>
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="conversation-preview min-w-0 flex-1 truncate text-xs text-gray-500">{item.lastMessageSnippet || "Hội thoại mới"}</span>
+              </span>
               <span className="conversation-account flex min-w-0 items-center gap-1.5 leading-4 text-[11px] text-gray-400"><ConversationAvatar name={accountName} avatarUrl={item.accountAvatarUrl} size="size-4" /><span className="min-w-0 truncate leading-4">{accountName}</span>{item.tags?.length ? <span className="flex min-w-0 items-center gap-1">{item.tags.slice(0, 2).map((tag) => <span className="conversation-tag max-w-[88px] truncate rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: tag.color }} key={tag.id}>{tag.name}</span>)}</span> : null}<span className="ml-auto shrink-0" title={conversationPlatformLabel(item.platform)}><PlatformIcon provider={platform} size={15} plain /></span></span>
-          </span>
-          {item.unreadCount > 0 && <span className={`conversation-unread grid size-5 shrink-0 place-items-center rounded-full bg-red-500 text-[11px] font-bold text-white ${collapsed ? "absolute right-1 top-1" : ""}`}>{item.unreadCount > 99 ? "99+" : item.unreadCount}</span>}
-        </button>;
+            </span>
+            {item.unreadCount > 0 && <span className={`conversation-unread grid size-5 shrink-0 place-items-center rounded-full bg-red-500 text-[11px] font-bold text-white ${collapsed ? "absolute right-1 top-1" : ""}`}>{item.unreadCount > 99 ? "99+" : item.unreadCount}</span>}
+          </button>
+          {!collapsed && availableTags.length > 0 && <div className="absolute bottom-2 right-8 z-20">
+            <button className="grid size-6 place-items-center rounded-md text-gray-400 transition hover:bg-gray-200 hover:text-sky-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300" type="button" aria-label={`Gắn thẻ cho ${name}`} onClick={() => setOpenTagId((current) => current === item.id ? null : item.id)}><InboxIcon name="tag" size={13} /></button>
+            {openTagId === item.id && <div className="absolute bottom-7 right-0 grid w-44 gap-1 rounded-lg border border-gray-200 bg-white p-2 shadow-xl" role="menu" aria-label={`Thẻ của ${name}`}>
+              {availableTags.map((tag) => { const selected = item.tags?.some((current) => current.id === tag.id); return <button className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-700 hover:bg-slate-50 disabled:opacity-50" type="button" role="menuitemcheckbox" aria-checked={selected} disabled={pendingTagId === `${item.id}:${tag.id}`} key={tag.id} onClick={() => void toggleTag(item, tag)}><span className={`grid size-4 place-items-center rounded border ${selected ? "border-sky-600 bg-sky-600 text-white" : "border-gray-300"}`}>{selected ? "✓" : ""}</span><span className="min-w-0 flex-1 truncate">{tag.name}</span><span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: tag.color }} /></button>; })}
+            </div>}
+          </div>}
+        </div>;
       })}
     </div>
     <div className="absolute inset-y-0 right-0 z-10 w-2 cursor-col-resize touch-none" role="separator" aria-label="Kéo để thay đổi kích thước danh sách hội thoại" aria-orientation="vertical" onPointerDown={onResizeStart} />

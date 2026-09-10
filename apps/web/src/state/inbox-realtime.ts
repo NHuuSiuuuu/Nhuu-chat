@@ -16,7 +16,8 @@ export function upsertConversation(conversations: ConversationContract[], conver
     ...existing,
     ...conversation,
     accountName: conversation.accountName ?? existing?.accountName,
-    accountAvatarUrl: conversation.accountAvatarUrl ?? existing?.accountAvatarUrl
+    accountAvatarUrl: conversation.accountAvatarUrl ?? existing?.accountAvatarUrl,
+    tags: conversation.tags ?? existing?.tags
   };
   return [merged, ...conversations.filter((item) => item.id !== conversation.id)]
     .sort((left, right) => right.lastMessageAt.localeCompare(left.lastMessageAt));

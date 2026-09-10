@@ -8,13 +8,15 @@ import {
   conversationAssignmentSchema,
   conversationIdSchema,
   conversationListQuerySchema,
-  conversationStatusSchema
+  conversationStatusSchema,
+  conversationTagsSchema
 } from "../schemas/conversation.schemas.js";
 import {
   listConversations as listConversationRecords,
   markConversationRead as markConversationReadRecord,
   updateAssignment as updateConversationAssignment,
-  updateStatus as updateConversationStatus
+  updateStatus as updateConversationStatus,
+  updateConversationTags as updateConversationTagsRecord
 } from "../services/conversation.service.js";
 
 function authenticatedRequest(request: Request) {
@@ -90,6 +92,25 @@ export const updateStatus: RequestHandler = async (request, response, next) => {
     }
     const result = await updateConversationStatus(id, body.data.status);
     emitChatEvent("chat:conversation_updated", id, result);
+    response.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateConversationTags: RequestHandler = async (request, response, next) => {
+  try {
+    const auth = authenticatedRequest(request);
+    const id = conversationId(request.params);
+    const body = conversationTagsSchema.safeParse(request.body);
+    if (!body.success) throw new AppError(400, "INVALID_REQUEST", "tagIds is invalid");
+    const target = await ConversationModel.findById(id).lean();
+    const result = await updateConversationTagsRecord(id, body.data.tagIds, auth);
+    emitInboxEventToRecipients(
+      "chat:conversation_updated",
+      [target?.ownerId ? String(target.ownerId) : "", target?.assignedAgentId ? String(target.assignedAgentId) : ""],
+      result
+    );
     response.json(result);
   } catch (error) {
     next(error);

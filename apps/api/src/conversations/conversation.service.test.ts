@@ -13,6 +13,10 @@ describe("conversation presentation contract", () => {
       conversationType: "group",
       accountName: "Nhuu Telegram",
       accountAvatarUrl: "https://cdn.example/account.png",
+      tagIds: [
+        { _id: "tag-1", name: "Mua hàng", color: "#22c55e" },
+        { _id: "tag-2", name: "Ưu tiên", color: "#ef4444" }
+      ],
       assignedAgentId: null,
       unreadCount: 3,
       status: "open",
@@ -27,7 +31,11 @@ describe("conversation presentation contract", () => {
       conversationName: "Nhóm sân bóng",
       conversationType: "group",
       accountName: "Nhuu Telegram",
-      accountAvatarUrl: "https://cdn.example/account.png"
+      accountAvatarUrl: "https://cdn.example/account.png",
+      tags: [
+        { id: "tag-1", name: "Mua hàng", color: "#22c55e" },
+        { id: "tag-2", name: "Ưu tiên", color: "#ef4444" }
+      ]
     });
   });
 });
