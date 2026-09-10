@@ -57,6 +57,7 @@ function telegramCredentials(): { apiId: number; apiHash: string } {
   return { apiId, apiHash };
 }
 
+// Creates an expiring MTProto login session and keeps the QR/2FA state private to its owner.
 export async function startPersonalQrLogin(userId: string) {
   const existing = [...pendingQrLogins.values()].find((item) => item.userId === userId && (item.status === "waiting" || item.status === "password_required"));
   if (existing && (existing.status === "waiting" || existing.status === "password_required") && shouldReusePendingQr(existing.status)) {
@@ -165,6 +166,7 @@ export async function getActivePersonalClient(userId: string): Promise<TelegramC
   return restorePersonalClient(userId, session.encryptedSession);
 }
 
+// Reconnects every persisted Telegram session during API startup so inbound sync works after a restart.
 export async function restoreActivePersonalClients(): Promise<void> {
   const sessions = await TelegramPersonalSessionModel.find({ status: "active" })
     .select("+encryptedSession")
@@ -178,6 +180,7 @@ export async function restoreActivePersonalClients(): Promise<void> {
   }));
 }
 
+// Restores one encrypted session only after Telegram confirms that it is still authorized.
 async function restorePersonalClient(userId: string, encryptedSession: string): Promise<TelegramClient | undefined> {
   const credentials = telegramCredentials();
   const client = new TelegramClient(new StringSession(decryptSecret(encryptedSession)), credentials.apiId, credentials.apiHash, {
@@ -194,6 +197,7 @@ async function restorePersonalClient(userId: string, encryptedSession: string): 
   return client;
 }
 
+// Converts incoming MTProto events into canonical customer, conversation, message, and realtime records.
 function attachPersonalMessageSync(userId: string, client: TelegramClient): void {
   client.addEventHandler(async (event) => {
     const message = event.message;

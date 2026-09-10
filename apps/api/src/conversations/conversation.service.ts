@@ -45,6 +45,7 @@ export async function updateStatus(id: string, status: "open" | "pending" | "clo
   return toConversation(row);
 }
 
+// Clears unread state only when the authenticated user is allowed to access this conversation.
 export async function markConversationRead(id: string, auth: AuthUser) {
   const accessFilter = conversationAccessFilter(auth);
   const row = await ConversationModel.findOneAndUpdate({ _id: id, ...accessFilter }, { unreadCount: 0 }, { new: true }).populate("customerId", "name avatarUrl").lean();
@@ -52,6 +53,7 @@ export async function markConversationRead(id: string, auth: AuthUser) {
   return toConversation(row);
 }
 
+// Normalizes populated and unpopulated Mongo documents into the frontend conversation contract.
 export function toConversation(row: any) {
   const customer = row.customerId && typeof row.customerId === "object" ? row.customerId : null;
   return {

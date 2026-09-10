@@ -22,6 +22,7 @@ export function InboxPage({ token, refresh, onBack }: { token: string; refresh?:
   const readStateRef = React.useRef(new Map<string, { generation: number; baseline: number; revision: number; confirmedGeneration?: number; confirmedRevision?: number }>());
   const active = conversations.find((item) => item.id === activeId) ?? null;
   const [readRequestKey, setReadRequestKey] = useState(0);
+  // Uses generation and revision guards so delayed read responses cannot undo newer realtime activity.
   async function markActiveRead(id: string) {
     const previousReadState = readStateRef.current.get(id);
     const currentRevision = conversationRevisionRef.current.get(id) ?? 0;

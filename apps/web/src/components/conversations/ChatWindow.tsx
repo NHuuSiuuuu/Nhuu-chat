@@ -12,6 +12,7 @@ export function ChatWindow({ conversation, messages, onSend }: { conversation: C
   const scrollFrameRef = useRef<number | null>(null);
   const [showLatestButton, setShowLatestButton] = useState(false);
 
+  // Scrolls only while the agent is following the latest message, preserving manual browsing of older messages.
   function scrollToLatest(behavior: ScrollBehavior = "smooth") {
     const element = messagesRef.current;
     if (!element) return;
