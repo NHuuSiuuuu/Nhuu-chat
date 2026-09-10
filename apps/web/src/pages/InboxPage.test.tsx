@@ -119,6 +119,18 @@ describe("Inbox Tailwind migration", () => {
     expect(chat).toContain("onRefreshAiSuggestions");
   });
 
+  it("passes realtime typing state to the chat window", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+    const chat = readFileSync(new URL("../components/conversations/ChatWindow.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("isCustomerTyping");
+    expect(source).toContain("chatEvents.agentTyping");
+    expect(source).toContain("isCustomerTyping={isCustomerTyping}");
+    expect(chat).toContain("isCustomerTyping");
+    expect(chat).toContain("animate-bounce");
+    expect(chat).toContain('aria-label="Người dùng đang nhập"');
+  });
+
   it("does not apply an older suggestion response after the active conversation changes", async () => {
     const guard = createAiSuggestionsRequestGuard();
     const first = deferred<string>();
