@@ -2,7 +2,7 @@ import { AppError } from "../common/errors.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { UserModel } from "../models/user.model.js";
 import { isValidObjectId } from "mongoose";
-import type { AuthUser } from "../services/auth.service.js";
+import type { AuthUser } from "./auth.service.js";
 import { conversationAccessFilter } from "../realtime/access.js";
 
 export async function listConversations(query: {

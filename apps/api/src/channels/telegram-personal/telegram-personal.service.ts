@@ -12,8 +12,8 @@ import { CustomerModel } from "../../models/customer.model.js";
 import { MessageModel } from "../../models/message.model.js";
 import { TelegramPersonalSessionModel } from "./telegram-personal.model.js";
 import { emitChatEvent, emitInboxEventToRecipients } from "../../realtime/socket.js";
-import { toConversation } from "../../conversations/conversation.service.js";
-import { toMessage } from "../../messages/message.service.js";
+import { toConversation } from "../../services/conversation.service.js";
+import { toMessage } from "../../services/message.service.js";
 import { createPasswordPrompt, isRetryableTelegramPasswordError, shouldReusePendingQr, type PasswordPrompt } from "./telegram-personal.auth.js";
 
 const QR_TTL_MS = 30_000;

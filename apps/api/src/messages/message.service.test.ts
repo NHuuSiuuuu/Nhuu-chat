@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { listMessages } from "./message.service.js";
+import { listMessages } from "../services/message.service.js";
 
 describe("message pagination ordering", () => {
   it("requests the newest page first while returning messages chronologically", () => {

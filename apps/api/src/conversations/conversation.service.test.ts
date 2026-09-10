@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { toConversation } from "./conversation.service.js";
+import { toConversation } from "../services/conversation.service.js";
 
 describe("conversation presentation contract", () => {
   it("includes populated customer identity and conversation type", () => {

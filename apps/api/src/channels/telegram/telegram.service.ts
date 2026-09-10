@@ -7,8 +7,8 @@ import { TelegramClient } from "./telegram.client.js";
 import { telegramChannelConfigSchema, telegramUpdateSchema } from "./telegram.schemas.js";
 import { isBotPaused } from "../../orchestration/bot-pause.service.js";
 import { emitChatEvent, emitInboxEventToRecipients } from "../../realtime/socket.js";
-import { toConversation } from "../../conversations/conversation.service.js";
-import { toMessage } from "../../messages/message.service.js";
+import { toConversation } from "../../services/conversation.service.js";
+import { toMessage } from "../../services/message.service.js";
 
 export async function ingestTelegramUpdate(input: unknown): Promise<void> {
   const update = telegramUpdateSchema.parse(input);
