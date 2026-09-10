@@ -54,6 +54,10 @@ export function toAvatarDataUrl(avatar: Buffer | Uint8Array | undefined, mimeTyp
   return `data:${mimeType};base64,${bytes.toString("base64")}`;
 }
 
+export function personalMessageSenderType(isOutgoing: boolean): "customer" | "agent" {
+  return isOutgoing ? "agent" : "customer";
+}
+
 async function refreshPersonalSessionAvatar(userId: string, client: TelegramClient): Promise<void> {
   try {
     const avatar = await client.downloadProfilePhoto("me", { isBig: false });
@@ -226,39 +230,56 @@ async function restorePersonalClient(userId: string, encryptedSession: string, e
 function attachPersonalMessageSync(userId: string, client: TelegramClient): void {
   client.addEventHandler(async (event) => {
     const message = event.message;
-    if (!message || message.out) return;
+    if (!message) return;
+    const isOutgoing = message.out === true;
     const channelId = String(message.chatId ?? "");
     const content = message.message?.trim();
     if (!channelId || !content) return;
+    const existingConversation = isOutgoing
+      ? await ConversationModel.findOne({ platform: "telegram_personal", channelId, ownerId: userId }).lean()
+      : null;
+    // Telegram-originated outbound messages belong to an existing conversation; the web send flow already creates it.
+    if (isOutgoing && !existingConversation) return;
     const sender = await message.getSender().catch(() => null) as Api.User | null;
     const senderId = sender?.id ? String(sender.id) : channelId;
-    const senderAvatar = sender ? await client.downloadProfilePhoto(sender, { isBig: false }).catch(() => undefined) : undefined;
+    const senderAvatar = !isOutgoing && sender ? await client.downloadProfilePhoto(sender, { isBig: false }).catch(() => undefined) : undefined;
     const senderAvatarUrl = Buffer.isBuffer(senderAvatar) ? toAvatarDataUrl(senderAvatar) : undefined;
     const chat = await message.getChat().catch(() => null) as { title?: string } | null;
     const isGroup = (message as unknown as { isGroup?: boolean }).isGroup === true;
-    const customer = await CustomerModel.findOneAndUpdate(
+    const customer = isOutgoing ? null : await CustomerModel.findOneAndUpdate(
       { platform: "telegram_personal", platformId: senderId },
       { $set: { name: [sender?.firstName, sender?.lastName].filter(Boolean).join(" ") || "Telegram user", ...(senderAvatarUrl ? { avatarUrl: senderAvatarUrl } : {}) }, $setOnInsert: { platform: "telegram_personal", platformId: senderId } },
       { upsert: true, new: true }
     );
+    const conversationUpdate: Record<string, unknown> = {
+      $set: {
+        customerId: isOutgoing ? existingConversation?.customerId : customer?._id,
+        ownerId: userId,
+        conversationType: isGroup ? "group" : "private",
+        conversationName: isGroup ? (chat?.title ?? null) : null,
+        lastMessageAt: new Date(message.date * 1000),
+        lastMessageSnippet: content
+      }
+    };
+    if (!isOutgoing) conversationUpdate.$inc = { unreadCount: 1 };
     const conversation = await ConversationModel.findOneAndUpdate(
       { platform: "telegram_personal", channelId, ownerId: userId },
-      { $set: { customerId: customer._id, ownerId: userId, conversationType: isGroup ? "group" : "private", conversationName: isGroup ? (chat?.title ?? null) : null, lastMessageAt: new Date(message.date * 1000), lastMessageSnippet: content }, $inc: { unreadCount: 1 }, $setOnInsert: { platform: "telegram_personal", channelId } },
+      conversationUpdate,
       { upsert: true, new: true }
     );
     try {
       await conversation.populate("customerId", "name avatarUrl");
       await conversation.populate("tagIds", "name color");
-      const senderName = [sender?.firstName, sender?.lastName].filter(Boolean).join(" ") || "Telegram user";
-      const storedMessage = await MessageModel.create({ conversationId: conversation._id, platform: "telegram_personal", externalMessageId: String(message.id), senderType: "customer", senderId, type: "text", content, deliveryStatus: "delivered", metadata: { senderName } });
       const account = await TelegramPersonalSessionModel.findOne({ userId, status: "active" }).lean();
+      const senderName = isOutgoing ? account?.displayName ?? "Bạn" : [sender?.firstName, sender?.lastName].filter(Boolean).join(" ") || "Telegram user";
+      const storedMessage = await MessageModel.create({ conversationId: conversation._id, platform: "telegram_personal", externalMessageId: String(message.id), senderType: personalMessageSenderType(isOutgoing), senderId, type: "text", content, deliveryStatus: "delivered", metadata: { senderName } });
       const conversationPayload = toConversation(conversation.toObject(), account ? { name: account.displayName, avatarUrl: account.avatarUrl ?? undefined } : undefined);
       emitChatEvent("chat:message_received", String(conversation._id), toMessage(storedMessage.toObject()));
       emitInboxEventToRecipients("chat:conversation_updated", [userId, conversation.assignedAgentId ? String(conversation.assignedAgentId) : ""], conversationPayload);
     } catch (error) {
       if (!isDuplicateKey(error)) throw error;
     }
-  }, new NewMessage({ incoming: true }));
+  }, new NewMessage({}));
 }
 
 function isDuplicateKey(error: unknown): boolean {

@@ -4,7 +4,8 @@ import {
   buildTelegramQrUrl,
   isQrExpired,
   serializePersonalSession,
-  toAvatarDataUrl
+  toAvatarDataUrl,
+  personalMessageSenderType
 } from "../../services/telegram-personal.service.js";
 
 describe("Telegram personal QR login", () => {
@@ -31,5 +32,10 @@ describe("Telegram personal QR login", () => {
       "data:image/jpeg;base64,YXZhdGFyLWJ5dGVz"
     );
     expect(toAvatarDataUrl(undefined, "image/jpeg")).toBeUndefined();
+  });
+
+  it("classifies Telegram messages sent by the connected account as agent messages", () => {
+    expect(personalMessageSenderType(true)).toBe("agent");
+    expect(personalMessageSenderType(false)).toBe("customer");
   });
 });
