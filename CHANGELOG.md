@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Giữ icon nền tảng trong dòng hội thoại ở dạng logo phẳng, không bọc circle hoặc border.
 - Hiển thị tài khoản mạng xã hội đã kết nối (avatar/tên) ở dòng người phụ trách của từng hội thoại; giữ tag cạnh tên và icon nền tảng ở mép phải.
 - Cải thiện UI danh sách hội thoại theo `DEVELOPMENT_PROMPT.md`: dòng hội thoại thoáng hơn, avatar 48px, tên/thời gian rõ, preview có tag badge tùy chọn và nhận diện nền tảng bằng icon/label.
 - Kết nối tab `Thẻ hội thoại` với API CRUD: tải danh sách từ backend, thêm, sửa và xóa tag thật trong database, kèm trạng thái loading/lỗi trên Settings.
