@@ -54,6 +54,21 @@ export function toAvatarDataUrl(avatar: Buffer | Uint8Array | undefined, mimeTyp
   return `data:${mimeType};base64,${bytes.toString("base64")}`;
 }
 
+async function refreshPersonalSessionAvatar(userId: string, client: TelegramClient): Promise<void> {
+  try {
+    const avatar = await client.downloadProfilePhoto("me", { isBig: false });
+    const avatarUrl = Buffer.isBuffer(avatar) ? toAvatarDataUrl(avatar) : undefined;
+    if (!avatarUrl) return;
+    await TelegramPersonalSessionModel.findOneAndUpdate(
+      { userId },
+      { $set: { avatarUrl } },
+      { new: true }
+    );
+  } catch {
+    // Avatar refresh is best-effort and must never prevent message synchronization.
+  }
+}
+
 function telegramCredentials(): { apiId: number; apiHash: string } {
   const apiId = Number(process.env.TELEGRAM_API_ID);
   const apiHash = process.env.TELEGRAM_API_HASH;
@@ -172,7 +187,7 @@ export async function getActivePersonalClient(userId: string): Promise<TelegramC
     .lean();
   if (!session) return undefined;
 
-  return restorePersonalClient(userId, session.encryptedSession);
+  return restorePersonalClient(userId, session.encryptedSession, session.avatarUrl);
 }
 
 // Reconnects every persisted Telegram session during API startup so inbound sync works after a restart.
@@ -182,7 +197,7 @@ export async function restoreActivePersonalClients(): Promise<void> {
     .lean();
   await Promise.all(sessions.map(async (session) => {
     try {
-      await restorePersonalClient(String(session.userId), session.encryptedSession);
+      await restorePersonalClient(String(session.userId), session.encryptedSession, session.avatarUrl);
     } catch (error) {
       console.error(`Failed to restore Telegram personal session for user ${String(session.userId)}`, error);
     }
@@ -190,7 +205,7 @@ export async function restoreActivePersonalClients(): Promise<void> {
 }
 
 // Restores one encrypted session only after Telegram confirms that it is still authorized.
-async function restorePersonalClient(userId: string, encryptedSession: string): Promise<TelegramClient | undefined> {
+async function restorePersonalClient(userId: string, encryptedSession: string, existingAvatarUrl?: string | null): Promise<TelegramClient | undefined> {
   const credentials = telegramCredentials();
   const client = new TelegramClient(new StringSession(decryptSecret(encryptedSession)), credentials.apiId, credentials.apiHash, {
     connectionRetries: 3
@@ -201,6 +216,7 @@ async function restorePersonalClient(userId: string, encryptedSession: string): 
     return undefined;
   }
 
+  if (!existingAvatarUrl) await refreshPersonalSessionAvatar(userId, client);
   activePersonalClients.set(userId, client);
   attachPersonalMessageSync(userId, client);
   return client;
