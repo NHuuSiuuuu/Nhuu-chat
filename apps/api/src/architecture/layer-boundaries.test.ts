@@ -32,4 +32,11 @@ describe("API layer boundaries", () => {
       expect(source).not.toMatch(/import\s+(?:type\s+)?\{[^}]*\b(?:Request|Response)\b[^}]*\}\s+from\s+["']express["']/s);
     }
   });
+
+  it("does not let services depend on HTTP schema modules", () => {
+    for (const file of filesUnder("services").filter((path) => path.endsWith(".ts"))) {
+      const source = readFileSync(join(apiRoot, file), "utf8");
+      expect(source).not.toMatch(/from ["'][^"']*\/schemas\//);
+    }
+  });
 });

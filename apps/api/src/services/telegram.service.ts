@@ -6,10 +6,14 @@ import { CustomerModel } from "../models/customer.model.js";
 import { MessageModel } from "../models/message.model.js";
 import { isBotPaused } from "../orchestration/bot-pause.service.js";
 import { emitChatEvent, emitInboxEventToRecipients } from "../realtime/socket.js";
-import type { TelegramChannelConfigInput } from "../schemas/telegram.schemas.js";
 import { toConversation } from "./conversation.service.js";
 import { toMessage } from "./message.service.js";
 import { createProviderSecret } from "./provider-secret.service.js";
+
+export interface TelegramChannelConfigInput {
+  botToken: string;
+  webhookBaseUrl: string;
+}
 
 export async function ingestTelegramUpdate(update: TelegramUpdate): Promise<void> {
   const normalized = normalizeTelegramUpdate(update);

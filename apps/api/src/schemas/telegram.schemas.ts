@@ -8,5 +8,3 @@ export const telegramChannelConfigSchema = z.object({
   botToken: z.string().trim().min(1),
   webhookBaseUrl: z.string().url()
 });
-
-export type TelegramChannelConfigInput = z.infer<typeof telegramChannelConfigSchema>;

@@ -117,6 +117,20 @@ describe("Telegram personal controller", () => {
     expect(serviceMocks.submitPersonalQrPassword).not.toHaveBeenCalled();
   });
 
+  it("converts an invalid QR login id to an invalid-request error", async () => {
+    const { response } = responseRecorder();
+    const next = vi.fn();
+
+    await getQrLoginStatus({ auth, params: { id: 123 } } as never, response as never, next);
+
+    expect(next.mock.calls[0]?.[0]).toMatchObject({
+      statusCode: 400,
+      code: "INVALID_REQUEST",
+      message: "QR login id is missing"
+    });
+    expect(serviceMocks.getPersonalQrLoginStatus).not.toHaveBeenCalled();
+  });
+
   it("preserves the missing-authentication failure without calling a service", async () => {
     const { response } = responseRecorder();
     const next = vi.fn();

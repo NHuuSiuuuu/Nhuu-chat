@@ -21,7 +21,9 @@ function authenticatedUserId(request: AuthenticatedRequest): string {
 
 function qrLoginId(params: unknown): string {
   const result = telegramPersonalQrIdSchema.safeParse(params);
-  if (!result.success) throw new Error("QR login id is missing");
+  if (!result.success) {
+    throw new AppError(400, "INVALID_REQUEST", "QR login id is missing");
+  }
   return result.data.id;
 }
 

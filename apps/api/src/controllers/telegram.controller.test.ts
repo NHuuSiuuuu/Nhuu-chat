@@ -90,6 +90,25 @@ describe("Telegram controller", () => {
     await registerChannel({ body: { botToken: "", webhookBaseUrl: "not-a-url" } } as never, response as never, next);
 
     expect(serviceMocks.registerTelegramChannel).not.toHaveBeenCalled();
-    expect(next).toHaveBeenCalledOnce();
+    expect(next.mock.calls[0]?.[0]).toMatchObject({
+      statusCode: 400,
+      code: "INVALID_REQUEST"
+    });
+  });
+
+  it("converts invalid webhook updates to an invalid-request error", async () => {
+    const { response } = responseRecorder();
+    const next = vi.fn();
+
+    await ingestWebhook({
+      params: { secret: "expected-secret" },
+      body: { update_id: "not-a-number" }
+    } as never, response as never, next);
+
+    expect(serviceMocks.ingestTelegramUpdate).not.toHaveBeenCalled();
+    expect(next.mock.calls[0]?.[0]).toMatchObject({
+      statusCode: 400,
+      code: "INVALID_REQUEST"
+    });
   });
 });
