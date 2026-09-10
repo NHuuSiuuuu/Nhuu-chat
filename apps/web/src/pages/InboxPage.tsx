@@ -13,6 +13,22 @@ import { DashboardTopbar } from "../components/dashboard/DashboardTopbar.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 const CONVERSATION_TAGS_API_URL = "/api/v1/conversation-tags";
+// Tracks request identity and conversation identity so overlapping responses cannot cross conversation boundaries.
+export function createAiSuggestionsRequestGuard() {
+  let activeConversationId: string | null = null;
+  let latestRequestId = 0;
+  return {
+    setActiveConversation(id: string | null) {
+      if (id === activeConversationId) return;
+      activeConversationId = id;
+      latestRequestId += 1;
+    },
+    start(conversationId: string) {
+      const requestId = ++latestRequestId;
+      return () => requestId === latestRequestId && conversationId === activeConversationId;
+    }
+  };
+}
 export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: { token: string; refresh?: () => Promise<string | null>; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hội thoại" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void }) {
   const [conversations, setConversations] = useState<ConversationContract[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -28,9 +44,8 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
   const conversationRevisionRef = React.useRef(new Map<string, number>());
   const conversationsRef = React.useRef<ConversationContract[]>([]);
   const readStateRef = React.useRef(new Map<string, { generation: number; baseline: number; revision: number; confirmedGeneration?: number; confirmedRevision?: number }>());
-  const aiSuggestionsRequestRef = React.useRef(0);
-  const activeIdRef = React.useRef<string | null>(activeId);
-  activeIdRef.current = activeId;
+  const aiSuggestionsGuardRef = React.useRef(createAiSuggestionsRequestGuard());
+  aiSuggestionsGuardRef.current.setActiveConversation(activeId);
   const active = conversations.find((item) => item.id === activeId) ?? null;
   const [readRequestKey, setReadRequestKey] = useState(0);
   // Uses generation and revision guards so delayed read responses cannot undo newer realtime activity.
@@ -77,10 +92,9 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
     }
   }
   // Loads suggestions for only the visible conversation so stale responses cannot replace newer composer state.
-  async function refreshAiSuggestions(id = activeIdRef.current) {
+  async function refreshAiSuggestions(id = activeId) {
     if (!id) return;
-    const requestId = ++aiSuggestionsRequestRef.current;
-    const isCurrentRequest = () => requestId === aiSuggestionsRequestRef.current && id === activeIdRef.current;
+    const isCurrentRequest = aiSuggestionsGuardRef.current.start(id);
     setIsAiSuggestionsLoading(true);
     setAiSuggestionsError(null);
     try {
@@ -132,7 +146,6 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
     return () => { cancelled = true; };
   }, [activeId, token, refresh]);
   useEffect(() => {
-    aiSuggestionsRequestRef.current += 1;
     setAiSuggestions(null);
     setAiSuggestionsError(null);
     setIsAiSuggestionsLoading(false);

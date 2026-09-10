@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { createAiSuggestionsRequestGuard } from "./InboxPage.js";
 
 describe("Inbox Tailwind migration", () => {
   it("uses the shared shell without handwritten Inbox CSS", () => {
@@ -118,14 +119,30 @@ describe("Inbox Tailwind migration", () => {
     expect(chat).toContain("onRefreshAiSuggestions");
   });
 
-  it("invalidates stale suggestion requests when the active conversation changes", () => {
-    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+  it("does not apply an older suggestion response after the active conversation changes", async () => {
+    const guard = createAiSuggestionsRequestGuard();
+    const first = deferred<string>();
+    const second = deferred<string>();
+    const applied: string[] = [];
 
-    expect(source).toContain("aiSuggestionsRequestRef");
-    expect(source).toContain("activeIdRef");
-    expect(source).toContain("const requestId = ++aiSuggestionsRequestRef.current");
-    expect(source).toContain("requestId === aiSuggestionsRequestRef.current");
-    expect(source).toContain("id === activeIdRef.current");
-    expect(source).toContain("aiSuggestionsRequestRef.current += 1");
+    guard.setActiveConversation("conversation-a");
+    const isFirstCurrent = guard.start("conversation-a");
+    const firstResult = first.promise.then((value) => { if (isFirstCurrent()) applied.push(value); });
+
+    guard.setActiveConversation("conversation-b");
+    const isSecondCurrent = guard.start("conversation-b");
+    const secondResult = second.promise.then((value) => { if (isSecondCurrent()) applied.push(value); });
+
+    second.resolve("new suggestion");
+    first.resolve("stale suggestion");
+    await Promise.all([firstResult, secondResult]);
+
+    expect(applied).toEqual(["new suggestion"]);
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((complete) => { resolve = complete; });
+  return { promise, resolve };
+}
