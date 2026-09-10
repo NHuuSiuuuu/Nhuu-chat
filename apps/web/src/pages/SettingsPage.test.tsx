@@ -48,4 +48,23 @@ describe("Settings page", () => {
     expect(source).toContain('"Phân quyền": "users"');
     expect(source).toContain('"Lịch sử": "clock"');
   });
+
+  it("connects conversation tag management to the authenticated API", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('import { apiRequest } from "../lib/api.js"');
+    expect(source).toContain("ConversationTagContract");
+    expect(source).toContain('"/api/v1/conversation-tags"');
+    expect(source).toContain('"POST"');
+    expect(source).toContain('"PATCH"');
+    expect(source).toContain('method: "DELETE"');
+    expect(source).toContain("Đang tải thẻ...");
+    expect(source).toContain("Không thể tải danh sách thẻ");
+  });
+
+  it("passes access token and refresh handler into SettingsPage", () => {
+    const source = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("<SettingsPage token={auth.accessToken} refresh={refresh}");
+  });
 });

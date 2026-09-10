@@ -8,5 +8,6 @@ export async function apiRequest<T>(baseUrl: string, path: string, token: string
     if (refreshedToken) return apiRequest<T>(baseUrl, path, refreshedToken, init);
   }
   if (!response.ok) throw new Error(`API request failed: ${response.status}`);
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }

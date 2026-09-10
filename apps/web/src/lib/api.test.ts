@@ -15,4 +15,10 @@ describe("authenticated API requests", () => {
     expect(refresh).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ headers: expect.objectContaining({ authorization: "Bearer fresh-access-token" }) }));
   });
+
+  it("accepts a successful 204 response without parsing an empty body", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
+
+    await expect(apiRequest<void>("", "/conversation-tags/tag-1", "access-token", { method: "DELETE" })).resolves.toBeUndefined();
+  });
 });
