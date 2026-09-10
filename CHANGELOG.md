@@ -42,6 +42,7 @@ Các ghi chú nâng cấp được viết rõ ràng để cả team dễ theo d�
 
 ### Đã thay đổi
 
+- Tổ chức lại API theo các tầng toàn cục `routes`, `controllers`, `services` và `schemas` mà không thay đổi hành vi runtime.
 - Trạng thái QR Telegram cá nhân bổ sung `password_required` và endpoint xác minh mật khẩu theo đúng session của người dùng.
 - Chuyển toàn bộ styling frontend sang Tailwind CSS v4, loại bỏ các file CSS giao diện cũ và giữ lại duy nhất entry `apps/web/src/styles/tailwind.css`.
 - Sửa các chi tiết hậu kiểm Tailwind: loại bỏ class nền xung đột, bổ sung accessibility cho modal/composer, giới hạn viewport modal và áp dụng utility classes cho form đăng nhập.
