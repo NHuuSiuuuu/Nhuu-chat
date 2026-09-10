@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Căn chỉnh lại message: tin nhắn của chính mình nằm bên phải, action hover nằm bên trái bubble; message khách giữ hướng ngược lại.
 - Cập nhật UI message theo `DEVELOPMENT_PROMPT.md`: avatar, tên người gửi thực tế, timestamp, mention `@All` và nhóm thao tác khi hover.
 - Bổ sung `senderName` tùy chọn cho message contract và mapper Telegram để hiển thị đúng người gửi trong hội thoại nhóm.
 - Kết nối điều hướng header: bấm logo `NhuuChat` về Dashboard và bấm `Hội thoại` mở Inbox.

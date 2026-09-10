@@ -33,6 +33,8 @@ describe("Inbox Tailwind migration", () => {
     expect(chat).toContain("group-hover:opacity-100");
     expect(chat).toContain("@All");
     expect(chat).toContain("conversation.customerName?.trim()");
+    expect(chat).toContain('message.senderType === "customer" ? "flex-row" : "flex-row-reverse"');
+    expect(chat).toContain('message.senderType === "customer" ? "justify-start" : "justify-end"');
     expect(source).toContain("readStateRef");
     expect(source).toContain("generation");
     expect(source).toContain("confirmedGeneration");
