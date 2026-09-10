@@ -1,6 +1,6 @@
 import * as React from "react";
 
-type IconName = "inbox" | "chat" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "chevron-left" | "tag" | "edit" | "trash" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more";
+type IconName = "inbox" | "chat" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "chevron-left" | "tag" | "edit" | "trash" | "monitor" | "phone" | "cloud" | "wrench" | "clock" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more";
 
 export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -17,6 +17,11 @@ export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }
     tag: <path d="m20.6 13.4-7.2 7.2a2 2 0 0 1-2.8 0L3.4 13.4a2 2 0 0 1 0-2.8l7.2-7.2A2 2 0 0 1 12 2.8h5.8a2 2 0 0 1 2 2V10a2 2 0 0 1-.6 1.4ZM16 7h.01" />,
     edit: <><path d="m4 16.5-.8 4.3 4.3-.8L19 8.5 15.5 5 4 16.5Z" /><path d="m13.5 7 3.5 3.5" /></>,
     trash: <><path d="M5 7h14M10 11v6M14 11v6" /><path d="M9 7V4h6v3m-9 0 1 13h10l1-13" /></>,
+    monitor: <><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></>,
+    phone: <path d="M6.5 4.5 9 4l2 4-2 1.5a14 14 0 0 0 5.5 5.5L16 13l4 2-.5 2.5c-.2 1.2-1.3 2-2.5 1.8A15.8 15.8 0 0 1 4.7 7c-.2-1.2.6-2.3 1.8-2.5Z" />,
+    cloud: <path d="M7.5 19h10a4 4 0 0 0 .6-8A6.5 6.5 0 0 0 6 9.5 4.5 4.5 0 0 0 7.5 19Z" />,
+    wrench: <path d="m14.7 6.3 3-3a5 5 0 0 0-5.9 6L4.5 16.6a2 2 0 1 0 2.8 2.8l6.7-7.3a5 5 0 0 0 6-5.8l-3 3-2.3-.8-.8-2.2Z" />,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
     send: <path d="m3 4 18 8-18 8 3-8-3-8Zm3 8h9" />,
     paperclip: <path d="m8 12 5.5-5.5a3 3 0 0 1 4.2 4.2L11 17.4a4 4 0 1 1-5.7-5.7l6-6" />,
     sparkles: <><path d="m12 3-1.2 4.8L6 9l4.8 1.2L12 15l1.2-4.8L18 9l-4.8-1.2L12 3Z" /><path d="m19 15-.6 2.4L16 18l2.4.6L19 21l.6-2.4L22 18l-2.4-.6L19 15Z" /></>,

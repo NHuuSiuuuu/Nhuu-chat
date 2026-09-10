@@ -32,4 +32,20 @@ describe("Settings page", () => {
 
     expect(source).toContain('useState("Cài đặt chung")');
   });
+
+  it("maps each settings option to its corresponding icon", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('"Cài đặt chung": "settings"');
+    expect(source).toContain('"Thẻ hội thoại": "tag"');
+    expect(source).toContain('"Trợ lý AI": "sparkles"');
+    expect(source).toContain('"Hỗ trợ trả lời": "chat"');
+    expect(source).toContain('"Giao diện": "monitor"');
+    expect(source).toContain('"Cuộc gọi": "phone"');
+    expect(source).toContain('"Chế độ xoay vòng": "refresh"');
+    expect(source).toContain('"Đồng bộ": "cloud"');
+    expect(source).toContain('"Công cụ": "wrench"');
+    expect(source).toContain('"Phân quyền": "users"');
+    expect(source).toContain('"Lịch sử": "clock"');
+  });
 });
