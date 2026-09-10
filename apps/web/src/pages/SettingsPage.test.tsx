@@ -17,4 +17,13 @@ describe("Settings page", () => {
     expect(source).toContain("Lưu");
     expect(source).toContain("Huỷ");
   });
+
+  it("offers a custom color option and keeps the selected color when saving a tag", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('type="color"');
+    expect(source).toContain("Tùy chỉnh màu");
+    expect(source).toContain("selectedColor");
+    expect(source).toContain("color: selectedColor");
+  });
 });

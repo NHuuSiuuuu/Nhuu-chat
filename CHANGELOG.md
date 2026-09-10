@@ -63,6 +63,7 @@ Các ghi chú nâng cấp được viết rõ ràng để cả team dễ theo d�
 - Thu gọn sidebar hội thoại desktop xuống chế độ avatar-only kiểu Telegram và giảm chiều cao composer nhập tin nhắn.
 - Đổi sidebar hội thoại desktop sang kéo-thả ở mép để điều chỉnh độ rộng liên tục, không thu gọn bằng nút click.
 - Thêm route `/settings` và trang Cài đặt theo `DEVELOPMENT_PROMPT.md`, giữ nguyên header Hchat ở phía trên.
+- Bổ sung tùy chọn chọn màu custom khi thêm thẻ hội thoại và lưu màu đã chọn cùng tag.
 
 ### Đã sửa
 
