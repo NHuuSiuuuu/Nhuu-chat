@@ -9,29 +9,14 @@ const quickReplies = [
 
 const members = ["Nguyễn Văn Hữu", "Đội hỗ trợ"];
 
-const aiSuggestionSets = [
-  [
-    "Dạ, em chào anh/chị, em có thể hỗ trợ gì ạ?",
-    "Shop nhận được file rồi ạ, em kiểm tra ngay nhé.",
-    "Dạ em nghe ạ, mình cần hỗ trợ thêm thông tin gì không ạ?"
-  ],
-  [
-    "Dạ, em đã kiểm tra thông tin của mình rồi ạ.",
-    "Anh/chị đợi em một chút để em xác nhận lại nhé.",
-    "Em sẽ phản hồi lại anh/chị trong ít phút ạ."
-  ]
-];
-
 export function MessageComposer({ onSend, disabled = false, aiSuggestions, isAiSuggestionsLoading = false, aiSuggestionsError, onRefreshAiSuggestions }: { onSend: (content: string) => Promise<void>; disabled?: boolean; aiSuggestions?: string[] | null; isAiSuggestionsLoading?: boolean; aiSuggestionsError?: string | null; onRefreshAiSuggestions?: () => void }) {
   const [content, setContent] = useState("");
   const [isShortcutModalOpen, setIsShortcutModalOpen] = useState(false);
   const [suggestionKind, setSuggestionKind] = useState<"quick-reply" | "members" | null>(null);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
-  const [aiSuggestionSetIndex, setAiSuggestionSetIndex] = useState(0);
 
   const suggestions = suggestionKind === "quick-reply" ? quickReplies : members;
-  const localAiSuggestions = aiSuggestionSets[aiSuggestionSetIndex] ?? aiSuggestionSets[0];
-  const displayedAiSuggestions = aiSuggestions?.length ? aiSuggestions : localAiSuggestions;
+  const displayedAiSuggestions = aiSuggestions?.length ? aiSuggestions : [];
 
   async function submitMessage() {
     if (disabled || !content.trim()) return;
@@ -85,7 +70,7 @@ export function MessageComposer({ onSend, disabled = false, aiSuggestions, isAiS
       </div>
       <div className="flex items-center justify-between px-3 pt-1.5 text-xs text-gray-400">
         <span className="inline-flex items-center gap-1.5 font-medium"><InboxIcon name="sparkles" size={14} /> AI gợi ý</span>
-        <button className="rounded p-1.5 transition hover:bg-gray-100 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 disabled:cursor-not-allowed disabled:opacity-50" type="button" aria-label="Làm mới gợi ý AI" onClick={() => onRefreshAiSuggestions ? onRefreshAiSuggestions() : setAiSuggestionSetIndex((current) => (current + 1) % aiSuggestionSets.length)} disabled={isAiSuggestionsLoading}><span className={isAiSuggestionsLoading ? "inline-flex animate-spin" : "inline-flex"}><InboxIcon name="refresh" size={15} /></span></button>
+        <button className="rounded p-1.5 transition hover:bg-gray-100 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 disabled:cursor-not-allowed disabled:opacity-50" type="button" aria-label="Làm mới gợi ý AI" onClick={() => onRefreshAiSuggestions?.()} disabled={isAiSuggestionsLoading}><span className={isAiSuggestionsLoading ? "inline-flex animate-spin" : "inline-flex"}><InboxIcon name="refresh" size={15} /></span></button>
       </div>
       {isAiSuggestionsLoading && <p className="px-3 pb-1 text-xs text-gray-400" role="status">Đang tải gợi ý AI...</p>}
       {aiSuggestionsError && <p className="px-3 pb-1 text-xs text-amber-600" role="status">{aiSuggestionsError}</p>}
