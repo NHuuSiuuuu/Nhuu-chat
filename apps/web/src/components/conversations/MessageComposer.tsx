@@ -9,6 +9,11 @@ const quickReplies = [
 
 const members = ["Nguyễn Văn Hữu", "Đội hỗ trợ"];
 
+// Keep suggestion chips empty during a request so stale results are not presented as current.
+export function getDisplayedAiSuggestions(aiSuggestions: string[] | null | undefined, isLoading: boolean): string[] {
+  return isLoading || !aiSuggestions?.length ? [] : aiSuggestions;
+}
+
 export function MessageComposer({ onSend, disabled = false, aiSuggestions, isAiSuggestionsLoading = false, aiSuggestionsError, onRefreshAiSuggestions }: { onSend: (content: string) => Promise<void>; disabled?: boolean; aiSuggestions?: string[] | null; isAiSuggestionsLoading?: boolean; aiSuggestionsError?: string | null; onRefreshAiSuggestions?: () => void }) {
   const [content, setContent] = useState("");
   const [isShortcutModalOpen, setIsShortcutModalOpen] = useState(false);
@@ -16,7 +21,7 @@ export function MessageComposer({ onSend, disabled = false, aiSuggestions, isAiS
   const [suggestionIndex, setSuggestionIndex] = useState(0);
 
   const suggestions = suggestionKind === "quick-reply" ? quickReplies : members;
-  const displayedAiSuggestions = aiSuggestions?.length ? aiSuggestions : [];
+  const displayedAiSuggestions = getDisplayedAiSuggestions(aiSuggestions, isAiSuggestionsLoading);
 
   async function submitMessage() {
     if (disabled || !content.trim()) return;

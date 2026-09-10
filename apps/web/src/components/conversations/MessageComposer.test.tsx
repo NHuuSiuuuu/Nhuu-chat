@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import * as composerModule from "./MessageComposer";
 
 describe("MessageComposer accessibility", () => {
   it("keeps a visible focus ring on the message input", () => {
@@ -46,7 +47,7 @@ describe("MessageComposer accessibility", () => {
 
     expect(source).not.toContain("aiSuggestionSets");
     expect(source).not.toContain("aiSuggestionSetIndex");
-    expect(source).toContain("aiSuggestions?.length ? aiSuggestions : []");
+    expect(source).toContain("getDisplayedAiSuggestions(aiSuggestions, isAiSuggestionsLoading)");
     expect(source).toContain('aria-label="Gợi ý AI"');
     expect(source).toContain("AI gợi ý");
   });
@@ -56,7 +57,26 @@ describe("MessageComposer accessibility", () => {
 
     expect(source).toContain('isAiSuggestionsLoading && <span className="inline-flex animate-spin" aria-hidden="true">');
     expect(source).toContain('aria-label="Gợi ý AI"');
-    expect(source).toContain("aiSuggestions?.length ? aiSuggestions : []");
+    expect(source).toContain("getDisplayedAiSuggestions(aiSuggestions, isAiSuggestionsLoading)");
+  });
+
+  it("returns no displayed suggestions while loading or without API suggestions", () => {
+    expect(typeof composerModule.getDisplayedAiSuggestions).toBe("function");
+
+    if (typeof composerModule.getDisplayedAiSuggestions === "function") {
+      expect(composerModule.getDisplayedAiSuggestions(["stale suggestion"], true)).toEqual([]);
+      expect(composerModule.getDisplayedAiSuggestions(null, false)).toEqual([]);
+    }
+  });
+
+  it("returns API suggestions after loading resolves", () => {
+    expect(typeof composerModule.getDisplayedAiSuggestions).toBe("function");
+
+    if (typeof composerModule.getDisplayedAiSuggestions === "function") {
+      const apiSuggestions = ["Gợi ý 1", "Gợi ý 2"];
+
+      expect(composerModule.getDisplayedAiSuggestions(apiSuggestions, false)).toEqual(apiSuggestions);
+    }
   });
 
   it("renders server suggestions with loading and non-blocking error states", () => {
