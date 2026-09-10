@@ -64,7 +64,7 @@ export class GeminiReplySuggestionProvider {
       });
       const request = this.client.models.generateContent({
         model: env.GEMINI_CHAT_MODEL,
-        contents: `Generate short Vietnamese customer-service replies.\n\nLatest customer message:\n${input.latestCustomerMessage}`,
+        contents: `Generate short, polite Vietnamese customer-service replies. Do not invent prices, policies, order status, or claim unsupported actions.\n\nLatest customer message:\n${input.latestCustomerMessage}`,
         config: {
           responseMimeType: "application/json",
           responseSchema: {

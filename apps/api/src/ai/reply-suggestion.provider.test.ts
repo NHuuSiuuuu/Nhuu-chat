@@ -92,7 +92,13 @@ describe("Gemini reply suggestion provider", () => {
     });
 
     expect(generateContent.mock.calls[0][0].contents).toContain(
-      "short Vietnamese customer-service replies"
+      "short, polite Vietnamese customer-service replies"
+    );
+    expect(generateContent.mock.calls[0][0].contents).toContain(
+      "polite Vietnamese customer-service replies"
+    );
+    expect(generateContent.mock.calls[0][0].contents).toContain(
+      "Do not invent prices, policies, order status, or claim unsupported actions"
     );
   });
 
