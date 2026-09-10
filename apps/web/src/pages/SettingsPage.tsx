@@ -13,7 +13,7 @@ interface SettingsPageProps {
 }
 
 export function SettingsPage({ onLogoClick, onNavigate }: SettingsPageProps) {
-  const [activeTab, setActiveTab] = useState("Thẻ hội thoại");
+  const [activeTab, setActiveTab] = useState("Cài đặt chung");
   const [isAddTagModalOpen, setIsAddTagModalOpen] = useState(false);
   const [tagName, setTagName] = useState("");
   const [selectedColor, setSelectedColor] = useState(pickerColors[6]);

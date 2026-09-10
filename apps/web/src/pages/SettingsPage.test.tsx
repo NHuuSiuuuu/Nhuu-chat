@@ -26,4 +26,10 @@ describe("Settings page", () => {
     expect(source).toContain("selectedColor");
     expect(source).toContain("color: selectedColor");
   });
+
+  it("opens on the first settings item by default", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('useState("Cài đặt chung")');
+  });
 });
