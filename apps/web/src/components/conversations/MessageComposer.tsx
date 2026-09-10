@@ -63,21 +63,21 @@ export function MessageComposer({ onSend, disabled = false }: { onSend: (content
   }
 
   return <>
-    <form className="message-composer mx-6 mb-5 mt-4 overflow-visible rounded-xl border border-gray-200 bg-white shadow-sm" onSubmit={(event) => { event.preventDefault(); void submitMessage(); }}>
-      <div className="flex items-center border-b border-gray-100 px-3 py-2">
+    <form className="message-composer mx-4 mb-3 mt-2 overflow-visible rounded-xl border border-gray-200 bg-white shadow-sm" onSubmit={(event) => { event.preventDefault(); void submitMessage(); }}>
+      <div className="flex items-center border-b border-gray-100 px-3 py-1.5">
         <button className="inline-flex items-center gap-1.5 rounded-md bg-gray-100 px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" onClick={() => window.location.assign("/settings/conversation-tags")} aria-label="Quản lý thẻ hội thoại"><InboxIcon name="plus" size={14} /> Thẻ</button>
       </div>
-      <div className="flex items-center justify-between px-3 pt-2 text-xs text-gray-400">
+      <div className="flex items-center justify-between px-3 pt-1.5 text-xs text-gray-400">
         <span className="inline-flex items-center gap-1.5 font-medium"><InboxIcon name="sparkles" size={14} /> AI gợi ý</span>
         <button className="rounded p-1.5 transition hover:bg-gray-100 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Làm mới gợi ý AI"><InboxIcon name="refresh" size={15} /></button>
       </div>
-      <div className="relative px-3 py-2">
+      <div className="relative px-3 py-1.5">
         {suggestionKind && <div className="absolute bottom-full left-3 right-3 z-20 mb-2 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl" role="listbox" aria-label={suggestionKind === "quick-reply" ? "Mẫu trả lời nhanh" : "Gợi ý thành viên"}>
           {suggestions.map((suggestion, index) => <button className={`block w-full rounded-md px-3 py-2 text-left text-sm transition ${index === suggestionIndex ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`} type="button" role="option" aria-selected={index === suggestionIndex} key={suggestion} onClick={() => selectSuggestion(suggestion)}>{suggestion}</button>)}
         </div>}
-        <textarea className="min-h-16 w-full resize-none border-0 bg-transparent text-sm leading-6 text-gray-800 outline-none placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-1" aria-label="Tin nhắn" value={content} onChange={(event) => setContent(event.target.value)} onKeyDown={handleKeyDown} placeholder="Nhập tin nhắn... (gõ / để chèn mẫu trả lời nhanh, Shift+Enter để xuống dòng)" disabled={disabled} rows={2} />
+        <textarea className="min-h-12 w-full resize-none border-0 bg-transparent text-sm leading-5 text-gray-800 outline-none placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-1" aria-label="Tin nhắn" value={content} onChange={(event) => setContent(event.target.value)} onKeyDown={handleKeyDown} placeholder="Nhập tin nhắn... (gõ / để chèn mẫu trả lời nhanh, Shift+Enter để xuống dòng)" disabled={disabled} rows={1} />
       </div>
-      <div className="flex items-center justify-between border-t border-gray-100 px-3 py-2">
+      <div className="flex items-center justify-between border-t border-gray-100 px-3 py-1.5">
         <button className="grid size-8 place-items-center rounded-full bg-gray-100 text-gray-500 transition hover:bg-gray-200 hover:text-gray-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" onClick={() => setIsShortcutModalOpen(true)} aria-label="Mở phím tắt"><span className="text-sm font-bold">?</span></button>
         <div className="flex items-center gap-1">
           <button className="grid size-8 place-items-center rounded-md text-gray-500 transition hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Thêm ghi chú"><InboxIcon name="note" size={17} /></button>

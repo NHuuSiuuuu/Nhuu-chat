@@ -46,4 +46,15 @@ describe("Inbox Tailwind migration", () => {
     const avatar = readFileSync(new URL("../components/conversations/ConversationAvatar.tsx", import.meta.url), "utf8");
     expect(avatar).toContain("onError");
   });
+
+  it("provides a desktop conversation-list collapse control", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+    const list = readFileSync(new URL("../components/conversations/ConversationList.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("isConversationListCollapsed");
+    expect(source).toContain("setIsConversationListCollapsed");
+    expect(list).toContain("collapsed");
+    expect(list).toContain("Thu gọn danh sách");
+    expect(list).toContain("w-[72px]");
+  });
 });

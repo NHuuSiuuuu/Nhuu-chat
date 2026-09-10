@@ -1,6 +1,6 @@
 import * as React from "react";
 
-type IconName = "inbox" | "chat" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more";
+type IconName = "inbox" | "chat" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "chevron-left" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more";
 
 export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -13,6 +13,7 @@ export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }
     filter: <path d="M4 6h16M7 12h10M10 18h4" />,
     plus: <path d="M12 5v14M5 12h14" />,
     list: <><path d="M8 6h12M8 12h12M8 18h12" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></>,
+    "chevron-left": <path d="m15 18-6-6 6-6" />,
     send: <path d="m3 4 18 8-18 8 3-8-3-8Zm3 8h9" />,
     paperclip: <path d="m8 12 5.5-5.5a3 3 0 0 1 4.2 4.2L11 17.4a4 4 0 1 1-5.7-5.7l6-6" />,
     sparkles: <><path d="m12 3-1.2 4.8L6 9l4.8 1.2L12 15l1.2-4.8L18 9l-4.8-1.2L12 3Z" /><path d="m19 15-.6 2.4L16 18l2.4.6L19 21l.6-2.4L22 18l-2.4-.6L19 15Z" /></>,

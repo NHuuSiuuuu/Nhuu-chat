@@ -32,4 +32,12 @@ describe("MessageComposer accessibility", () => {
     expect(source).toContain("Phím tắt &amp; Mẹo");
     expect(source).toContain("<kbd");
   });
+
+  it("keeps the composer compact while preserving a multiline input", () => {
+    const source = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("mx-4 mb-3 mt-2");
+    expect(source).toContain("rows={1}");
+    expect(source).toContain("min-h-12");
+  });
 });
