@@ -91,4 +91,30 @@ describe("Inbox Tailwind migration", () => {
     expect(list).toContain("availableTags");
     expect(list).toContain("onTagsChange");
   });
+
+  it("owns the authenticated Gemini suggestions request and state", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("AiSuggestionsResponse");
+    expect(source).toContain("/api/v1/conversations/${id}/ai-suggestions");
+    expect(source).toContain('method: "POST"');
+    expect(source).toContain("isAiSuggestionsLoading");
+    expect(source).toContain("aiSuggestionsError");
+    expect(source).toContain("onRefreshAiSuggestions");
+    expect(source).toContain("setAiSuggestions(null)");
+  });
+
+  it("passes Gemini suggestion state through ChatWindow", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+    const chat = readFileSync(new URL("../components/conversations/ChatWindow.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("aiSuggestions={aiSuggestions}");
+    expect(source).toContain("isAiSuggestionsLoading={isAiSuggestionsLoading}");
+    expect(source).toContain("aiSuggestionsError={aiSuggestionsError}");
+    expect(source).toContain("onRefreshAiSuggestions={refreshAiSuggestions}");
+    expect(chat).toContain("aiSuggestions");
+    expect(chat).toContain("isAiSuggestionsLoading");
+    expect(chat).toContain("aiSuggestionsError");
+    expect(chat).toContain("onRefreshAiSuggestions");
+  });
 });

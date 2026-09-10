@@ -50,4 +50,23 @@ describe("MessageComposer accessibility", () => {
     expect(source).toContain('aria-label="Gợi ý AI"');
     expect(source).toContain("AI gợi ý");
   });
+
+  it("renders server suggestions with loading and non-blocking error states", () => {
+    const source = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("aiSuggestions?: string[]");
+    expect(source).toContain("isAiSuggestionsLoading");
+    expect(source).toContain("aiSuggestionsError");
+    expect(source).toContain("onRefreshAiSuggestions");
+    expect(source).toContain("disabled={isAiSuggestionsLoading}");
+    expect(source).toContain("aiSuggestionsError &&");
+  });
+
+  it("keeps suggestion selection separate from sending", () => {
+    const source = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("setContent(value)");
+    expect(source).toContain("onClick={() => selectSuggestion(suggestion)}");
+    expect(source).toContain("onSend(content.trim())");
+  });
 });
