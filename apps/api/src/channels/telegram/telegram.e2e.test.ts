@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { orchestrateTelegramReply } from "./telegram.service.js";
+import { orchestrateTelegramReply } from "../../services/telegram.service.js";
 
 describe("Telegram webhook bot orchestration", () => {
   const inbound = {

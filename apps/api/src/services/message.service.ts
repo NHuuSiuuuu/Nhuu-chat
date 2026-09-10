@@ -60,7 +60,7 @@ export async function sendOutboundMessage(
       throw new AppError(403, "FORBIDDEN", "You do not own this Telegram connection");
     }
     // The personal connector uses toMessage for inbound messages; load it only for delivery.
-    const { getActivePersonalClient } = await import("../channels/telegram-personal/telegram-personal.service.js");
+    const { getActivePersonalClient } = await import("./telegram-personal.service.js");
     const client = await getActivePersonalClient(userId);
     if (!client) {
       throw new AppError(409, "TELEGRAM_PERSONAL_DISCONNECTED", "Telegram personal session is not active");

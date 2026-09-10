@@ -5,16 +5,16 @@ import { Api, TelegramClient } from "telegram";
 import { NewMessage } from "telegram/events/index.js";
 import { StringSession } from "telegram/sessions/index.js";
 
-import { decryptSecret, encryptSecret } from "../../common/crypto.js";
-import { AppError } from "../../common/errors.js";
-import { ConversationModel } from "../../models/conversation.model.js";
-import { CustomerModel } from "../../models/customer.model.js";
-import { MessageModel } from "../../models/message.model.js";
-import { TelegramPersonalSessionModel } from "./telegram-personal.model.js";
-import { emitChatEvent, emitInboxEventToRecipients } from "../../realtime/socket.js";
-import { toConversation } from "../../services/conversation.service.js";
-import { toMessage } from "../../services/message.service.js";
-import { createPasswordPrompt, isRetryableTelegramPasswordError, shouldReusePendingQr, type PasswordPrompt } from "./telegram-personal.auth.js";
+import { createPasswordPrompt, isRetryableTelegramPasswordError, shouldReusePendingQr, type PasswordPrompt } from "../channels/telegram-personal/telegram-personal.auth.js";
+import { TelegramPersonalSessionModel } from "../channels/telegram-personal/telegram-personal.model.js";
+import { decryptSecret, encryptSecret } from "../common/crypto.js";
+import { AppError } from "../common/errors.js";
+import { ConversationModel } from "../models/conversation.model.js";
+import { CustomerModel } from "../models/customer.model.js";
+import { MessageModel } from "../models/message.model.js";
+import { emitChatEvent, emitInboxEventToRecipients } from "../realtime/socket.js";
+import { toConversation } from "./conversation.service.js";
+import { toMessage } from "./message.service.js";
 
 const QR_TTL_MS = 30_000;
 

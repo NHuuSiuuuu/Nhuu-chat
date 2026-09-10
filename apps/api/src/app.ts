@@ -4,8 +4,8 @@ import type { HealthResponse } from "@nhuu-chat/contracts";
 
 import { authRouter } from "./routes/auth.routes.js";
 import { errorHandler } from "./common/errors.js";
-import { telegramRouter } from "./channels/telegram/telegram.routes.js";
-import { telegramPersonalRouter } from "./channels/telegram-personal/telegram-personal.routes.js";
+import { telegramRouter } from "./routes/channels/telegram.routes.js";
+import { telegramPersonalRouter } from "./routes/channels/telegram-personal.routes.js";
 import { conversationRouter } from "./routes/conversations.routes.js";
 import { messageRouter } from "./routes/messages.routes.js";
 import { customerRouter } from "./routes/customers.routes.js";

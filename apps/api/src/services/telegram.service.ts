@@ -1,17 +1,17 @@
-import { ConversationModel } from "../../models/conversation.model.js";
-import { CustomerModel } from "../../models/customer.model.js";
-import { MessageModel } from "../../models/message.model.js";
-import { createProviderSecret } from "../../services/provider-secret.service.js";
-import { normalizeTelegramUpdate } from "./telegram.normalizer.js";
-import { TelegramClient } from "./telegram.client.js";
-import { telegramChannelConfigSchema, telegramUpdateSchema } from "./telegram.schemas.js";
-import { isBotPaused } from "../../orchestration/bot-pause.service.js";
-import { emitChatEvent, emitInboxEventToRecipients } from "../../realtime/socket.js";
-import { toConversation } from "../../services/conversation.service.js";
-import { toMessage } from "../../services/message.service.js";
+import type { TelegramUpdate } from "../channels/telegram/telegram.schemas.js";
+import { normalizeTelegramUpdate } from "../channels/telegram/telegram.normalizer.js";
+import { TelegramClient } from "../channels/telegram/telegram.client.js";
+import { ConversationModel } from "../models/conversation.model.js";
+import { CustomerModel } from "../models/customer.model.js";
+import { MessageModel } from "../models/message.model.js";
+import { isBotPaused } from "../orchestration/bot-pause.service.js";
+import { emitChatEvent, emitInboxEventToRecipients } from "../realtime/socket.js";
+import type { TelegramChannelConfigInput } from "../schemas/telegram.schemas.js";
+import { toConversation } from "./conversation.service.js";
+import { toMessage } from "./message.service.js";
+import { createProviderSecret } from "./provider-secret.service.js";
 
-export async function ingestTelegramUpdate(input: unknown): Promise<void> {
-  const update = telegramUpdateSchema.parse(input);
+export async function ingestTelegramUpdate(update: TelegramUpdate): Promise<void> {
   const normalized = normalizeTelegramUpdate(update);
   if (!normalized) return;
 
@@ -78,8 +78,7 @@ export async function ingestTelegramUpdate(input: unknown): Promise<void> {
   }
 }
 
-export async function registerTelegramChannel(input: unknown) {
-  const config = telegramChannelConfigSchema.parse(input);
+export async function registerTelegramChannel(config: TelegramChannelConfigInput) {
   const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
   if (!webhookSecret) throw new Error("TELEGRAM_WEBHOOK_SECRET is not configured");
 

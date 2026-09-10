@@ -7,7 +7,7 @@ import { env } from "@nhuu-chat/config";
 import { createApp } from "./app.js";
 import { connectDatabase, disconnectDatabase } from "./db/mongoose.js";
 import { closeRealtimeServer, createRealtimeServer } from "./realtime/socket.js";
-import { restoreActivePersonalClients } from "./channels/telegram-personal/telegram-personal.service.js";
+import { restoreActivePersonalClients } from "./services/telegram-personal.service.js";
 
 import type { Server as HttpServer } from "node:http";
 

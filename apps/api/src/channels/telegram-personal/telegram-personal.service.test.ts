@@ -4,7 +4,7 @@ import {
   buildTelegramQrUrl,
   isQrExpired,
   serializePersonalSession
-} from "./telegram-personal.service.js";
+} from "../../services/telegram-personal.service.js";
 
 describe("Telegram personal QR login", () => {
   it("builds a tg login URL from the binary login token", () => {

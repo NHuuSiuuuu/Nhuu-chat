@@ -37,7 +37,7 @@ describe("Telegram personal session restore", () => {
   });
 
   it("restores an active session from the encrypted database record after process restart", async () => {
-    const { getActivePersonalClient } = await import("./telegram-personal.service.js");
+    const { getActivePersonalClient } = await import("../../services/telegram-personal.service.js");
 
     const client = await getActivePersonalClient("user-1");
 
@@ -53,7 +53,7 @@ describe("Telegram personal session restore", () => {
         lean: async () => [{ userId: "user-2", encryptedSession: "encrypted-session", status: "active" }]
       })
     });
-    const { restoreActivePersonalClients } = await import("./telegram-personal.service.js");
+    const { restoreActivePersonalClients } = await import("../../services/telegram-personal.service.js");
 
     await restoreActivePersonalClients();
 

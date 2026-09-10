@@ -20,7 +20,7 @@ vi.mock("../models/message.model.js", () => ({
   MessageModel: { create: dependencyMocks.createMessage }
 }));
 
-vi.mock("../channels/telegram-personal/telegram-personal.service.js", () => ({
+vi.mock("./telegram-personal.service.js", () => ({
   getActivePersonalClient: dependencyMocks.getActivePersonalClient
 }));
 

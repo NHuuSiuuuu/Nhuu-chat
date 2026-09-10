@@ -29,13 +29,7 @@ export const telegramUpdateSchema = z
   })
   .passthrough();
 
-export const telegramChannelConfigSchema = z.object({
-  botToken: z.string().trim().min(1),
-  webhookBaseUrl: z.string().url()
-});
-
 export type TelegramUpdate = z.infer<typeof telegramUpdateSchema>;
-export type TelegramChannelConfigInput = z.infer<typeof telegramChannelConfigSchema>;
 
 export interface NormalizedInboundMessage {
   platform: "telegram";
