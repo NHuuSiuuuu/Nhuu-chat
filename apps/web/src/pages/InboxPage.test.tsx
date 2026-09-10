@@ -139,6 +139,44 @@ describe("Inbox Tailwind migration", () => {
 
     expect(applied).toEqual(["new suggestion"]);
   });
+
+  it("keeps the newer request loading after an older request settles", async () => {
+    const guard = createAiSuggestionsRequestGuard();
+    const first = deferred<string>();
+    const second = deferred<string>();
+    const applied: string[] = [];
+    let isLoading = false;
+
+    guard.setActiveConversation("conversation-a");
+    const isFirstCurrent = guard.start("conversation-a");
+    isLoading = true;
+    const firstResult = first.promise.then((value) => {
+      if (isFirstCurrent()) {
+        applied.push(value);
+        isLoading = false;
+      }
+    });
+
+    guard.setActiveConversation("conversation-b");
+    const isSecondCurrent = guard.start("conversation-b");
+    isLoading = true;
+    const secondResult = second.promise.then((value) => {
+      if (isSecondCurrent()) {
+        applied.push(value);
+        isLoading = false;
+      }
+    });
+
+    first.resolve("stale suggestion");
+    await firstResult;
+    expect(applied).toEqual([]);
+    expect(isLoading).toBe(true);
+
+    second.resolve("current suggestion");
+    await secondResult;
+    expect(applied).toEqual(["current suggestion"]);
+    expect(isLoading).toBe(false);
+  });
 });
 
 function deferred<T>() {
