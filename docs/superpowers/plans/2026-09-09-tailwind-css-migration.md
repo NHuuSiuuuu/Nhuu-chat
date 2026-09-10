@@ -147,7 +147,7 @@ Replace semantic Dashboard classes with Tailwind utilities, including:
 
 ```tsx
 <main className="min-h-screen bg-[#f2f5f9] text-[#273348]">
-<header className="flex min-h-16 items-center bg-[#4e5d9a] px-7 text-white">
+<header className="flex min-h-16 items-center bg-blue-600 px-7 text-white">
 <div className="mx-auto w-full max-w-[954px]">
 ```
 

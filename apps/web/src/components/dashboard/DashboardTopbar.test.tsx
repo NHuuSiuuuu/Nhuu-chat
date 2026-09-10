@@ -13,7 +13,7 @@ describe("DashboardTopbar", () => {
   it("keeps the shared brand, navigation, and owner identity", () => {
     const element = DashboardTopbar();
 
-    expect(element.props.className).toContain("bg-[#4e5d9a]");
+    expect(element.props.className).toContain("bg-blue-600");
     expect(element.props.className).toContain("min-h-16");
     expect(element.props.className).not.toContain("-mx-");
     expect(element.props.className).not.toContain("mb-");

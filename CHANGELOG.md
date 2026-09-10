@@ -5,6 +5,10 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Cập nhật `docs/wiki/README.md` thành tài liệu Wiki chi tiết về trạng thái MVP, luồng Inbox responsive, cách cài đặt, kiểm thử, giới hạn và roadmap.
+- Thêm sidebar thông tin bổ trợ bên phải khung chat với tab `Thông tin`/`Tạo đơn`, khu vực ghi chú, đơn hàng và responsive drawer cho màn hình nhỏ.
+- Cải thiện responsive Inbox: ẩn danh sách hội thoại trái dưới breakpoint hẹp, thêm drawer danh sách và nút mở danh sách cạnh avatar trong khung chat.
+- Làm mới form nhập tin nhắn: textarea nhiều dòng, gửi bằng Enter, xuống dòng bằng Shift+Enter, gợi ý mẫu trả lời/thành viên, thanh công cụ và modal phím tắt.
 - Khôi phục quy ước lỗi validation trước refactor (`1e05c33`): giữ lỗi 400 có sẵn của auth/Telegram 2FA và lỗi 500 có sẵn của Telegram bot, QR-status thiếu id, auth thiếu body; không chuẩn hóa toàn bộ lỗi schema thành 400.
 - Bổ sung kiểm thử không cần Mongo cho chuẩn hóa/loại trùng tag khách hàng, phản hồi và chuyển tiếp lỗi customer/knowledge, cùng vòng đời lưu/xóa knowledge.
 - Chuyển toàn bộ xử lý gửi tin outbound vào message service; bổ sung kiểm thử hành vi gửi Telegram bot/cá nhân, lưu tin, phân quyền, lỗi và event controller.

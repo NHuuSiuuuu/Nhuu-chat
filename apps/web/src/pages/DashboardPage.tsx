@@ -20,7 +20,7 @@ export function DashboardPage({ token, refresh, onOpenInbox }: { token: string; 
   const accountCount = connected ? 1 : 0;
   const openModal = () => setShowConnect(true);
 
-  return <main className="min-h-screen bg-[#f2f5f9] pt-[26px] text-[#273348] max-[700px]:px-[14px] max-[700px]:py-5 max-[700px]:pt-5" aria-labelledby="dashboard-title">
+  return <main className="min-h-screen bg-[#f2f5f9] text-[#273348] max-[700px]:px-[34px] " aria-labelledby="dashboard-title">
     <DashboardTopbar />
     <div className="mx-auto w-full max-w-[954px]">
       <header className="mb-2 flex items-end justify-between gap-6 rounded-[14px] bg-white px-[17px] pb-4 pt-[19px] max-[700px]:items-stretch max-[700px]:flex-col">

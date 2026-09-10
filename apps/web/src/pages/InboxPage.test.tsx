@@ -22,8 +22,12 @@ describe("Inbox Tailwind migration", () => {
     expect(list).toContain("ConversationAvatar");
     expect(chat).toContain("cancelAnimationFrame");
     expect(chat).toContain("scrollFrameRef");
+    expect(chat).toContain("ConversationInfoSidebar");
     expect(source).toContain("markActiveRead");
     expect(source).toContain("message.conversationId === activeId");
+    expect(source).toContain("max-[899px]:hidden");
+    expect(source).toContain("isConversationListOpen");
+    expect(chat).toContain('aria-label="Danh sách hội thoại"');
     expect(source).toContain("readStateRef");
     expect(source).toContain("generation");
     expect(source).toContain("confirmedGeneration");
