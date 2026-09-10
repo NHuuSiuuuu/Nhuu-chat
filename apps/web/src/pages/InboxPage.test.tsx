@@ -47,14 +47,24 @@ describe("Inbox Tailwind migration", () => {
     expect(avatar).toContain("onError");
   });
 
-  it("provides a desktop conversation-list collapse control", () => {
+  it("provides a desktop conversation-list collapsed layout", () => {
     const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
     const list = readFileSync(new URL("../components/conversations/ConversationList.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain("isConversationListCollapsed");
-    expect(source).toContain("setIsConversationListCollapsed");
+    expect(source).toContain("conversationListWidth");
     expect(list).toContain("collapsed");
-    expect(list).toContain("Thu gọn danh sách");
     expect(list).toContain("w-[72px]");
+  });
+
+  it("uses a pointer drag handle instead of a collapse click action", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+    const list = readFileSync(new URL("../components/conversations/ConversationList.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("clampConversationListWidth");
+    expect(source).toContain("onPointerMove");
+    expect(list).toContain("onPointerDown");
+    expect(list).toContain("cursor-col-resize");
+    expect(list).toContain("Kéo để thay đổi kích thước danh sách hội thoại");
+    expect(list).not.toContain("Thu gọn danh sách");
   });
 });

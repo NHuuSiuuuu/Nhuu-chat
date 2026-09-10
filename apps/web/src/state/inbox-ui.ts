@@ -6,6 +6,13 @@ interface ConversationPresentationInput {
   conversationType?: "private" | "group";
 }
 
+export const CONVERSATION_LIST_MIN_WIDTH = 72;
+export const CONVERSATION_LIST_MAX_WIDTH = 395;
+
+export function clampConversationListWidth(width: number): number {
+  return Math.min(CONVERSATION_LIST_MAX_WIDTH, Math.max(CONVERSATION_LIST_MIN_WIDTH, width));
+}
+
 export function conversationDisplayName({ channelId, customerName, conversationName, conversationType }: ConversationPresentationInput): string {
   if (conversationName?.trim()) return conversationName.trim();
   if (conversationType === "group") return "Nhóm hội thoại";

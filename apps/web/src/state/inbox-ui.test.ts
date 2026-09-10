@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { conversationDisplayName, conversationInitials, formatConversationTime, conversationPlatformLabel, isNearLatestMessage, markConversationRead } from "./inbox-ui.js";
+import { clampConversationListWidth, conversationDisplayName, conversationInitials, formatConversationTime, conversationPlatformLabel, isNearLatestMessage, markConversationRead } from "./inbox-ui.js";
 
 describe("inbox presentation", () => {
   it("builds a stable customer label and initials without extra API fields", () => {
@@ -27,5 +27,11 @@ describe("inbox presentation", () => {
 
   it("clears unread count when a conversation is opened", () => {
     expect(markConversationRead({ id: "conversation-1", unreadCount: 4 })).toEqual({ id: "conversation-1", unreadCount: 0 });
+  });
+
+  it("keeps the draggable conversation list within desktop bounds", () => {
+    expect(clampConversationListWidth(40)).toBe(72);
+    expect(clampConversationListWidth(260)).toBe(260);
+    expect(clampConversationListWidth(460)).toBe(395);
   });
 });
