@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Giảm cỡ chữ nội dung tin nhắn trong khung hội thoại xuống `text-sm` để phù hợp mật độ giao diện.
 - Căn giữa avatar 16px và tên tài khoản nền tảng trên cùng một dòng trong danh sách hội thoại.
 - Giữ icon nền tảng trong dòng hội thoại ở dạng logo phẳng, không bọc circle hoặc border.
 - Hiển thị tài khoản mạng xã hội đã kết nối (avatar/tên) ở dòng người phụ trách của từng hội thoại; giữ tag cạnh tên và icon nền tảng ở mép phải.
