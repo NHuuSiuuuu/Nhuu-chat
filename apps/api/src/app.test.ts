@@ -16,4 +16,10 @@ describe("API route registration", () => {
 
     expect(response.status).toBe(401);
   });
+
+  it("registers the shared conversation tags API behind authentication", async () => {
+    const response = await request(createApp()).get("/api/v1/conversation-tags");
+
+    expect(response.status).toBe(401);
+  });
 });

@@ -10,6 +10,7 @@ MVP quản lý inbox chăm sóc khách hàng Telegram và trợ lý RAG. MongoDB
 - MongoDB/Mongoose domain models, mã hóa provider secret AES-256-GCM.
 - Telegram webhook có secret và idempotency.
 - REST conversation/message API và Socket.IO room authentication.
+- CRUD danh mục thẻ hội thoại dùng chung cho admin/agent tại `/api/v1/conversation-tags`.
 - Knowledge chunking, TXT/Markdown/PDF/DOCX parser, provider-independent RAG.
 - Bot Pause 30 phút và retry outbound 0s/1s/4s.
 - Inbox React tối thiểu.
@@ -51,6 +52,7 @@ Khi phát triển giao diện, chạy web bằng `pnpm --filter web dev`. Build 
 - `POST /api/v1/auth/login` trả access token, refresh token và role hiện tại của tài khoản.
 - Sau đăng nhập, mọi role được đưa vào Dashboard. Người dùng phải kết nối Telegram trước khi Inbox có dữ liệu.
 - Telegram cá nhân cần `TELEGRAM_API_ID` và `TELEGRAM_API_HASH` lấy từ `my.telegram.org`; QR được quét bằng ứng dụng Telegram đã đăng nhập.
+- Thẻ hội thoại được quản lý qua API với payload `{ "name": "Mua hàng", "color": "#22c55e" }`; danh mục hiện dùng chung cho admin/agent. Việc gắn thẻ vào từng hội thoại chưa thuộc bước này.
 - Telegram Bot API hiện tại vẫn là provider riêng, không dùng chung session cá nhân.
 
 Test Mongo integration cần `MONGODB_TEST_URI` trỏ tới database test riêng trên Atlas; nếu không có URI này, test dùng fallback in-memory theo cấu hình hiện tại.

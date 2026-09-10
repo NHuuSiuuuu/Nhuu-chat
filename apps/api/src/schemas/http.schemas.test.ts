@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { registerSchema } from "./auth.schemas.js";
 import { customerTagsSchema } from "./customers.schemas.js";
 import { knowledgeInputSchema } from "./knowledge.schemas.js";
+import { conversationTagInputSchema } from "./conversation-tag.schemas.js";
 
 describe("HTTP schemas", () => {
   it("rejects a registration password shorter than eight characters", () => {
@@ -14,5 +15,9 @@ describe("HTTP schemas", () => {
 
   it("requires title and content for knowledge ingestion", () => {
     expect(knowledgeInputSchema.safeParse({ title: "", content: "" }).success).toBe(false);
+  });
+
+  it("accepts a valid conversation tag", () => {
+    expect(conversationTagInputSchema.safeParse({ name: "Mua hàng", color: "#22c55e" }).success).toBe(true);
   });
 });

@@ -10,6 +10,7 @@ import { conversationRouter } from "./routes/conversations.routes.js";
 import { messageRouter } from "./routes/messages.routes.js";
 import { customerRouter } from "./routes/customers.routes.js";
 import { knowledgeRouter } from "./routes/knowledge.routes.js";
+import { conversationTagRouter } from "./routes/conversation-tags.routes.js";
 import { corsAllowlist, rateLimit, requestId, securityHeaders } from "./common/security.middleware.js";
 
 export function createApp(): Express {
@@ -32,6 +33,7 @@ export function createApp(): Express {
   app.use("/api/v1/messages", messageRouter);
   app.use("/api/v1/customers", customerRouter);
   app.use("/api/v1/knowledge", knowledgeRouter);
+  app.use("/api/v1/conversation-tags", conversationTagRouter);
   app.use(errorHandler);
 
   return app;

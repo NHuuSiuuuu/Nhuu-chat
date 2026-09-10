@@ -6,6 +6,12 @@ export interface HealthResponse {
 export type ChatPlatform = "facebook" | "instagram" | "zalo" | "telegram" | "telegram_personal";
 export type ConversationStatus = "open" | "pending" | "closed";
 
+export interface ConversationTagContract {
+  id: string;
+  name: string;
+  color: string;
+}
+
 export interface ChatMessageContract {
   id: string;
   conversationId: string;

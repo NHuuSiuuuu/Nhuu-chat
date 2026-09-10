@@ -34,6 +34,7 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
 - Telegram cá nhân hỗ trợ QR login, xác minh 2FA, hủy phiên QR cũ và khôi phục session sau khi API restart.
 - Socket.IO room authentication và event realtime cho message/conversation.
 - API đọc/ghi hội thoại, message, customer và knowledge.
+- API CRUD danh mục thẻ hội thoại dùng chung cho admin/agent tại `/api/v1/conversation-tags`.
 - Chunking và parser cho TXT, Markdown, PDF, DOCX; RAG adapter độc lập với provider.
 - Bot Pause 30 phút và retry outbound theo các mốc `0s`, `1s`, `4s`.
 - Frontend đã chuyển sang Tailwind CSS v4; entry CSS duy nhất là `apps/web/src/styles/tailwind.css`.

@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm backend CRUD thẻ hội thoại dùng chung cho admin/agent qua `/api/v1/conversation-tags`, hỗ trợ tạo, sửa, xóa và kiểm tra tên/màu hex hợp lệ.
 - Sửa routing header bằng History API: logo điều hướng tới `/dashboard`, mục `Hội thoại` tới `/inbox`, đồng thời hỗ trợ back/forward của trình duyệt.
 - Bỏ avatar khỏi message của agent/chính mình; chỉ giữ avatar ở message khách để khung chat gọn hơn.
 - Căn chỉnh lại message: tin nhắn của chính mình nằm bên phải, action hover nằm bên trái bubble; message khách giữ hướng ngược lại.
