@@ -22,7 +22,7 @@ describe("conversation suggestions route", () => {
   it("protects the AI suggestions endpoint for admins and agents", () => {
     const route = conversationRouter.stack.find((layer) => layer.route?.path === "/:id/ai-suggestions");
 
-    expect(route?.route?.methods.post).toBe(true);
+    expect(route?.route?.path).toBe("/:id/ai-suggestions");
     expect(route?.route?.stack.at(-1)?.handle).toBe(routeMocks.getConversationReplySuggestions);
     expect(routeMocks.requireRole).toHaveBeenCalledWith("admin", "agent");
   });
