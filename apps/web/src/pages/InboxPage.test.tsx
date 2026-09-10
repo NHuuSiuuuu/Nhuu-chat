@@ -117,4 +117,15 @@ describe("Inbox Tailwind migration", () => {
     expect(chat).toContain("aiSuggestionsError");
     expect(chat).toContain("onRefreshAiSuggestions");
   });
+
+  it("invalidates stale suggestion requests when the active conversation changes", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("aiSuggestionsRequestRef");
+    expect(source).toContain("activeIdRef");
+    expect(source).toContain("const requestId = ++aiSuggestionsRequestRef.current");
+    expect(source).toContain("requestId === aiSuggestionsRequestRef.current");
+    expect(source).toContain("id === activeIdRef.current");
+    expect(source).toContain("aiSuggestionsRequestRef.current += 1");
+  });
 });

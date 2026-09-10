@@ -28,6 +28,9 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
   const conversationRevisionRef = React.useRef(new Map<string, number>());
   const conversationsRef = React.useRef<ConversationContract[]>([]);
   const readStateRef = React.useRef(new Map<string, { generation: number; baseline: number; revision: number; confirmedGeneration?: number; confirmedRevision?: number }>());
+  const aiSuggestionsRequestRef = React.useRef(0);
+  const activeIdRef = React.useRef<string | null>(activeId);
+  activeIdRef.current = activeId;
   const active = conversations.find((item) => item.id === activeId) ?? null;
   const [readRequestKey, setReadRequestKey] = useState(0);
   // Uses generation and revision guards so delayed read responses cannot undo newer realtime activity.
@@ -74,17 +77,19 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
     }
   }
   // Loads suggestions for only the visible conversation so stale responses cannot replace newer composer state.
-  async function refreshAiSuggestions(id = activeId) {
+  async function refreshAiSuggestions(id = activeIdRef.current) {
     if (!id) return;
+    const requestId = ++aiSuggestionsRequestRef.current;
+    const isCurrentRequest = () => requestId === aiSuggestionsRequestRef.current && id === activeIdRef.current;
     setIsAiSuggestionsLoading(true);
     setAiSuggestionsError(null);
     try {
       const result = await apiRequest<AiSuggestionsResponse>(API_URL, `/api/v1/conversations/${id}/ai-suggestions`, token, { method: "POST" }, refresh);
-      if (id === activeId) setAiSuggestions(result.suggestions);
+      if (isCurrentRequest()) setAiSuggestions(result.suggestions);
     } catch {
-      if (id === activeId) setAiSuggestionsError("Không thể tải gợi ý AI.");
+      if (isCurrentRequest()) setAiSuggestionsError("Không thể tải gợi ý AI.");
     } finally {
-      if (id === activeId) setIsAiSuggestionsLoading(false);
+      if (isCurrentRequest()) setIsAiSuggestionsLoading(false);
     }
   }
   useEffect(() => {
@@ -127,6 +132,7 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
     return () => { cancelled = true; };
   }, [activeId, token, refresh]);
   useEffect(() => {
+    aiSuggestionsRequestRef.current += 1;
     setAiSuggestions(null);
     setAiSuggestionsError(null);
     setIsAiSuggestionsLoading(false);
