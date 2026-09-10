@@ -16,7 +16,8 @@ import {
   markConversationRead as markConversationReadRecord,
   updateAssignment as updateConversationAssignment,
   updateStatus as updateConversationStatus,
-  updateConversationTags as updateConversationTagsRecord
+  updateConversationTags as updateConversationTagsRecord,
+  getConversationReplySuggestions as getConversationReplySuggestionsRecord
 } from "../services/conversation.service.js";
 
 function authenticatedRequest(request: Request) {
@@ -112,6 +113,16 @@ export const updateConversationTags: RequestHandler = async (request, response, 
       result
     );
     response.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getConversationReplySuggestions: RequestHandler = async (request, response, next) => {
+  try {
+    const auth = authenticatedRequest(request);
+    const id = conversationId(request.params);
+    response.json(await getConversationReplySuggestionsRecord(id, auth));
   } catch (error) {
     next(error);
   }

@@ -9,7 +9,8 @@ const serviceMocks = vi.hoisted(() => ({
   sendOutboundMessage: vi.fn(),
   updateAssignment: vi.fn(),
   updateStatus: vi.fn(),
-  updateConversationTags: vi.fn()
+  updateConversationTags: vi.fn(),
+  getConversationReplySuggestions: vi.fn()
 }));
 
 const conversationModelMocks = vi.hoisted(() => ({
@@ -28,7 +29,8 @@ vi.mock("../services/conversation.service.js", async (importOriginal) => ({
   markConversationRead: serviceMocks.markConversationRead,
   updateAssignment: serviceMocks.updateAssignment,
   updateStatus: serviceMocks.updateStatus,
-  updateConversationTags: serviceMocks.updateConversationTags
+  updateConversationTags: serviceMocks.updateConversationTags,
+  getConversationReplySuggestions: serviceMocks.getConversationReplySuggestions
 }));
 
 vi.mock("../services/message.service.js", () => ({
@@ -47,7 +49,8 @@ import {
   markConversationRead,
   updateAssignment,
   updateStatus,
-  updateConversationTags
+  updateConversationTags,
+  getConversationReplySuggestions
 } from "./conversations.controller.js";
 import { listMessages, sendMessage } from "./messages.controller.js";
 
@@ -71,6 +74,47 @@ const adminAuth = { id: "admin-1", email: "admin@example.com", role: "admin" } a
 describe("conversation controller", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+  });
+
+  it("rejects unauthenticated AI suggestion requests", async () => {
+    const { response } = responseRecorder();
+    const next = vi.fn();
+
+    await getConversationReplySuggestions({ params: { id: "conversation-1" } } as never, response as never, next);
+
+    expect(next.mock.calls[0]?.[0]).toMatchObject({ statusCode: 401, code: "AUTHENTICATION_REQUIRED" });
+    expect(serviceMocks.getConversationReplySuggestions).not.toHaveBeenCalled();
+  });
+
+  it("returns AI suggestions and their source from the service", async () => {
+    const expected = { suggestions: ["Gợi ý 1", "Gợi ý 2", "Gợi ý 3"], source: "gemini" as const };
+    serviceMocks.getConversationReplySuggestions.mockResolvedValue(expected);
+    const { response, state } = responseRecorder();
+    const next = vi.fn();
+
+    await getConversationReplySuggestions({ auth: adminAuth, params: { id: "conversation-1" } } as never, response as never, next);
+
+    expect(serviceMocks.getConversationReplySuggestions).toHaveBeenCalledWith("conversation-1", adminAuth);
+    expect(state.body).toEqual(expected);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("returns sanitized fallback data without provider error details", async () => {
+    serviceMocks.getConversationReplySuggestions.mockResolvedValue({
+      suggestions: ["Dạ, em sẽ kiểm tra giúp anh/chị ạ."],
+      source: "fallback"
+    });
+    const { response, state } = responseRecorder();
+    const next = vi.fn();
+
+    await getConversationReplySuggestions({ auth: adminAuth, params: { id: "conversation-1" } } as never, response as never, next);
+
+    expect(state.body).toEqual({
+      suggestions: ["Dạ, em sẽ kiểm tra giúp anh/chị ạ."],
+      source: "fallback"
+    });
+    expect(JSON.stringify(state.body)).not.toContain("GEMINI_API_KEY is not configured");
+    expect(next).not.toHaveBeenCalled();
   });
 
   it("returns the conversation list from the service", async () => {

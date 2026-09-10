@@ -6,6 +6,14 @@ import type { AuthUser } from "./auth.service.js";
 import { conversationAccessFilter } from "../realtime/access.js";
 import { TelegramPersonalSessionModel } from "../channels/telegram-personal/telegram-personal.model.js";
 import { ConversationTagModel } from "../models/conversation-tag.model.js";
+import { MessageModel } from "../models/message.model.js";
+import type { AiSuggestionsResponse } from "@nhuu-chat/contracts";
+
+const LOCAL_REPLY_SUGGESTIONS = [
+  "Dạ, em đã nhận được thông tin của anh/chị ạ.",
+  "Anh/chị đợi em một chút để em kiểm tra lại nhé.",
+  "Em sẽ phản hồi lại anh/chị trong ít phút ạ."
+];
 
 export async function listConversations(query: {
   page?: string;
@@ -82,6 +90,31 @@ export async function updateConversationTags(id: string, tagIds: string[], auth:
   ).populate("customerId", "name avatarUrl").populate("tagIds", "name color").lean();
   if (!row) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
   return toConversation(row);
+}
+
+// Checks conversation visibility before loading any customer content for the AI request.
+export async function getConversationReplySuggestions(id: string, auth: AuthUser): Promise<AiSuggestionsResponse> {
+  const conversation = await ConversationModel.findOne({ _id: id, ...conversationAccessFilter(auth) }).lean();
+  if (!conversation) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
+
+  const latestCustomerMessage = await MessageModel.findOne({ conversationId: id, senderType: "customer" })
+    .sort({ createdAt: -1, _id: -1 })
+    .lean();
+  const content = typeof latestCustomerMessage?.content === "string" ? latestCustomerMessage.content.trim() : "";
+  if (!content) return localReplySuggestions();
+
+  try {
+    const { GeminiReplySuggestionProvider } = await import("../ai/reply-suggestion.provider.js");
+    const suggestions = await new GeminiReplySuggestionProvider().suggest({ latestCustomerMessage: content });
+    return { suggestions: suggestions.slice(0, 3), source: "gemini" };
+  } catch {
+    // Provider and configuration failures stay internal so agents always receive usable replies.
+    return localReplySuggestions();
+  }
+}
+
+function localReplySuggestions(): AiSuggestionsResponse {
+  return { suggestions: [...LOCAL_REPLY_SUGGESTIONS], source: "fallback" };
 }
 
 // Normalizes populated and unpopulated Mongo documents into the frontend conversation contract.

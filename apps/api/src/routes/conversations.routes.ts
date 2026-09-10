@@ -7,7 +7,8 @@ import {
   markConversationRead,
   updateAssignment,
   updateStatus,
-  updateConversationTags
+  updateConversationTags,
+  getConversationReplySuggestions
 } from "../controllers/conversations.controller.js";
 import { listMessages } from "../controllers/messages.controller.js";
 
@@ -19,3 +20,4 @@ conversationRouter.patch("/:id/read", requireRole(...inboxAccessRoles), markConv
 conversationRouter.patch("/:id/assignment", requireRole("admin", "agent"), updateAssignment);
 conversationRouter.patch("/:id/status", requireRole("admin", "agent"), updateStatus);
 conversationRouter.put("/:id/tags", requireRole("admin", "agent"), updateConversationTags);
+conversationRouter.post("/:id/ai-suggestions", requireRole("admin", "agent"), getConversationReplySuggestions);
