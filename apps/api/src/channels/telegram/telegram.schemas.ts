@@ -5,7 +5,8 @@ const telegramUserSchema = z.object({
   is_bot: z.boolean(),
   first_name: z.string().min(1),
   last_name: z.string().optional(),
-  username: z.string().optional()
+  username: z.string().optional(),
+  avatar_url: z.string().url().optional()
 });
 
 const telegramChatSchema = z.object({
@@ -38,6 +39,7 @@ export interface NormalizedInboundMessage {
   senderId: string;
   senderName: string;
   senderUsername?: string;
+  avatarUrl?: string;
   type: "text";
   content: string;
   sentAt: Date;

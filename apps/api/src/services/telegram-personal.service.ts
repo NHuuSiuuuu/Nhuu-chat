@@ -48,6 +48,12 @@ export function serializePersonalSession(session: string): string {
   return encryptSecret(session);
 }
 
+export function toAvatarDataUrl(avatar: Buffer | Uint8Array | undefined, mimeType = "image/jpeg"): string | undefined {
+  if (!avatar) return undefined;
+  const bytes = Buffer.isBuffer(avatar) ? avatar : Buffer.from(avatar);
+  return `data:${mimeType};base64,${bytes.toString("base64")}`;
+}
+
 function telegramCredentials(): { apiId: number; apiHash: string } {
   const apiId = Number(process.env.TELEGRAM_API_ID);
   const apiHash = process.env.TELEGRAM_API_HASH;
@@ -105,6 +111,8 @@ export async function startPersonalQrLogin(userId: string) {
   }).then(async (telegramUser) => {
     const user = telegramUser as Api.User;
     const displayName = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.username || "Telegram user";
+    const avatar = await client.downloadProfilePhoto("me", { isBig: false }).catch(() => undefined);
+    const avatarUrl = Buffer.isBuffer(avatar) ? toAvatarDataUrl(avatar) : undefined;
     await TelegramPersonalSessionModel.findOneAndUpdate(
       { userId },
       {
@@ -113,6 +121,7 @@ export async function startPersonalQrLogin(userId: string) {
         telegramUserId: String(user.id),
         username: user.username ?? null,
         displayName,
+        avatarUrl: avatarUrl ?? null,
         status: "active",
         connectedAt: new Date()
       },
@@ -150,8 +159,8 @@ export function submitPersonalQrPassword(id: string, userId: string, password: s
 export async function getPersonalSessionStatus(userId: string) {
   const session = await TelegramPersonalSessionModel.findOne({ userId }).lean();
   return session
-    ? { connected: session.status === "active", displayName: session.displayName, username: session.username }
-    : { connected: false, displayName: null, username: null };
+    ? { connected: session.status === "active", displayName: session.displayName, username: session.username, avatarUrl: session.avatarUrl ?? null }
+    : { connected: false, displayName: null, username: null, avatarUrl: null };
 }
 
 export async function getActivePersonalClient(userId: string): Promise<TelegramClient | undefined> {
@@ -207,11 +216,13 @@ function attachPersonalMessageSync(userId: string, client: TelegramClient): void
     if (!channelId || !content) return;
     const sender = await message.getSender().catch(() => null) as Api.User | null;
     const senderId = sender?.id ? String(sender.id) : channelId;
+    const senderAvatar = sender ? await client.downloadProfilePhoto(sender, { isBig: false }).catch(() => undefined) : undefined;
+    const senderAvatarUrl = Buffer.isBuffer(senderAvatar) ? toAvatarDataUrl(senderAvatar) : undefined;
     const chat = await message.getChat().catch(() => null) as { title?: string } | null;
     const isGroup = (message as unknown as { isGroup?: boolean }).isGroup === true;
     const customer = await CustomerModel.findOneAndUpdate(
       { platform: "telegram_personal", platformId: senderId },
-      { $set: { name: [sender?.firstName, sender?.lastName].filter(Boolean).join(" ") || "Telegram user" }, $setOnInsert: { platform: "telegram_personal", platformId: senderId } },
+      { $set: { name: [sender?.firstName, sender?.lastName].filter(Boolean).join(" ") || "Telegram user", ...(senderAvatarUrl ? { avatarUrl: senderAvatarUrl } : {}) }, $setOnInsert: { platform: "telegram_personal", platformId: senderId } },
       { upsert: true, new: true }
     );
     const conversation = await ConversationModel.findOneAndUpdate(
@@ -225,7 +236,7 @@ function attachPersonalMessageSync(userId: string, client: TelegramClient): void
       const senderName = [sender?.firstName, sender?.lastName].filter(Boolean).join(" ") || "Telegram user";
       const storedMessage = await MessageModel.create({ conversationId: conversation._id, platform: "telegram_personal", externalMessageId: String(message.id), senderType: "customer", senderId, type: "text", content, deliveryStatus: "delivered", metadata: { senderName } });
       const account = await TelegramPersonalSessionModel.findOne({ userId, status: "active" }).lean();
-      const conversationPayload = toConversation(conversation.toObject(), account ? { name: account.displayName } : undefined);
+      const conversationPayload = toConversation(conversation.toObject(), account ? { name: account.displayName, avatarUrl: account.avatarUrl ?? undefined } : undefined);
       emitChatEvent("chat:message_received", String(conversation._id), toMessage(storedMessage.toObject()));
       emitInboxEventToRecipients("chat:conversation_updated", [userId, conversation.assignedAgentId ? String(conversation.assignedAgentId) : ""], conversationPayload);
     } catch (error) {

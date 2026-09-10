@@ -17,6 +17,7 @@ export function normalizeTelegramUpdate(
     senderId: String(message.from.id),
     senderName,
     ...(message.from.username ? { senderUsername: message.from.username } : {}),
+    ...(message.from.avatar_url ? { avatarUrl: message.from.avatar_url } : {}),
     type: "text",
     content: message.text,
     sentAt: new Date(message.date * 1_000),

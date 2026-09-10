@@ -7,6 +7,7 @@ const telegramPersonalSessionSchema = new Schema(
     telegramUserId: { type: String, required: true },
     username: { type: String, default: null },
     displayName: { type: String, required: true },
+    avatarUrl: { type: String, default: null },
     status: { type: String, enum: ["active", "disconnected"], default: "active", index: true },
     connectedAt: { type: Date, required: true },
     lastSyncedAt: { type: Date, default: null }

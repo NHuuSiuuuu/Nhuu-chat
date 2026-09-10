@@ -16,7 +16,8 @@ describe("normalizeTelegramUpdate", () => {
           is_bot: false,
           first_name: "Nhuu",
           last_name: "Tester",
-          username: "nhuu_tester"
+          username: "nhuu_tester",
+          avatar_url: "data:image/jpeg;base64,avatar"
         },
         text: "Xin chào"
       }
@@ -29,6 +30,7 @@ describe("normalizeTelegramUpdate", () => {
       senderId: "123",
       senderName: "Nhuu Tester",
       senderUsername: "nhuu_tester",
+      avatarUrl: "data:image/jpeg;base64,avatar",
       type: "text",
       content: "Xin chào",
       sentAt: new Date("2024-09-08T13:13:20.000Z"),

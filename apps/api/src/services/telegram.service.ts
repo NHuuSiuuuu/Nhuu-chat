@@ -30,6 +30,7 @@ export async function ingestTelegramUpdate(update: TelegramUpdate): Promise<void
     {
       $set: {
         name: normalized.senderName,
+        ...(normalized.avatarUrl ? { avatarUrl: normalized.avatarUrl } : {}),
         ...(normalized.senderUsername ? { notes: `@${normalized.senderUsername}` } : {})
       },
       $setOnInsert: { platform: normalized.platform, platformId: normalized.senderId }

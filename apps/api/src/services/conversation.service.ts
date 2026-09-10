@@ -31,7 +31,7 @@ export async function listConversations(query: {
   const sessions = ownerIds.length > 0
     ? await TelegramPersonalSessionModel.find({ userId: { $in: ownerIds }, status: "active" }).lean()
     : [];
-  const accountByOwnerId = new Map(sessions.map((session) => [String(session.userId), { name: session.displayName, avatarUrl: undefined }]));
+  const accountByOwnerId = new Map(sessions.map((session) => [String(session.userId), { name: session.displayName, avatarUrl: session.avatarUrl ?? undefined }]));
   return {
     conversations: rows.map((row) => toConversation(row, row.ownerId ? accountByOwnerId.get(String(row.ownerId)) : undefined)),
     total

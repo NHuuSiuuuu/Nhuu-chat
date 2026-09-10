@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildTelegramQrUrl,
   isQrExpired,
-  serializePersonalSession
+  serializePersonalSession,
+  toAvatarDataUrl
 } from "../../services/telegram-personal.service.js";
 
 describe("Telegram personal QR login", () => {
@@ -23,5 +24,12 @@ describe("Telegram personal QR login", () => {
 
     expect(record).not.toContain("session-secret-value");
     expect(record.split(".")).toHaveLength(4);
+  });
+
+  it("serializes a downloaded avatar into a reusable common avatar URL", () => {
+    expect(toAvatarDataUrl(Buffer.from("avatar-bytes"), "image/jpeg")).toBe(
+      "data:image/jpeg;base64,YXZhdGFyLWJ5dGVz"
+    );
+    expect(toAvatarDataUrl(undefined, "image/jpeg")).toBeUndefined();
   });
 });
