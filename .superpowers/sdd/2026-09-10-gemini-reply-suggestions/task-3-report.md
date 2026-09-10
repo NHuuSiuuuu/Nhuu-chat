@@ -23,6 +23,7 @@
 - Replaced the stale-request source-string assertion with a runtime deferred-promise regression test using the production request guard.
 - Added runtime coverage that an older request cannot clear the newer conversation's loading state; only the current request settles it.
 - Added runtime rejection coverage that an older request cannot set the newer conversation's error or clear its loading state.
+- Fixed the refresh spinner typing issue by animating a wrapper element instead of passing unsupported `className` to `InboxIcon`.
 
 ## Verification
 
@@ -32,6 +33,9 @@
 - Runtime overlap regression: older response was resolved after the newer conversation request and was not applied.
 - Loading cleanup regression: older completion left loading active for the newer request, and the newer completion cleared it.
 - Error regression: older rejection left the newer conversation error-free and loading until its current request completed.
+- Focused web tests: 18 passed.
+- API/shared TypeScript check: passed.
+- Affected web-component TypeScript check: passed.
 - Web production build: passed with Vite.
 - `git diff --check`: passed.
 

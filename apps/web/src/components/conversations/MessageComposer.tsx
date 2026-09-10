@@ -85,7 +85,7 @@ export function MessageComposer({ onSend, disabled = false, aiSuggestions, isAiS
       </div>
       <div className="flex items-center justify-between px-3 pt-1.5 text-xs text-gray-400">
         <span className="inline-flex items-center gap-1.5 font-medium"><InboxIcon name="sparkles" size={14} /> AI gợi ý</span>
-        <button className="rounded p-1.5 transition hover:bg-gray-100 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 disabled:cursor-not-allowed disabled:opacity-50" type="button" aria-label="Làm mới gợi ý AI" onClick={() => onRefreshAiSuggestions ? onRefreshAiSuggestions() : setAiSuggestionSetIndex((current) => (current + 1) % aiSuggestionSets.length)} disabled={isAiSuggestionsLoading}><InboxIcon name="refresh" size={15} className={isAiSuggestionsLoading ? "animate-spin" : undefined} /></button>
+        <button className="rounded p-1.5 transition hover:bg-gray-100 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 disabled:cursor-not-allowed disabled:opacity-50" type="button" aria-label="Làm mới gợi ý AI" onClick={() => onRefreshAiSuggestions ? onRefreshAiSuggestions() : setAiSuggestionSetIndex((current) => (current + 1) % aiSuggestionSets.length)} disabled={isAiSuggestionsLoading}><span className={isAiSuggestionsLoading ? "inline-flex animate-spin" : "inline-flex"}><InboxIcon name="refresh" size={15} /></span></button>
       </div>
       {isAiSuggestionsLoading && <p className="px-3 pb-1 text-xs text-gray-400" role="status">Đang tải gợi ý AI...</p>}
       {aiSuggestionsError && <p className="px-3 pb-1 text-xs text-amber-600" role="status">{aiSuggestionsError}</p>}
