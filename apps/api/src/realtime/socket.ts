@@ -2,7 +2,7 @@ import type { Server as HttpServer } from "node:http";
 import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { createClient, type RedisClientType } from "redis";
-import { verifyAccessToken } from "../auth/auth.service.js";
+import { verifyAccessToken } from "../services/auth.service.js";
 import { chatEvents } from "@nhuu-chat/contracts";
 import { ConversationModel } from "../models/conversation.model.js";
 import { canJoinConversation } from "./access.js";

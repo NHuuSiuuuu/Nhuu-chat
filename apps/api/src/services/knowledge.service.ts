@@ -1,5 +1,5 @@
 import { KnowledgeChunkModel, KnowledgeDocumentModel } from "../models/knowledge.model.js";
-import { chunkText } from "./chunker.js";
+import { chunkText } from "../knowledge/chunker.js";
 import type { EmbeddingProvider } from "../ai/embedding.provider.js";
 import type { VectorStore } from "../ai/vector.store.js";
 

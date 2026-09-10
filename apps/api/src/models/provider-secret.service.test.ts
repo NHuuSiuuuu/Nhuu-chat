@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { buildProviderSecretDocument } from "./provider-secret.service.js";
+import { buildProviderSecretDocument } from "../services/provider-secret.service.js";
 
 process.env.ENCRYPTION_KEY ??= "test-encryption-key-that-is-at-least-32-characters";
 

@@ -1,7 +1,7 @@
 import { ConversationModel } from "../../models/conversation.model.js";
 import { CustomerModel } from "../../models/customer.model.js";
 import { MessageModel } from "../../models/message.model.js";
-import { createProviderSecret } from "../../models/provider-secret.service.js";
+import { createProviderSecret } from "../../services/provider-secret.service.js";
 import { normalizeTelegramUpdate } from "./telegram.normalizer.js";
 import { TelegramClient } from "./telegram.client.js";
 import { telegramChannelConfigSchema, telegramUpdateSchema } from "./telegram.schemas.js";

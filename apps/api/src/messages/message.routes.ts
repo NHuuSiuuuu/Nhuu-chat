@@ -3,7 +3,7 @@ import { AppError } from "../common/errors.js";
 import { requireRole } from "../auth/auth.middleware.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { createOutboundMessage, toMessage } from "./message.service.js";
-import { readProviderSecretByName } from "../models/provider-secret.service.js";
+import { readProviderSecretByName } from "../services/provider-secret.service.js";
 import { TelegramClient } from "../channels/telegram/telegram.client.js";
 import { emitChatEvent, emitInboxEventToRecipients } from "../realtime/socket.js";
 import { toConversation } from "../conversations/conversation.service.js";

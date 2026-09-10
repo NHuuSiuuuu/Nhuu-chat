@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { startTestDatabase, stopTestDatabase } from "../test/mongo-repl-set.js";
-import { createProviderSecret, readProviderSecret } from "./provider-secret.service.js";
+import { createProviderSecret, readProviderSecret } from "../services/provider-secret.service.js";
 import { ProviderSecretModel } from "./provider-secret.model.js";
 
 process.env.ENCRYPTION_KEY ??= "test-encryption-key-that-is-at-least-32-characters";

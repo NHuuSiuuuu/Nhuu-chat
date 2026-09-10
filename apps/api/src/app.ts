@@ -2,14 +2,14 @@ import express, { type Express } from "express";
 
 import type { HealthResponse } from "@nhuu-chat/contracts";
 
-import { authRouter } from "./auth/auth.routes.js";
+import { authRouter } from "./routes/auth.routes.js";
 import { errorHandler } from "./common/errors.js";
 import { telegramRouter } from "./channels/telegram/telegram.routes.js";
 import { telegramPersonalRouter } from "./channels/telegram-personal/telegram-personal.routes.js";
 import { conversationRouter } from "./conversations/conversation.routes.js";
 import { messageRouter } from "./messages/message.routes.js";
-import { customerRouter } from "./customers/customer.routes.js";
-import { knowledgeRouter } from "./knowledge/knowledge.routes.js";
+import { customerRouter } from "./routes/customers.routes.js";
+import { knowledgeRouter } from "./routes/knowledge.routes.js";
 import { corsAllowlist, rateLimit, requestId, securityHeaders } from "./common/security.middleware.js";
 
 export function createApp(): Express {

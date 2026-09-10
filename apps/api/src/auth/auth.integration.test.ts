@@ -3,8 +3,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createApp } from "../app.js";
 import { requireRole } from "./auth.middleware.js";
-import { hashPassword } from "./auth.service.js";
-import { verifyAccessToken } from "./auth.service.js";
+import { hashPassword } from "../services/auth.service.js";
+import { verifyAccessToken } from "../services/auth.service.js";
 import { UserModel } from "../models/user.model.js";
 import { startTestDatabase, stopTestDatabase } from "../test/mongo-repl-set.js";
 

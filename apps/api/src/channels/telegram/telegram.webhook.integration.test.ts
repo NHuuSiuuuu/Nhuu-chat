@@ -2,7 +2,7 @@ import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createApp } from "../../app.js";
-import { issueTokens } from "../../auth/auth.service.js";
+import { issueTokens } from "../../services/auth.service.js";
 import { ConversationModel } from "../../models/conversation.model.js";
 import { CustomerModel } from "../../models/customer.model.js";
 import { MessageModel } from "../../models/message.model.js";

@@ -1,6 +1,6 @@
 import { AppError } from "../common/errors.js";
 import { readEncryptedSecret, writeEncryptedSecret } from "../common/secret-storage.js";
-import { ProviderSecretModel } from "./provider-secret.model.js";
+import { ProviderSecretModel } from "../models/provider-secret.model.js";
 
 export function buildProviderSecretDocument(provider: string, name: string, plaintext: string) {
   const encrypted = writeEncryptedSecret(plaintext);

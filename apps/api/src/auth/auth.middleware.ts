@@ -2,7 +2,7 @@ import type { Request, RequestHandler } from "express";
 
 import { AppError } from "../common/errors.js";
 import type { Role } from "../models/user.model.js";
-import { verifyAccessToken, type AuthUser } from "./auth.service.js";
+import { verifyAccessToken, type AuthUser } from "../services/auth.service.js";
 
 export interface AuthenticatedRequest extends Request {
   auth?: AuthUser;
