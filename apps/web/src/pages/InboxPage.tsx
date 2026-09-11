@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useEffect, useState } from "react";
-import { chatEvents, type AiSuggestionsResponse, type ChatMessageContract, type ConversationContract, type ConversationTagContract } from "@nhuu-chat/contracts";
+import { chatEvents, type AiSettingsContract, type AiSuggestionsResponse, type ChatMessageContract, type ConversationContract, type ConversationTagContract } from "@nhuu-chat/contracts";
 import { apiRequest } from "../lib/api.js";
 import { createChatSocket } from "../lib/socket.js";
 import { resolveApiBaseUrl } from "../lib/api-url.js";
@@ -13,6 +13,8 @@ import { DashboardTopbar } from "../components/dashboard/DashboardTopbar.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 const CONVERSATION_TAGS_API_URL = "/api/v1/conversation-tags";
+const AI_SETTINGS_API_URL = "/api/v1/ai-settings";
+const DEFAULT_AI_SETTINGS: AiSettingsContract = { modelTier: "smart", enabled: true, suggestionsEnabled: true, sentimentEnabled: true, suggestionMode: "on_open", sentimentWindow: 3 };
 // Tracks request identity and conversation identity so overlapping responses cannot cross conversation boundaries.
 export function createAiSuggestionsRequestGuard() {
   let activeConversationId: string | null = null;
@@ -36,6 +38,7 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
   const [aiSuggestions, setAiSuggestions] = useState<AiSuggestionsResponse["suggestions"] | null>(null);
   const [isAiSuggestionsLoading, setIsAiSuggestionsLoading] = useState(false);
   const [aiSuggestionsError, setAiSuggestionsError] = useState<string | null>(null);
+  const [aiSettings, setAiSettings] = useState<AiSettingsContract>(DEFAULT_AI_SETTINGS);
   const [isCustomerTyping, setIsCustomerTyping] = useState(false);
   const [availableTags, setAvailableTags] = useState<ConversationTagContract[]>([]);
   const [isConversationListOpen, setIsConversationListOpen] = useState(false);
@@ -48,6 +51,7 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
   const aiSuggestionsGuardRef = React.useRef(createAiSuggestionsRequestGuard());
   aiSuggestionsGuardRef.current.setActiveConversation(activeId);
   const active = conversations.find((item) => item.id === activeId) ?? null;
+  const aiSuggestionsEnabled = aiSettings.enabled && aiSettings.suggestionsEnabled;
   const [readRequestKey, setReadRequestKey] = useState(0);
   // Uses generation and revision guards so delayed read responses cannot undo newer realtime activity.
   async function markActiveRead(id: string) {
@@ -93,13 +97,17 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
     }
   }
   // Loads suggestions for only the visible conversation so stale responses cannot replace newer composer state.
-  async function refreshAiSuggestions(id = activeId) {
+  async function refreshAiSuggestions(id = activeId, trigger: "manual" | "conversation_open" | "customer_message" = "manual") {
     if (!id) return;
+    if (!aiSuggestionsEnabled) {
+      setAiSuggestions(null);
+      return;
+    }
     const isCurrentRequest = aiSuggestionsGuardRef.current.start(id);
     setIsAiSuggestionsLoading(true);
     setAiSuggestionsError(null);
     try {
-      const result = await apiRequest<AiSuggestionsResponse>(API_URL, `/api/v1/conversations/${id}/ai-suggestions`, token, { method: "POST" }, refresh);
+      const result = await apiRequest<AiSuggestionsResponse>(API_URL, `/api/v1/conversations/${id}/ai-suggestions`, token, { method: "POST", body: JSON.stringify({ trigger }) }, refresh);
       if (isCurrentRequest()) setAiSuggestions(result.suggestions);
     } catch {
       if (isCurrentRequest()) setAiSuggestionsError("Không thể tải gợi ý AI.");
@@ -135,6 +143,13 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
     return () => { cancelled = true; };
   }, [token, refresh]);
   useEffect(() => {
+    let cancelled = false;
+    void apiRequest<AiSettingsContract>(API_URL, AI_SETTINGS_API_URL, token, {}, refresh)
+      .then((settings) => { if (!cancelled) setAiSettings(settings); })
+      .catch(() => { if (!cancelled) setAiSettings(DEFAULT_AI_SETTINGS); });
+    return () => { cancelled = true; };
+  }, [token, refresh]);
+  useEffect(() => {
     if (!activeId) return;
     void markActiveRead(activeId);
   }, [activeId, readRequestKey, token, refresh]);
@@ -151,13 +166,13 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
     setAiSuggestions(null);
     setAiSuggestionsError(null);
     setIsAiSuggestionsLoading(false);
-    if (activeId) void refreshAiSuggestions(activeId);
-  }, [activeId, token, refresh]);
+    if (activeId) void refreshAiSuggestions(activeId, "conversation_open");
+  }, [activeId, token, refresh, aiSuggestionsEnabled]);
   useEffect(() => {
     const socket = createChatSocket(API_URL, token);
     const joinActiveRoom = () => { if (activeId) socket.emit(chatEvents.joinRoom, activeId); };
     socket.on("connect", joinActiveRoom);
-    socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => { const revision = (conversationRevisionRef.current.get(message.conversationId) ?? 0) + 1; conversationRevisionRef.current.set(message.conversationId, revision); if (message.conversationId === activeId) { setIsCustomerTyping(false); setMessages((current) => appendUniqueMessage(current, message)); void markActiveRead(activeId); } });
+    socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => { const revision = (conversationRevisionRef.current.get(message.conversationId) ?? 0) + 1; conversationRevisionRef.current.set(message.conversationId, revision); if (message.conversationId === activeId) { setIsCustomerTyping(false); setMessages((current) => appendUniqueMessage(current, message)); void markActiveRead(activeId); if (message.senderType === "customer") void refreshAiSuggestions(activeId, "customer_message"); } });
     socket.on(chatEvents.agentTyping, (payload: { conversationId?: unknown; isTyping?: unknown }) => {
       if (payload.conversationId !== activeId) return;
       setIsCustomerTyping(payload.isTyping === true);
@@ -215,5 +230,5 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp, { once: true });
   }
-  return <main className="inbox-shell"><div className="flex h-screen min-h-0 flex-col overflow-hidden bg-slate-100"><DashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} /><div className="inbox-page grid min-h-0 flex-1 grid-cols-[44px_var(--conversation-list-width)_minmax(0,1fr)] overflow-hidden bg-slate-100 text-gray-800 transition-[grid-template-columns] duration-200 max-[900px]:grid-cols-[44px_minmax(0,1fr)]" style={{ "--conversation-list-width": `${conversationListWidth}px` } as React.CSSProperties}><aside className="inbox-nav flex flex-col items-center gap-3 bg-blue-600 px-1 py-3" aria-label="Thanh điều hướng"><div className="inbox-nav-logo mb-2 grid size-[30px] place-items-center rounded-lg border border-white/70 text-[17px] font-bold text-white">H</div><button className="inbox-nav-item grid size-9 place-items-center rounded-lg bg-black/15 text-white transition-colors hover:bg-black/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hội thoại"><InboxIcon name="chat" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hộp thư"><InboxIcon name="inbox" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Khách hàng"><InboxIcon name="users" /></button><div className="inbox-nav-spacer flex-1" /><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Trợ giúp"><InboxIcon name="help" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Cài đặt"><InboxIcon name="settings" /></button>{onBack && <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Về Dashboard" onClick={onBack}>←</button>}</aside><div className="min-h-0 max-[899px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} availableTags={availableTags} onTagsChange={updateConversationTags} collapsed={isConversationListCollapsed} onResizeStart={handleConversationListResizeStart} /></div><ChatWindow conversation={active} messages={messages} onSend={sendText} onOpenConversationList={() => setIsConversationListOpen(true)} isCustomerTyping={isCustomerTyping} aiSuggestions={aiSuggestions} isAiSuggestionsLoading={isAiSuggestionsLoading} aiSuggestionsError={aiSuggestionsError} onRefreshAiSuggestions={refreshAiSuggestions} />{isConversationListOpen && <><button className="fixed inset-0 z-40 bg-slate-900/30 min-[900px]:hidden" type="button" onClick={() => setIsConversationListOpen(false)} aria-label="Đóng danh sách hội thoại" /><div className="fixed inset-y-0 left-[44px] z-50 flex w-[min(395px,calc(100vw-44px))] min-[900px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} availableTags={availableTags} onTagsChange={updateConversationTags} /></div></>}</div></div></main>;
+  return <main className="inbox-shell"><div className="flex h-screen min-h-0 flex-col overflow-hidden bg-slate-100"><DashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} /><div className="inbox-page grid min-h-0 flex-1 grid-cols-[44px_var(--conversation-list-width)_minmax(0,1fr)] overflow-hidden bg-slate-100 text-gray-800 transition-[grid-template-columns] duration-200 max-[900px]:grid-cols-[44px_minmax(0,1fr)]" style={{ "--conversation-list-width": `${conversationListWidth}px` } as React.CSSProperties}><aside className="inbox-nav flex flex-col items-center gap-3 bg-blue-600 px-1 py-3" aria-label="Thanh điều hướng"><div className="inbox-nav-logo mb-2 grid size-[30px] place-items-center rounded-lg border border-white/70 text-[17px] font-bold text-white">H</div><button className="inbox-nav-item grid size-9 place-items-center rounded-lg bg-black/15 text-white transition-colors hover:bg-black/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hội thoại"><InboxIcon name="chat" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hộp thư"><InboxIcon name="inbox" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Khách hàng"><InboxIcon name="users" /></button><div className="inbox-nav-spacer flex-1" /><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Trợ giúp"><InboxIcon name="help" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Cài đặt"><InboxIcon name="settings" /></button>{onBack && <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Về Dashboard" onClick={onBack}>←</button>}</aside><div className="min-h-0 max-[899px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} availableTags={availableTags} onTagsChange={updateConversationTags} collapsed={isConversationListCollapsed} onResizeStart={handleConversationListResizeStart} /></div><ChatWindow conversation={active} messages={messages} onSend={sendText} onOpenConversationList={() => setIsConversationListOpen(true)} isCustomerTyping={isCustomerTyping} aiSuggestions={aiSuggestions} isAiSuggestionsLoading={isAiSuggestionsLoading} aiSuggestionsError={aiSuggestionsError} onRefreshAiSuggestions={refreshAiSuggestions} aiSuggestionsEnabled={aiSuggestionsEnabled} />{isConversationListOpen && <><button className="fixed inset-0 z-40 bg-slate-900/30 min-[900px]:hidden" type="button" onClick={() => setIsConversationListOpen(false)} aria-label="Đóng danh sách hội thoại" /><div className="fixed inset-y-0 left-[44px] z-50 flex w-[min(395px,calc(100vw-44px))] min-[900px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} availableTags={availableTags} onTagsChange={updateConversationTags} /></div></>}</div></div></main>;
 }

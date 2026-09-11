@@ -8,6 +8,8 @@ import { TelegramPersonalSessionModel } from "../channels/telegram-personal/tele
 import { ConversationTagModel } from "../models/conversation-tag.model.js";
 import { MessageModel } from "../models/message.model.js";
 import type { AiSuggestionsResponse } from "@nhuu-chat/contracts";
+import { shouldGenerateSuggestions, type AiSuggestionTrigger } from "../ai/ai-settings.js";
+import { getAiSettings } from "./ai-settings.service.js";
 
 const REPLY_SUGGESTION_CONTEXT_SIZE = 6;
 
@@ -89,9 +91,14 @@ export async function updateConversationTags(id: string, tagIds: string[], auth:
 }
 
 // Builds a bounded chronological context from both sides of the conversation after checking access.
-export async function getConversationReplySuggestions(id: string, auth: AuthUser): Promise<AiSuggestionsResponse> {
+export async function getConversationReplySuggestions(id: string, auth: AuthUser, trigger: AiSuggestionTrigger = "manual"): Promise<AiSuggestionsResponse> {
   const conversation = await ConversationModel.findOne({ _id: id, ...conversationAccessFilter(auth) }).lean();
   if (!conversation) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
+
+  const aiSettings = await getAiSettings(auth.id);
+  if (!aiSettings.enabled || !aiSettings.suggestionsEnabled || !shouldGenerateSuggestions(aiSettings.suggestionMode, trigger)) {
+    return { suggestions: [], source: "fallback" };
+  }
 
   const recentMessages = await MessageModel.find({ conversationId: id })
     .sort({ createdAt: -1, _id: -1 })
@@ -116,7 +123,10 @@ export async function getConversationReplySuggestions(id: string, auth: AuthUser
 
   try {
     const { GeminiReplySuggestionProvider } = await import("../ai/reply-suggestion.provider.js");
-    const suggestions = await new GeminiReplySuggestionProvider().suggest({ conversationContext: conversationContext.join("\n") });
+    const suggestions = await new GeminiReplySuggestionProvider().suggest({
+      conversationContext: conversationContext.join("\n"),
+      modelTier: aiSettings.modelTier
+    });
     return { suggestions: suggestions.slice(0, 3), source: "gemini" };
   } catch {
     // Provider and configuration failures stay internal while preserving an empty fallback response.

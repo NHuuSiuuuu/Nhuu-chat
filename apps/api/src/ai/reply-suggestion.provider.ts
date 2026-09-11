@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { env } from "@nhuu-chat/config";
+import { modelTierToGeminiModel, type AiModelTier } from "./ai-settings.js";
 
 const MAX_SUGGESTIONS = 3;
 const MAX_SUGGESTION_LENGTH = 240;
@@ -51,7 +52,7 @@ export class GeminiReplySuggestionProvider {
   }
 
   // Generates short customer-service replies and bounds the external provider call.
-  async suggest(input: { conversationContext: string }): Promise<string[]> {
+  async suggest(input: { conversationContext: string; modelTier?: AiModelTier }): Promise<string[]> {
     const abortController = new AbortController();
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
@@ -63,7 +64,7 @@ export class GeminiReplySuggestionProvider {
         }, REQUEST_TIMEOUT_MS);
       });
       const request = this.client.models.generateContent({
-        model: env.GEMINI_CHAT_MODEL,
+        model: input.modelTier ? modelTierToGeminiModel(input.modelTier) : env.GEMINI_CHAT_MODEL,
         contents: `Generate short, polite Vietnamese customer-service replies based on the conversation context. Do not invent prices, policies, order status, or claim unsupported actions.\n\nConversation context (oldest to newest):\n${input.conversationContext}`,
         config: {
           responseMimeType: "application/json",

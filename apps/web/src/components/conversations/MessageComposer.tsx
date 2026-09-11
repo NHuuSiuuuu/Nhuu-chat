@@ -14,7 +14,7 @@ export function getDisplayedAiSuggestions(aiSuggestions: string[] | null | undef
   return isLoading || !aiSuggestions?.length ? [] : aiSuggestions;
 }
 
-export function MessageComposer({ onSend, disabled = false, aiSuggestions, isAiSuggestionsLoading = false, aiSuggestionsError, onRefreshAiSuggestions }: { onSend: (content: string) => Promise<void>; disabled?: boolean; aiSuggestions?: string[] | null; isAiSuggestionsLoading?: boolean; aiSuggestionsError?: string | null; onRefreshAiSuggestions?: () => void }) {
+export function MessageComposer({ onSend, disabled = false, aiSuggestions, aiSuggestionsEnabled = true, isAiSuggestionsLoading = false, aiSuggestionsError, onRefreshAiSuggestions }: { onSend: (content: string) => Promise<void>; disabled?: boolean; aiSuggestions?: string[] | null; aiSuggestionsEnabled?: boolean; isAiSuggestionsLoading?: boolean; aiSuggestionsError?: string | null; onRefreshAiSuggestions?: () => void }) {
   const [content, setContent] = useState("");
   const [isShortcutModalOpen, setIsShortcutModalOpen] = useState(false);
   const [suggestionKind, setSuggestionKind] = useState<"quick-reply" | "members" | null>(null);
@@ -73,13 +73,13 @@ export function MessageComposer({ onSend, disabled = false, aiSuggestions, isAiS
       <div className="flex items-center border-b border-gray-100 px-3 py-1.5">
         <button className="inline-flex items-center gap-1.5 rounded-md bg-gray-100 px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" onClick={() => window.location.assign("/settings/conversation-tags")} aria-label="Quản lý thẻ hội thoại"><InboxIcon name="plus" size={14} /> Thẻ</button>
       </div>
-      <div className="flex items-center justify-between px-3 pt-1.5 text-xs text-gray-400">
+      {aiSuggestionsEnabled && <div className="flex items-center justify-between px-3 pt-1.5 text-xs text-gray-400">
         <span className="inline-flex items-center gap-1.5 font-medium"><InboxIcon name="sparkles" size={14} /> AI gợi ý {isAiSuggestionsLoading && <span className="inline-flex animate-spin" aria-hidden="true"><InboxIcon name="refresh" size={14} /></span>}</span>
         <button className="rounded p-1.5 transition hover:bg-gray-100 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 disabled:cursor-not-allowed disabled:opacity-50" type="button" aria-label="Làm mới gợi ý AI" onClick={() => onRefreshAiSuggestions?.()} disabled={isAiSuggestionsLoading}><span className={isAiSuggestionsLoading ? "inline-flex animate-spin" : "inline-flex"}><InboxIcon name="refresh" size={15} /></span></button>
-      </div>
-      {isAiSuggestionsLoading && <p className="px-3 pb-1 text-xs text-gray-400" role="status">Đang tải gợi ý AI...</p>}
-      {aiSuggestionsError && <p className="px-3 pb-1 text-xs text-amber-600" role="status">{aiSuggestionsError}</p>}
-      {displayedAiSuggestions.length > 0 && <div className="flex gap-2 overflow-x-auto px-3 pb-1.5 pt-1" role="group" aria-label="Gợi ý AI">
+      </div>}
+      {aiSuggestionsEnabled && isAiSuggestionsLoading && <p className="px-3 pb-1 text-xs text-gray-400" role="status">Đang tải gợi ý AI...</p>}
+      {aiSuggestionsEnabled && aiSuggestionsError && <p className="px-3 pb-1 text-xs text-amber-600" role="status">{aiSuggestionsError}</p>}
+      {aiSuggestionsEnabled && displayedAiSuggestions.length > 0 && <div className="flex gap-2 overflow-x-auto px-3 pb-1.5 pt-1" role="group" aria-label="Gợi ý AI">
         {displayedAiSuggestions.map((suggestion) => <button className="min-w-[190px] max-w-[250px] shrink-0 truncate rounded-full border border-violet-200 bg-violet-50 px-4 py-2 text-left text-xs font-semibold text-violet-700 transition hover:border-violet-300 hover:bg-violet-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-300" type="button" key={suggestion} onClick={() => selectSuggestion(suggestion)} title={suggestion}>{suggestion}</button>)}
       </div>}
       <div className="relative px-3 py-1.5">

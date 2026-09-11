@@ -35,3 +35,7 @@ export const conversationStatusSchema = z.object({
 export const conversationTagsSchema = z.object({
   tagIds: z.array(z.string().min(1)).max(50)
 });
+
+export const aiSuggestionRequestSchema = z.object({
+  trigger: z.enum(["manual", "conversation_open", "customer_message"]).default("manual")
+}).default({});

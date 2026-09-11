@@ -119,6 +119,20 @@ describe("Inbox Tailwind migration", () => {
     expect(chat).toContain("onRefreshAiSuggestions");
   });
 
+  it("loads AI settings and sends the configured suggestion trigger", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+    const composer = readFileSync(new URL("../components/conversations/MessageComposer.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("AiSettingsContract");
+    expect(source).toContain("/api/v1/ai-settings");
+    expect(source).toContain("suggestionsEnabled");
+    expect(source).toContain('refreshAiSuggestions(activeId, "conversation_open")');
+    expect(source).toContain('refreshAiSuggestions(activeId, "customer_message")');
+    expect(source).toContain('trigger: "manual"');
+    expect(source).toContain("aiSuggestionsEnabled");
+    expect(composer).toContain("aiSuggestionsEnabled");
+  });
+
   it("passes realtime typing state to the chat window", () => {
     const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
     const chat = readFileSync(new URL("../components/conversations/ChatWindow.tsx", import.meta.url), "utf8");

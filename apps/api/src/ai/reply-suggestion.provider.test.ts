@@ -102,6 +102,15 @@ describe("Gemini reply suggestion provider", () => {
     );
   });
 
+  it("uses the selected Gemini model tier", async () => {
+    const { GeminiReplySuggestionProvider } = await importProvider();
+    const provider = new GeminiReplySuggestionProvider();
+
+    await provider.suggest({ conversationContext: "Khách hàng: Xin chào", modelTier: "smart" });
+
+    expect(generateContent.mock.calls[0][0].model).toBe("gemini-3.5-flash");
+  });
+
   it("filters non-strings and empty values and caps suggestions at 240 characters", async () => {
     generateContent.mockResolvedValue({
       text: JSON.stringify({

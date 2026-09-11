@@ -8,6 +8,19 @@ export interface AiSuggestionsResponse {
   source: "gemini" | "fallback";
 }
 
+export type AiModelTier = "smart" | "balanced" | "economy";
+export type AiSuggestionMode = "off" | "manual" | "on_open" | "on_customer_message";
+export type AiSentimentWindow = 3 | 6 | 10;
+
+export interface AiSettingsContract {
+  modelTier: AiModelTier;
+  enabled: boolean;
+  suggestionsEnabled: boolean;
+  sentimentEnabled: boolean;
+  suggestionMode: AiSuggestionMode;
+  sentimentWindow: AiSentimentWindow;
+}
+
 export type ChatPlatform = "facebook" | "instagram" | "zalo" | "telegram" | "telegram_personal";
 export type ConversationStatus = "open" | "pending" | "closed";
 

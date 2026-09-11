@@ -13,6 +13,10 @@ const providerMocks = vi.hoisted(() => ({
   suggest: vi.fn()
 }));
 
+const aiSettingsMocks = vi.hoisted(() => ({
+  getAiSettings: vi.fn()
+}));
+
 vi.mock("../models/conversation.model.js", () => ({ ConversationModel: conversationModelMocks }));
 vi.mock("../models/message.model.js", () => ({ MessageModel: messageModelMocks }));
 vi.mock("../ai/reply-suggestion.provider.js", () => ({
@@ -21,6 +25,7 @@ vi.mock("../ai/reply-suggestion.provider.js", () => ({
     return { suggest: providerMocks.suggest };
   })
 }));
+vi.mock("./ai-settings.service.js", () => aiSettingsMocks);
 
 import { getConversationReplySuggestions } from "./conversation.service.js";
 
@@ -49,7 +54,8 @@ describe("getConversationReplySuggestions", () => {
       { senderType: "customer", content: "Tôi muốn hỏi về đơn hàng" },
       { senderType: "agent", content: "Dạ, em hỗ trợ anh/chị ạ." }
     ]));
-    providerMocks.suggest.mockResolvedValue(["Gợi ý 1", "Gợi ý 2", "Gợi ý 3"]);
+  providerMocks.suggest.mockResolvedValue(["Gợi ý 1", "Gợi ý 2", "Gợi ý 3"]);
+    aiSettingsMocks.getAiSettings.mockResolvedValue({ modelTier: "smart", enabled: true, suggestionsEnabled: true, sentimentEnabled: true, suggestionMode: "manual", sentimentWindow: 3 });
   });
 
   it("uses the six newest messages with sender labels and chronological order", async () => {
@@ -60,7 +66,8 @@ describe("getConversationReplySuggestions", () => {
     expect(messageModelMocks.find().sort).toHaveBeenCalledWith({ createdAt: -1, _id: -1 });
     expect(messageModelMocks.find().limit).toHaveBeenCalledWith(6);
     expect(providerMocks.suggest).toHaveBeenCalledWith({
-      conversationContext: "Nhân viên: Dạ, em hỗ trợ anh/chị ạ.\nKhách hàng: Tôi muốn hỏi về đơn hàng"
+      conversationContext: "Nhân viên: Dạ, em hỗ trợ anh/chị ạ.\nKhách hàng: Tôi muốn hỏi về đơn hàng",
+      modelTier: "smart"
     });
     expect(result).toEqual({ suggestions: ["Gợi ý 1", "Gợi ý 2", "Gợi ý 3"], source: "gemini" });
   });
@@ -98,6 +105,25 @@ describe("getConversationReplySuggestions", () => {
     expect(result.source).toBe("fallback");
     expect(result.suggestions).toEqual([]);
     expect(providerMocks.suggest).not.toHaveBeenCalled();
+  });
+
+  it("does not call Gemini when AI suggestions are disabled", async () => {
+    aiSettingsMocks.getAiSettings.mockResolvedValue({ modelTier: "smart", enabled: true, suggestionsEnabled: false, sentimentEnabled: true, suggestionMode: "manual", sentimentWindow: 3 });
+
+    const result = await getConversationReplySuggestions("conversation-1", adminAuth, "manual");
+
+    expect(result).toEqual({ suggestions: [], source: "fallback" });
+    expect(messageModelMocks.find).not.toHaveBeenCalled();
+    expect(providerMocks.suggest).not.toHaveBeenCalled();
+  });
+
+  it("only allows the configured automatic trigger", async () => {
+    aiSettingsMocks.getAiSettings.mockResolvedValue({ modelTier: "smart", enabled: true, suggestionsEnabled: true, sentimentEnabled: true, suggestionMode: "on_open", sentimentWindow: 3 });
+
+    const result = await getConversationReplySuggestions("conversation-1", adminAuth, "customer_message");
+
+    expect(result).toEqual({ suggestions: [], source: "fallback" });
+    expect(messageModelMocks.find).not.toHaveBeenCalled();
   });
 
   it("returns an empty fallback when Gemini configuration fails during provider creation", async () => {

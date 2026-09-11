@@ -88,6 +88,15 @@ describe("Settings page", () => {
     expect(source).toContain("max-w-full");
   });
 
+  it("persists AI settings through the backend", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('"/api/v1/ai-settings"');
+    expect(source).toContain('method: "PATCH"');
+    expect(source).toContain("AiSettingsContract");
+    expect(source).toContain("onSettingsChange");
+  });
+
   it("passes access token and refresh handler into SettingsPage", () => {
     const source = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
 

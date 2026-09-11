@@ -94,7 +94,7 @@ describe("conversation controller", () => {
 
     await getConversationReplySuggestions({ auth: adminAuth, params: { id: "conversation-1" } } as never, response as never, next);
 
-    expect(serviceMocks.getConversationReplySuggestions).toHaveBeenCalledWith("conversation-1", adminAuth);
+    expect(serviceMocks.getConversationReplySuggestions).toHaveBeenCalledWith("conversation-1", adminAuth, "manual");
     expect(state.body).toEqual(expected);
     expect(next).not.toHaveBeenCalled();
   });

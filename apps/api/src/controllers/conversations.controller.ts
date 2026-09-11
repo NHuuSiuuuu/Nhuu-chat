@@ -9,7 +9,8 @@ import {
   conversationIdSchema,
   conversationListQuerySchema,
   conversationStatusSchema,
-  conversationTagsSchema
+  conversationTagsSchema,
+  aiSuggestionRequestSchema
 } from "../schemas/conversation.schemas.js";
 import {
   listConversations as listConversationRecords,
@@ -122,7 +123,9 @@ export const getConversationReplySuggestions: RequestHandler = async (request, r
   try {
     const auth = authenticatedRequest(request);
     const id = conversationId(request.params);
-    response.json(await getConversationReplySuggestionsRecord(id, auth));
+    const body = aiSuggestionRequestSchema.safeParse(request.body ?? {});
+    if (!body.success) throw new AppError(400, "INVALID_REQUEST", "Suggestion trigger is invalid");
+    response.json(await getConversationReplySuggestionsRecord(id, auth, body.data.trigger));
   } catch (error) {
     next(error);
   }
