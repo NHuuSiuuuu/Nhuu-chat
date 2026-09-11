@@ -15,6 +15,15 @@ const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 const CONVERSATION_TAGS_API_URL = "/api/v1/conversation-tags";
 const AI_SETTINGS_API_URL = "/api/v1/ai-settings";
 const DEFAULT_AI_SETTINGS: AiSettingsContract = { modelTier: "smart", enabled: true, suggestionsEnabled: true, sentimentEnabled: true, suggestionMode: "on_open", sentimentWindow: 3 };
+
+export function shouldAutoRefreshAiSuggestions(
+  mode: AiSettingsContract["suggestionMode"],
+  trigger: "conversation_open" | "customer_message"
+): boolean {
+  return (trigger === "conversation_open" && mode === "on_open") ||
+    (trigger === "customer_message" && mode === "on_customer_message");
+}
+
 // Tracks request identity and conversation identity so overlapping responses cannot cross conversation boundaries.
 export function createAiSuggestionsRequestGuard() {
   let activeConversationId: string | null = null;
@@ -39,6 +48,7 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
   const [isAiSuggestionsLoading, setIsAiSuggestionsLoading] = useState(false);
   const [aiSuggestionsError, setAiSuggestionsError] = useState<string | null>(null);
   const [aiSettings, setAiSettings] = useState<AiSettingsContract>(DEFAULT_AI_SETTINGS);
+  const [aiSettingsLoaded, setAiSettingsLoaded] = useState(false);
   const [isCustomerTyping, setIsCustomerTyping] = useState(false);
   const [availableTags, setAvailableTags] = useState<ConversationTagContract[]>([]);
   const [isConversationListOpen, setIsConversationListOpen] = useState(false);
@@ -145,8 +155,8 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
   useEffect(() => {
     let cancelled = false;
     void apiRequest<AiSettingsContract>(API_URL, AI_SETTINGS_API_URL, token, {}, refresh)
-      .then((settings) => { if (!cancelled) setAiSettings(settings); })
-      .catch(() => { if (!cancelled) setAiSettings(DEFAULT_AI_SETTINGS); });
+      .then((settings) => { if (!cancelled) { setAiSettings(settings); setAiSettingsLoaded(true); } })
+      .catch(() => { if (!cancelled) { setAiSettings(DEFAULT_AI_SETTINGS); setAiSettingsLoaded(true); } });
     return () => { cancelled = true; };
   }, [token, refresh]);
   useEffect(() => {
@@ -166,13 +176,15 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
     setAiSuggestions(null);
     setAiSuggestionsError(null);
     setIsAiSuggestionsLoading(false);
-    if (activeId) void refreshAiSuggestions(activeId, "conversation_open");
-  }, [activeId, token, refresh, aiSuggestionsEnabled]);
+    if (activeId && aiSettingsLoaded && shouldAutoRefreshAiSuggestions(aiSettings.suggestionMode, "conversation_open")) {
+      void refreshAiSuggestions(activeId, "conversation_open");
+    }
+  }, [activeId, token, refresh, aiSuggestionsEnabled, aiSettingsLoaded, aiSettings.suggestionMode]);
   useEffect(() => {
     const socket = createChatSocket(API_URL, token);
     const joinActiveRoom = () => { if (activeId) socket.emit(chatEvents.joinRoom, activeId); };
     socket.on("connect", joinActiveRoom);
-    socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => { const revision = (conversationRevisionRef.current.get(message.conversationId) ?? 0) + 1; conversationRevisionRef.current.set(message.conversationId, revision); if (message.conversationId === activeId) { setIsCustomerTyping(false); setMessages((current) => appendUniqueMessage(current, message)); void markActiveRead(activeId); if (message.senderType === "customer") void refreshAiSuggestions(activeId, "customer_message"); } });
+    socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => { const revision = (conversationRevisionRef.current.get(message.conversationId) ?? 0) + 1; conversationRevisionRef.current.set(message.conversationId, revision); if (message.conversationId === activeId) { setIsCustomerTyping(false); setMessages((current) => appendUniqueMessage(current, message)); void markActiveRead(activeId); if (message.senderType === "customer" && aiSettingsLoaded && shouldAutoRefreshAiSuggestions(aiSettings.suggestionMode, "customer_message")) void refreshAiSuggestions(activeId, "customer_message"); } });
     socket.on(chatEvents.agentTyping, (payload: { conversationId?: unknown; isTyping?: unknown }) => {
       if (payload.conversationId !== activeId) return;
       setIsCustomerTyping(payload.isTyping === true);
@@ -192,7 +204,7 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
     });
     joinActiveRoom();
     return () => { socket.off("connect", joinActiveRoom); socket.disconnect(); };
-  }, [token, activeId]);
+  }, [token, activeId, aiSettingsLoaded, aiSettings.suggestionMode, aiSuggestionsEnabled]);
   function selectConversation(id: string) { setActiveId(id); setReadRequestKey((current) => current + 1); setIsConversationListOpen(false); }
   async function updateConversationTags(id: string, tags: ConversationTagContract[]) {
     const previous = conversationsRef.current.find((item) => item.id === id)?.tags ?? [];

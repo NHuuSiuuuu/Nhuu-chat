@@ -52,10 +52,12 @@ describe("MessageComposer accessibility", () => {
     expect(source).toContain("AI gợi ý");
   });
 
-  it("shows a loading spinner beside the AI suggestion label without static chips", () => {
+  it("keeps the refresh button as the only AI loading indicator", () => {
     const source = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain('isAiSuggestionsLoading && <span className="inline-flex animate-spin" aria-hidden="true">');
+    expect(source).not.toContain('AI gợi ý {isAiSuggestionsLoading &&');
+    expect(source).not.toContain('isAiSuggestionsLoading && <span className="inline-flex animate-spin" aria-hidden="true">');
+    expect(source).toContain('className={isAiSuggestionsLoading ? "inline-flex animate-spin" : "inline-flex"}');
     expect(source).toContain('aria-label="Gợi ý AI"');
     expect(source).toContain("getDisplayedAiSuggestions(aiSuggestions, isAiSuggestionsLoading)");
   });

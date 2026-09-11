@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { createAiSuggestionsRequestGuard } from "./InboxPage.js";
+import { createAiSuggestionsRequestGuard, shouldAutoRefreshAiSuggestions } from "./InboxPage.js";
 
 describe("Inbox Tailwind migration", () => {
   it("uses the shared shell without handwritten Inbox CSS", () => {
@@ -131,6 +131,13 @@ describe("Inbox Tailwind migration", () => {
     expect(source).toContain('trigger: "manual"');
     expect(source).toContain("aiSuggestionsEnabled");
     expect(composer).toContain("aiSuggestionsEnabled");
+  });
+
+  it("does not auto-request suggestions for manual mode", () => {
+    expect(shouldAutoRefreshAiSuggestions("manual", "conversation_open")).toBe(false);
+    expect(shouldAutoRefreshAiSuggestions("manual", "customer_message")).toBe(false);
+    expect(shouldAutoRefreshAiSuggestions("on_open", "conversation_open")).toBe(true);
+    expect(shouldAutoRefreshAiSuggestions("on_customer_message", "customer_message")).toBe(true);
   });
 
   it("passes realtime typing state to the chat window", () => {

@@ -74,7 +74,7 @@ export function MessageComposer({ onSend, disabled = false, aiSuggestions, aiSug
         <button className="inline-flex items-center gap-1.5 rounded-md bg-gray-100 px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" onClick={() => window.location.assign("/settings/conversation-tags")} aria-label="Quản lý thẻ hội thoại"><InboxIcon name="plus" size={14} /> Thẻ</button>
       </div>
       {aiSuggestionsEnabled && <div className="flex items-center justify-between px-3 pt-1.5 text-xs text-gray-400">
-        <span className="inline-flex items-center gap-1.5 font-medium"><InboxIcon name="sparkles" size={14} /> AI gợi ý {isAiSuggestionsLoading && <span className="inline-flex animate-spin" aria-hidden="true"><InboxIcon name="refresh" size={14} /></span>}</span>
+        <span className="inline-flex items-center gap-1.5 font-medium"><InboxIcon name="sparkles" size={14} /> AI gợi ý</span>
         <button className="rounded p-1.5 transition hover:bg-gray-100 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 disabled:cursor-not-allowed disabled:opacity-50" type="button" aria-label="Làm mới gợi ý AI" onClick={() => onRefreshAiSuggestions?.()} disabled={isAiSuggestionsLoading}><span className={isAiSuggestionsLoading ? "inline-flex animate-spin" : "inline-flex"}><InboxIcon name="refresh" size={15} /></span></button>
       </div>}
       {aiSuggestionsEnabled && isAiSuggestionsLoading && <p className="px-3 pb-1 text-xs text-gray-400" role="status">Đang tải gợi ý AI...</p>}
