@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Ẩn thanh scrollbar trên các vùng cuộn của Inbox, gợi ý AI, sidebar và modal nhưng vẫn giữ thao tác cuộn.
 - Kết nối phần Trợ lý AI với backend: bật/tắt mô hình và gợi ý, chọn tier Gemini, trigger gợi ý theo thao tác, và cấu hình cửa sổ cảm xúc 3/6/10 tin nhắn.
 - Sửa layout switch và nhóm nút điều khiển Trợ lý AI để không tràn hoặc lệch trên màn hình hẹp.
 - Bổ sung giao diện Trợ lý AI trong Cài đặt với tab gợi ý trả lời, cấu hình mô hình, thanh toán và phát hiện cảm xúc.

@@ -40,7 +40,7 @@ function SidebarContent({ activeTab, setActiveTab }: { activeTab: SidebarTab; se
       <button className={`border-b-2 px-3 py-3 text-xs font-semibold transition ${activeTab === "info" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`} type="button" onClick={() => setActiveTab("info")} aria-selected={activeTab === "info"}>Thông tin</button>
       <button className={`border-b-2 px-3 py-3 text-xs font-semibold transition ${activeTab === "create-order" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`} type="button" onClick={() => setActiveTab("create-order")} aria-selected={activeTab === "create-order"}>Tạo đơn</button>
     </nav>
-    <div className="min-h-0 flex-1 overflow-y-auto p-4">{activeTab === "info" ? <><NoteBlock /><OrderBlock /></> : <CreateOrderPanel />}</div>
+    <div className="min-h-0 flex-1 overflow-y-auto scrollbar-none p-4">{activeTab === "info" ? <><NoteBlock /><OrderBlock /></> : <CreateOrderPanel />}</div>
   </>;
 }
 

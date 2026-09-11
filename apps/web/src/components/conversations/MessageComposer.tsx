@@ -79,7 +79,7 @@ export function MessageComposer({ onSend, disabled = false, aiSuggestions, aiSug
       </div>}
       {aiSuggestionsEnabled && isAiSuggestionsLoading && <p className="px-3 pb-1 text-xs text-gray-400" role="status">Đang tải gợi ý AI...</p>}
       {aiSuggestionsEnabled && aiSuggestionsError && <p className="px-3 pb-1 text-xs text-amber-600" role="status">{aiSuggestionsError}</p>}
-      {aiSuggestionsEnabled && displayedAiSuggestions.length > 0 && <div className="flex gap-2 overflow-x-auto px-3 pb-1.5 pt-1" role="group" aria-label="Gợi ý AI">
+      {aiSuggestionsEnabled && displayedAiSuggestions.length > 0 && <div className="flex gap-2 overflow-x-auto scrollbar-none px-3 pb-1.5 pt-1" role="group" aria-label="Gợi ý AI">
         {displayedAiSuggestions.map((suggestion) => <button className="min-w-[190px] max-w-[250px] shrink-0 truncate rounded-full border border-violet-200 bg-violet-50 px-4 py-2 text-left text-xs font-semibold text-violet-700 transition hover:border-violet-300 hover:bg-violet-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-300" type="button" key={suggestion} onClick={() => selectSuggestion(suggestion)} title={suggestion}>{suggestion}</button>)}
       </div>}
       <div className="relative px-3 py-1.5">

@@ -93,6 +93,16 @@ describe("Inbox Tailwind migration", () => {
     expect(list).toContain("onTagsChange");
   });
 
+  it("hides scrollbars while preserving scrollable conversation surfaces", () => {
+    const list = readFileSync(new URL("../components/conversations/ConversationList.tsx", import.meta.url), "utf8");
+    const chat = readFileSync(new URL("../components/conversations/ChatWindow.tsx", import.meta.url), "utf8");
+    const composer = readFileSync(new URL("../components/conversations/MessageComposer.tsx", import.meta.url), "utf8");
+
+    expect(list).toContain("conversation-items min-h-0 overflow-y-auto scrollbar-none");
+    expect(chat).toContain("chat-messages relative min-h-0 flex-1 overflow-y-auto");
+    expect(composer).toContain("flex gap-2 overflow-x-auto scrollbar-none");
+  });
+
   it("owns the authenticated Gemini suggestions request and state", () => {
     const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
 
