@@ -27,15 +27,15 @@ const settingsIconByItem = {
 type AiAssistantTab = "Gợi ý trả lời" | "Chatbot tự động";
 
 function AiToggle({ checked, label, onChange }: { checked: boolean; label: string; onChange: (value: boolean) => void }) {
-  return <button className={`relative h-6 w-11 rounded-full transition-colors ${checked ? "bg-sky-500" : "bg-gray-300"}`} type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)}><span className={`absolute top-1 size-4 rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-6" : "translate-x-1"}`} /></button>;
+  return <button className={`relative inline-flex h-6 w-11 shrink-0 items-center justify-start border-0 p-0 rounded-full transition-colors ${checked ? "bg-sky-500" : "bg-gray-300"}`} type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)}><span className={`absolute left-1 top-1 size-4 rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : "translate-x-0"}`} /></button>;
 }
 
 function AiSelect({ value, options, label, onChange }: { value: string; options: string[]; label: string; onChange: (value: string) => void }) {
-  return <select className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100" aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option}>{option}</option>)}</select>;
+  return <select className="min-w-0 max-w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100" aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option}>{option}</option>)}</select>;
 }
 
 function AiSettingItem({ icon, iconClassName, title, description, children, footer }: { icon: "sparkles" | "cloud" | "chat" | "smile"; iconClassName: string; title: string; description: React.ReactNode; children: React.ReactNode; footer?: React.ReactNode }) {
-  return <article className="flex flex-wrap items-start gap-4 border-b border-gray-100 py-5 last:border-b-0"><span className={`grid size-11 shrink-0 place-items-center rounded-full ${iconClassName}`}><InboxIcon name={icon} size={20} /></span><div className="min-w-[220px] flex-1"><h3 className="font-semibold text-gray-900">{title}</h3><div className="mt-1 max-w-2xl text-sm leading-6 text-gray-500">{description}</div>{footer && <div className="mt-2">{footer}</div>}</div><div className="flex shrink-0 items-center gap-3 max-[640px]:w-full max-[640px]:justify-end">{children}</div></article>;
+  return <article className="flex flex-wrap items-start gap-4 border-b border-gray-100 py-5 last:border-b-0"><span className={`grid size-11 shrink-0 place-items-center rounded-full ${iconClassName}`}><InboxIcon name={icon} size={20} /></span><div className="min-w-[220px] flex-1"><h3 className="font-semibold text-gray-900">{title}</h3><div className="mt-1 max-w-2xl text-sm leading-6 text-gray-500">{description}</div>{footer && <div className="mt-2">{footer}</div>}</div><div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-3 max-[640px]:w-full">{children}</div></article>;
 }
 
 function AiAssistantSettings() {

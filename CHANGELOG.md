@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa layout switch và nhóm nút điều khiển Trợ lý AI để không tràn hoặc lệch trên màn hình hẹp.
 - Bổ sung giao diện Trợ lý AI trong Cài đặt với tab gợi ý trả lời, cấu hình mô hình, thanh toán và phát hiện cảm xúc.
 - Cập nhật model Gemini gợi ý trả lời sang `gemini-3.5-flash-lite` vì model `gemini-2.5-flash-lite` không còn khả dụng cho user mới.
 - Cập nhật gợi ý AI dùng 6 tin nhắn cuối của cả khách hàng và nhân viên, theo thứ tự thời gian, để Gemini có đủ ngữ cảnh hội thoại.

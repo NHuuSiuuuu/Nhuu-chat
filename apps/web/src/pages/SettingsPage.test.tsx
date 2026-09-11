@@ -78,6 +78,16 @@ describe("Settings page", () => {
     expect(source).toContain("setSuggestionsEnabled");
   });
 
+  it("keeps AI switches and setting controls inside their layout", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("left-1");
+    expect(source).toContain("translate-x-5");
+    expect(source).toContain("border-0 p-0");
+    expect(source).toContain("min-w-0 shrink-0 flex-wrap");
+    expect(source).toContain("max-w-full");
+  });
+
   it("passes access token and refresh handler into SettingsPage", () => {
     const source = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
 
