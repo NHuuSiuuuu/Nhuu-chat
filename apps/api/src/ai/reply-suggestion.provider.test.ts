@@ -57,7 +57,7 @@ describe("Gemini reply suggestion provider", () => {
     const provider = new GeminiReplySuggestionProvider();
 
     await expect(
-      provider.suggest({ latestCustomerMessage: "Can you help me?" })
+      provider.suggest({ conversationContext: "Khách hàng: Can you help me?" })
     ).resolves.toEqual([
       "First suggestion",
       "Second suggestion",
@@ -65,15 +65,15 @@ describe("Gemini reply suggestion provider", () => {
     ]);
   });
 
-  it("sends the Vietnamese reply prompt and JSON schema grounded on the customer message", async () => {
+  it("sends the Vietnamese reply prompt and JSON schema grounded on the conversation context", async () => {
     const { GeminiReplySuggestionProvider } = await importProvider();
     const provider = new GeminiReplySuggestionProvider();
 
-    await provider.suggest({ latestCustomerMessage: "Tôi muốn đổi sản phẩm." });
+    await provider.suggest({ conversationContext: "Khách hàng: Tôi muốn đổi sản phẩm.\nNhân viên: Em hỗ trợ ạ." });
 
     expect(generateContent).toHaveBeenCalledWith({
       model: "gemini-3.5-flash-lite",
-      contents: expect.stringContaining("Tôi muốn đổi sản phẩm."),
+      contents: expect.stringContaining("Khách hàng: Tôi muốn đổi sản phẩm."),
       config: expect.objectContaining({
         responseMimeType: "application/json",
         responseSchema: {
@@ -120,7 +120,7 @@ describe("Gemini reply suggestion provider", () => {
     const provider = new GeminiReplySuggestionProvider();
 
     await expect(
-      provider.suggest({ latestCustomerMessage: "Cần hỗ trợ" })
+      provider.suggest({ conversationContext: "Khách hàng: Cần hỗ trợ" })
     ).resolves.toEqual(["A".repeat(240), "Useful reply", "Another useful reply"]);
   });
 
@@ -130,7 +130,7 @@ describe("Gemini reply suggestion provider", () => {
     const { GeminiReplySuggestionProvider } = await importProvider();
     const provider = new GeminiReplySuggestionProvider();
     const suggestionRequest = provider
-      .suggest({ latestCustomerMessage: "Xin chào" })
+      .suggest({ conversationContext: "Khách hàng: Xin chào" })
       .catch((error: unknown) => error);
 
     await vi.advanceTimersByTimeAsync(10_000);
@@ -148,7 +148,7 @@ describe("Gemini reply suggestion provider", () => {
     const provider = new GeminiReplySuggestionProvider();
 
     await expect(
-      provider.suggest({ latestCustomerMessage: "Can you help me?" })
+      provider.suggest({ conversationContext: "Khách hàng: Can you help me?" })
     ).rejects.toThrow();
   });
 
@@ -158,7 +158,7 @@ describe("Gemini reply suggestion provider", () => {
     const provider = new GeminiReplySuggestionProvider();
 
     await expect(
-      provider.suggest({ latestCustomerMessage: "Can you help me?" })
+      provider.suggest({ conversationContext: "Khách hàng: Can you help me?" })
     ).rejects.toThrow("Gemini unavailable");
   });
 });

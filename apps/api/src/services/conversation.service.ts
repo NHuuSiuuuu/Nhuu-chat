@@ -9,6 +9,8 @@ import { ConversationTagModel } from "../models/conversation-tag.model.js";
 import { MessageModel } from "../models/message.model.js";
 import type { AiSuggestionsResponse } from "@nhuu-chat/contracts";
 
+const REPLY_SUGGESTION_CONTEXT_SIZE = 6;
+
 export async function listConversations(query: {
   page?: string;
   limit?: string;
@@ -86,20 +88,35 @@ export async function updateConversationTags(id: string, tagIds: string[], auth:
   return toConversation(row);
 }
 
-// Checks conversation visibility before loading any customer content for the AI request.
+// Builds a bounded chronological context from both sides of the conversation after checking access.
 export async function getConversationReplySuggestions(id: string, auth: AuthUser): Promise<AiSuggestionsResponse> {
   const conversation = await ConversationModel.findOne({ _id: id, ...conversationAccessFilter(auth) }).lean();
   if (!conversation) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
 
-  const latestCustomerMessage = await MessageModel.findOne({ conversationId: id, senderType: "customer" })
+  const recentMessages = await MessageModel.find({ conversationId: id })
     .sort({ createdAt: -1, _id: -1 })
+    .limit(REPLY_SUGGESTION_CONTEXT_SIZE)
     .lean();
-  const content = typeof latestCustomerMessage?.content === "string" ? latestCustomerMessage.content.trim() : "";
-  if (!content) return { suggestions: [], source: "fallback" };
+  const conversationContext = recentMessages
+    .reverse()
+    .map((message) => {
+      const content = typeof message.content === "string" ? message.content.trim() : "";
+      if (!content) return null;
+      const senderLabel = message.senderType === "customer"
+        ? "Khách hàng"
+        : message.senderType === "bot"
+          ? "Trợ lý"
+          : "Nhân viên";
+      return `${senderLabel}: ${content}`;
+    })
+    .filter((message): message is string => Boolean(message));
+  if (!conversationContext.some((message) => message.startsWith("Khách hàng:"))) {
+    return { suggestions: [], source: "fallback" };
+  }
 
   try {
     const { GeminiReplySuggestionProvider } = await import("../ai/reply-suggestion.provider.js");
-    const suggestions = await new GeminiReplySuggestionProvider().suggest({ latestCustomerMessage: content });
+    const suggestions = await new GeminiReplySuggestionProvider().suggest({ conversationContext: conversationContext.join("\n") });
     return { suggestions: suggestions.slice(0, 3), source: "gemini" };
   } catch {
     // Provider and configuration failures stay internal while preserving an empty fallback response.

@@ -5,7 +5,7 @@ const conversationModelMocks = vi.hoisted(() => ({
 }));
 
 const messageModelMocks = vi.hoisted(() => ({
-  findOne: vi.fn()
+  find: vi.fn()
 }));
 
 const providerMocks = vi.hoisted(() => ({
@@ -33,9 +33,11 @@ function resolvedQuery<T>(value: T) {
 function messageQuery<T>(value: T) {
   const query = {
     sort: vi.fn(),
+    limit: vi.fn(),
     lean: vi.fn().mockResolvedValue(value)
   };
   query.sort.mockReturnValue(query);
+  query.limit.mockReturnValue(query);
   return query;
 }
 
@@ -43,20 +45,23 @@ describe("getConversationReplySuggestions", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     conversationModelMocks.findOne.mockReturnValue(resolvedQuery({ _id: "conversation-1" }));
-    messageModelMocks.findOne.mockReturnValue(messageQuery({ content: "Tôi muốn hỏi về đơn hàng" }));
+    messageModelMocks.find.mockReturnValue(messageQuery([
+      { senderType: "customer", content: "Tôi muốn hỏi về đơn hàng" },
+      { senderType: "agent", content: "Dạ, em hỗ trợ anh/chị ạ." }
+    ]));
     providerMocks.suggest.mockResolvedValue(["Gợi ý 1", "Gợi ý 2", "Gợi ý 3"]);
   });
 
-  it("uses the newest customer message after checking conversation access", async () => {
+  it("uses the six newest messages with sender labels and chronological order", async () => {
     const result = await getConversationReplySuggestions("conversation-1", adminAuth);
 
     expect(conversationModelMocks.findOne).toHaveBeenCalledWith({ _id: "conversation-1" });
-    expect(messageModelMocks.findOne).toHaveBeenCalledWith({
-      conversationId: "conversation-1",
-      senderType: "customer"
+    expect(messageModelMocks.find).toHaveBeenCalledWith({ conversationId: "conversation-1" });
+    expect(messageModelMocks.find().sort).toHaveBeenCalledWith({ createdAt: -1, _id: -1 });
+    expect(messageModelMocks.find().limit).toHaveBeenCalledWith(6);
+    expect(providerMocks.suggest).toHaveBeenCalledWith({
+      conversationContext: "Nhân viên: Dạ, em hỗ trợ anh/chị ạ.\nKhách hàng: Tôi muốn hỏi về đơn hàng"
     });
-    expect(messageModelMocks.findOne().sort).toHaveBeenCalledWith({ createdAt: -1, _id: -1 });
-    expect(providerMocks.suggest).toHaveBeenCalledWith({ latestCustomerMessage: "Tôi muốn hỏi về đơn hàng" });
     expect(result).toEqual({ suggestions: ["Gợi ý 1", "Gợi ý 2", "Gợi ý 3"], source: "gemini" });
   });
 
@@ -73,7 +78,7 @@ describe("getConversationReplySuggestions", () => {
       _id: "conversation-1",
       assignedAgentId: "agent-1"
     });
-    expect(messageModelMocks.findOne).not.toHaveBeenCalled();
+    expect(messageModelMocks.find).not.toHaveBeenCalled();
   });
 
   it("returns an empty fallback when Gemini is unavailable", async () => {
@@ -86,7 +91,7 @@ describe("getConversationReplySuggestions", () => {
   });
 
   it("returns an empty fallback when no customer message is available", async () => {
-    messageModelMocks.findOne.mockReturnValue(messageQuery(null));
+    messageModelMocks.find.mockReturnValue(messageQuery([]));
 
     const result = await getConversationReplySuggestions("conversation-1", adminAuth);
 
