@@ -32,7 +32,7 @@ describe("environment configuration", () => {
     expect(env).toEqual({
       ...validEnvironment,
       PORT: 3000,
-      GEMINI_CHAT_MODEL: "gemini-2.5-flash-lite"
+      GEMINI_CHAT_MODEL: "gemini-3.5-flash-lite"
     });
   });
 

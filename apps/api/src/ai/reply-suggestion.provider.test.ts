@@ -72,7 +72,7 @@ describe("Gemini reply suggestion provider", () => {
     await provider.suggest({ latestCustomerMessage: "Tôi muốn đổi sản phẩm." });
 
     expect(generateContent).toHaveBeenCalledWith({
-      model: "gemini-2.5-flash-lite",
+      model: "gemini-3.5-flash-lite",
       contents: expect.stringContaining("Tôi muốn đổi sản phẩm."),
       config: expect.objectContaining({
         responseMimeType: "application/json",
