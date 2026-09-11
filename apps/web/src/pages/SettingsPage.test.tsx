@@ -62,6 +62,22 @@ describe("Settings page", () => {
     expect(source).toContain("Không thể tải danh sách thẻ");
   });
 
+  it("renders the AI assistant settings design with interactive controls", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('activeTab === "Trợ lý AI"');
+    expect(source).toContain("Gợi ý trả lời");
+    expect(source).toContain("Chatbot tự động");
+    expect(source).toContain("Mô hình AI");
+    expect(source).toContain("Thanh toán");
+    expect(source).toContain("Gợi ý trả lời tin nhắn từ AI");
+    expect(source).toContain("Phát hiện cảm xúc của khách hàng");
+    expect(source).toContain("Thông minh nhất");
+    expect(source).toContain("Khi mở hội thoại");
+    expect(source).toContain("AI Sentiment");
+    expect(source).toContain("setSuggestionsEnabled");
+  });
+
   it("passes access token and refresh handler into SettingsPage", () => {
     const source = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
 
