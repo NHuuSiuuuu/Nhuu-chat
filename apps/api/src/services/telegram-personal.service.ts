@@ -58,6 +58,13 @@ export function personalMessageSenderType(isOutgoing: boolean): "customer" | "ag
   return isOutgoing ? "agent" : "customer";
 }
 
+export function isPersonalOutgoingMessage(
+  message: { out?: unknown; senderId?: unknown },
+  telegramUserId?: string | null
+): boolean {
+  return message.out === true || (telegramUserId !== null && telegramUserId !== undefined && String(message.senderId ?? "") === telegramUserId);
+}
+
 async function refreshPersonalSessionAvatar(userId: string, client: TelegramClient): Promise<void> {
   try {
     const avatar = await client.downloadProfilePhoto("me", { isBig: false });
@@ -231,10 +238,11 @@ function attachPersonalMessageSync(userId: string, client: TelegramClient): void
   client.addEventHandler(async (event) => {
     const message = event.message;
     if (!message) return;
-    const isOutgoing = message.out === true;
     const channelId = String(message.chatId ?? "");
     const content = message.message?.trim();
     if (!channelId || !content) return;
+    const account = await TelegramPersonalSessionModel.findOne({ userId, status: "active" }).lean();
+    const isOutgoing = isPersonalOutgoingMessage(message, account?.telegramUserId);
     const existingConversation = isOutgoing
       ? await ConversationModel.findOne({ platform: "telegram_personal", channelId, ownerId: userId }).lean()
       : null;
@@ -270,7 +278,6 @@ function attachPersonalMessageSync(userId: string, client: TelegramClient): void
     try {
       await conversation.populate("customerId", "name avatarUrl");
       await conversation.populate("tagIds", "name color");
-      const account = await TelegramPersonalSessionModel.findOne({ userId, status: "active" }).lean();
       const senderName = isOutgoing ? account?.displayName ?? "Bạn" : [sender?.firstName, sender?.lastName].filter(Boolean).join(" ") || "Telegram user";
       const storedMessage = await MessageModel.create({ conversationId: conversation._id, platform: "telegram_personal", externalMessageId: String(message.id), senderType: personalMessageSenderType(isOutgoing), senderId, type: "text", content, deliveryStatus: "delivered", metadata: { senderName } });
       const conversationPayload = toConversation(conversation.toObject(), account ? { name: account.displayName, avatarUrl: account.avatarUrl ?? undefined } : undefined);
