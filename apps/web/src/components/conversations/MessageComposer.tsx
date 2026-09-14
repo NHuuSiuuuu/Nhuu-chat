@@ -14,6 +14,46 @@ export function createQuickReplyDraft(reply: QuickReplyContract): { content: str
   return { content: reply.message, attachmentUrl: reply.attachment?.secureUrl ?? null };
 }
 
+export interface ComposerBehaviorState {
+  content: string;
+  attachmentUrl: string | null;
+  suggestionKind: "quick-reply" | "members" | null;
+  suggestionIndex: number;
+}
+
+export function createComposerBehaviorState(content = ""): ComposerBehaviorState {
+  return { content, attachmentUrl: null, suggestionKind: null, suggestionIndex: 0 };
+}
+
+// Xử lý phím bằng một chuyển đổi trạng thái duy nhất để chọn mẫu không thể vô tình kích hoạt gửi tin.
+export function processComposerKey(state: ComposerBehaviorState, event: { key: string; shiftKey: boolean }, quickReplies: QuickReplyContract[], onSubmit: () => void): { state: ComposerBehaviorState; preventDefault: boolean } {
+  if (event.key === "Escape") return { state: { ...state, suggestionKind: null }, preventDefault: false };
+  const suggestionCount = state.suggestionKind === "quick-reply" ? quickReplies.length : members.length;
+  if (state.suggestionKind && (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Tab")) {
+    if (suggestionCount === 0) return { state, preventDefault: true };
+    const direction = event.key === "ArrowUp" ? -1 : 1;
+    return { state: { ...state, suggestionIndex: (state.suggestionIndex + direction + suggestionCount) % suggestionCount }, preventDefault: true };
+  }
+  if (state.suggestionKind && event.key === "Enter" && !event.shiftKey) {
+    if (suggestionCount === 0) return { state, preventDefault: true };
+    if (state.suggestionKind === "quick-reply") {
+      const reply = quickReplies[state.suggestionIndex] ?? quickReplies[0];
+      if (!reply) return { state, preventDefault: true };
+      const draft = createQuickReplyDraft(reply);
+      return { state: { content: draft.content, attachmentUrl: draft.attachmentUrl, suggestionKind: null, suggestionIndex: state.suggestionIndex }, preventDefault: true };
+    }
+    const member = members[state.suggestionIndex] ?? members[0];
+    return { state: member ? { ...state, content: member, attachmentUrl: null, suggestionKind: null } : state, preventDefault: true };
+  }
+  if (event.key === "/") return { state: { ...state, suggestionKind: "quick-reply", suggestionIndex: 0 }, preventDefault: false };
+  if (event.key === "@") return { state: { ...state, suggestionKind: "members", suggestionIndex: 0 }, preventDefault: false };
+  if (event.key === "Enter" && !event.shiftKey) {
+    onSubmit();
+    return { state, preventDefault: true };
+  }
+  return { state, preventDefault: false };
+}
+
 export function MessageComposer({ onSend, quickReplies, disabled = false, aiSuggestions, aiSuggestionsEnabled = true, isAiSuggestionsLoading = false, aiSuggestionsError, onRefreshAiSuggestions }: { onSend: (content: string) => Promise<void>; quickReplies: QuickReplyContract[]; disabled?: boolean; aiSuggestions?: string[] | null; aiSuggestionsEnabled?: boolean; isAiSuggestionsLoading?: boolean; aiSuggestionsError?: string | null; onRefreshAiSuggestions?: () => void }) {
   const [content, setContent] = useState("");
   const [selectedAttachmentUrl, setSelectedAttachmentUrl] = useState<string | null>(null);
@@ -21,7 +61,6 @@ export function MessageComposer({ onSend, quickReplies, disabled = false, aiSugg
   const [suggestionKind, setSuggestionKind] = useState<"quick-reply" | "members" | null>(null);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
 
-  const suggestionCount = suggestionKind === "quick-reply" ? quickReplies.length : members.length;
   const displayedAiSuggestions = getDisplayedAiSuggestions(aiSuggestions, isAiSuggestionsLoading);
 
   async function submitMessage() {
@@ -46,42 +85,13 @@ export function MessageComposer({ onSend, quickReplies, disabled = false, aiSugg
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Escape") {
-      setSuggestionKind(null);
-      setIsShortcutModalOpen(false);
-      return;
-    }
-    if (suggestionKind && suggestionCount > 0 && (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Tab")) {
-      event.preventDefault();
-      const direction = event.key === "ArrowUp" ? -1 : 1;
-      setSuggestionIndex((current) => (current + direction + suggestionCount) % suggestionCount);
-      return;
-    }
-    if (suggestionKind && suggestionCount > 0 && event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      if (suggestionKind === "quick-reply") {
-        const reply = quickReplies[suggestionIndex] ?? quickReplies[0];
-        if (reply) selectQuickReply(reply);
-      } else {
-        const member = members[suggestionIndex] ?? members[0];
-        if (member) selectSuggestion(member);
-      }
-      return;
-    }
-    if (event.key === "/") {
-      setSuggestionKind("quick-reply");
-      setSuggestionIndex(0);
-      return;
-    }
-    if (event.key === "@") {
-      setSuggestionKind("members");
-      setSuggestionIndex(0);
-      return;
-    }
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      void submitMessage();
-    }
+    const result = processComposerKey({ content, attachmentUrl: selectedAttachmentUrl, suggestionKind, suggestionIndex }, { key: event.key, shiftKey: event.shiftKey }, quickReplies, () => { void submitMessage(); });
+    if (result.preventDefault) event.preventDefault();
+    setContent(result.state.content);
+    setSelectedAttachmentUrl(result.state.attachmentUrl);
+    setSuggestionKind(result.state.suggestionKind);
+    setSuggestionIndex(result.state.suggestionIndex);
+    if (event.key === "Escape") setIsShortcutModalOpen(false);
   }
 
   return <>

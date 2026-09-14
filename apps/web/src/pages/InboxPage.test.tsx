@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createAiSuggestionsRequestGuard, shouldAutoRefreshAiSuggestions } from "./InboxPage.js";
+import * as inboxModule from "./InboxPage.js";
 
 describe("Inbox Tailwind migration", () => {
   it("uses the shared shell without handwritten Inbox CSS", () => {
@@ -129,16 +130,6 @@ describe("Inbox Tailwind migration", () => {
     expect(chat).toContain("onRefreshAiSuggestions");
   });
 
-  it("loads authenticated quick replies once with a stale-response guard", () => {
-    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
-    expect(source).toContain("QuickReplyContract");
-    expect(source).toContain('const QUICK_REPLIES_API_URL = "/api/v1/quick-replies"');
-    expect(source).toContain("useState<QuickReplyContract[]>([])");
-    expect(source).toContain("apiRequest<{ quickReplies: QuickReplyContract[] }>(API_URL, QUICK_REPLIES_API_URL, token, {}, refresh)");
-    expect(source).toContain("if (!cancelled) setQuickReplies(result.quickReplies)");
-    expect(source).toContain("return () => { cancelled = true; }");
-  });
-
   it("passes backend quick replies through ChatWindow to MessageComposer", () => {
     const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
     const chat = readFileSync(new URL("../components/conversations/ChatWindow.tsx", import.meta.url), "utf8");
@@ -146,6 +137,31 @@ describe("Inbox Tailwind migration", () => {
     expect(chat).toContain("quickReplies: QuickReplyContract[]");
     expect(chat).toContain("<MessageComposer");
     expect(chat).toContain("quickReplies={quickReplies}");
+  });
+
+  it("loads quick replies exactly once and applies the current result", async () => {
+    const request = vi.fn().mockResolvedValue({ quickReplies: [{ id: "reply-1", shortcut: "chao", message: "Xin chào" }] });
+    const apply = vi.fn();
+    const guard = inboxModule.createQuickRepliesRequestGuard();
+    await inboxModule.loadInboxQuickReplies(request, apply, guard.start());
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(apply).toHaveBeenCalledOnce();
+    expect(apply).toHaveBeenCalledWith([{ id: "reply-1", shortcut: "chao", message: "Xin chào" }]);
+  });
+
+  it("ignores a stale quick-reply response after a newer load starts", async () => {
+    const first = deferred<{ quickReplies: Array<{ id: string; shortcut: string; message: string }> }>();
+    const second = deferred<{ quickReplies: Array<{ id: string; shortcut: string; message: string }> }>();
+    const apply = vi.fn();
+    const guard = inboxModule.createQuickRepliesRequestGuard();
+    const firstLoad = inboxModule.loadInboxQuickReplies(() => first.promise, apply, guard.start());
+    const secondLoad = inboxModule.loadInboxQuickReplies(() => second.promise, apply, guard.start());
+    second.resolve({ quickReplies: [{ id: "reply-2", shortcut: "moi", message: "Mẫu mới" }] });
+    await secondLoad;
+    first.resolve({ quickReplies: [{ id: "reply-1", shortcut: "cu", message: "Mẫu cũ" }] });
+    await firstLoad;
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(apply).toHaveBeenCalledWith([{ id: "reply-2", shortcut: "moi", message: "Mẫu mới" }]);
   });
 
   it("loads AI settings and sends the configured suggestion trigger", () => {

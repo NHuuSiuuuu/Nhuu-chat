@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as composerModule from "./MessageComposer";
 
 describe("MessageComposer accessibility", () => {
@@ -124,5 +124,40 @@ describe("MessageComposer accessibility", () => {
     expect(source).toContain("href={selectedAttachmentUrl}");
     expect(source).not.toContain('const quickReplies = [');
     expect(source).not.toContain("Xin chào, em có thể hỗ trợ gì cho anh/chị?");
+  });
+
+  it("opens slash suggestions and selects text plus attachment without sending", () => {
+    const onSubmit = vi.fn();
+    const quickReplies = [{ id: "reply-1", shortcut: "bao-gia", message: "Em gửi anh/chị bảng giá mới nhất ạ.", attachment: { secureUrl: "https://res.cloudinary.com/nhuu/image/upload/bang-gia.png", publicId: "quick-replies/bang-gia", resourceType: "image" as const, mimeType: "image/png", bytes: 2048 } }];
+    const opened = composerModule.processComposerKey(composerModule.createComposerBehaviorState(), { key: "/", shiftKey: false }, quickReplies, onSubmit);
+    const selected = composerModule.processComposerKey(opened.state, { key: "Enter", shiftKey: false }, quickReplies, onSubmit);
+    expect(opened.state.suggestionKind).toBe("quick-reply");
+    expect(selected).toEqual({ state: { content: "Em gửi anh/chị bảng giá mới nhất ạ.", attachmentUrl: "https://res.cloudinary.com/nhuu/image/upload/bang-gia.png", suggestionKind: null, suggestionIndex: 0 }, preventDefault: true });
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("consumes Enter without sending when slash suggestions are empty", () => {
+    const onSubmit = vi.fn();
+    const opened = composerModule.processComposerKey(composerModule.createComposerBehaviorState("/"), { key: "/", shiftKey: false }, [], onSubmit);
+    const consumed = composerModule.processComposerKey(opened.state, { key: "Enter", shiftKey: false }, [], onSubmit);
+    expect(consumed.preventDefault).toBe(true);
+    expect(consumed.state.content).toBe("/");
+    expect(consumed.state.suggestionKind).toBe("quick-reply");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("preserves wraparound keyboard navigation and Escape closing", () => {
+    const quickReplies = [{ id: "reply-1", shortcut: "mot", message: "Một" }, { id: "reply-2", shortcut: "hai", message: "Hai" }];
+    const onSubmit = vi.fn();
+    const opened = composerModule.processComposerKey(composerModule.createComposerBehaviorState(), { key: "/", shiftKey: false }, quickReplies, onSubmit);
+    const movedDown = composerModule.processComposerKey(opened.state, { key: "ArrowDown", shiftKey: false }, quickReplies, onSubmit);
+    const wrappedByTab = composerModule.processComposerKey(movedDown.state, { key: "Tab", shiftKey: false }, quickReplies, onSubmit);
+    const wrappedUp = composerModule.processComposerKey(wrappedByTab.state, { key: "ArrowUp", shiftKey: false }, quickReplies, onSubmit);
+    const closed = composerModule.processComposerKey(wrappedUp.state, { key: "Escape", shiftKey: false }, quickReplies, onSubmit);
+    expect(movedDown.state.suggestionIndex).toBe(1);
+    expect(wrappedByTab.state.suggestionIndex).toBe(0);
+    expect(wrappedUp.state.suggestionIndex).toBe(1);
+    expect(closed.state.suggestionKind).toBeNull();
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 });

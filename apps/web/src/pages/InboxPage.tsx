@@ -41,6 +41,30 @@ export function createAiSuggestionsRequestGuard() {
     }
   };
 }
+
+export function createQuickRepliesRequestGuard() {
+  let latestRequestId = 0;
+  return {
+    start() {
+      const requestId = ++latestRequestId;
+      return () => requestId === latestRequestId;
+    },
+    cancel() {
+      latestRequestId += 1;
+    }
+  };
+}
+
+// Chỉ áp dụng kết quả của lần tải mẫu còn hiệu lực để auth context cũ không ghi đè state mới.
+export async function loadInboxQuickReplies(request: () => Promise<{ quickReplies: QuickReplyContract[] }>, apply: (quickReplies: QuickReplyContract[]) => void, isCurrent: () => boolean): Promise<void> {
+  try {
+    const result = await request();
+    if (isCurrent()) apply(result.quickReplies);
+  } catch {
+    if (isCurrent()) apply([]);
+  }
+}
+
 export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: { token: string; refresh?: () => Promise<string | null>; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hội thoại" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void }) {
   const [conversations, setConversations] = useState<ConversationContract[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -61,6 +85,7 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
   const conversationsRef = React.useRef<ConversationContract[]>([]);
   const readStateRef = React.useRef(new Map<string, { generation: number; baseline: number; revision: number; confirmedGeneration?: number; confirmedRevision?: number }>());
   const aiSuggestionsGuardRef = React.useRef(createAiSuggestionsRequestGuard());
+  const quickRepliesGuardRef = React.useRef(createQuickRepliesRequestGuard());
   aiSuggestionsGuardRef.current.setActiveConversation(activeId);
   const active = conversations.find((item) => item.id === activeId) ?? null;
   const aiSuggestionsEnabled = aiSettings.enabled && aiSettings.suggestionsEnabled;
@@ -155,11 +180,9 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
     return () => { cancelled = true; };
   }, [token, refresh]);
   useEffect(() => {
-    let cancelled = false;
-    void apiRequest<{ quickReplies: QuickReplyContract[] }>(API_URL, QUICK_REPLIES_API_URL, token, {}, refresh)
-      .then((result) => { if (!cancelled) setQuickReplies(result.quickReplies); })
-      .catch(() => { if (!cancelled) setQuickReplies([]); });
-    return () => { cancelled = true; };
+    const isCurrent = quickRepliesGuardRef.current.start();
+    void loadInboxQuickReplies(() => apiRequest<{ quickReplies: QuickReplyContract[] }>(API_URL, QUICK_REPLIES_API_URL, token, {}, refresh), setQuickReplies, isCurrent);
+    return () => { quickRepliesGuardRef.current.cancel(); };
   }, [token, refresh]);
   useEffect(() => {
     let cancelled = false;
