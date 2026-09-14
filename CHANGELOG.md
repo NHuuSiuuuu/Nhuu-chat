@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa ba lỗi hậu kiểm chatbot Telegram: phát unread từ kết quả tăng atomic khi tin cá nhân đến đồng thời; ghi diagnostics đã loại secret và thử handoff/pause kể cả lỗi trước claim, giữ ack/replay; giữ ID gửi cá nhân thành công đến muộn sau timeout để lọc echo mà không retry.
 - Nối inbound Telegram Bot và Telegram cá nhân vào `ChatbotOrchestrator.process` sau khi lưu tin khách; dùng chung bot delivery, token mã hóa/client session theo owner, template theo định danh kênh chuẩn và RAG đúng owner.
 - Giữ webhook validation/ack/idempotency; chống reply trùng khi replay, bỏ qua bot sender và echo của bot cá nhân kể cả khi echo đến trước kết quả gửi. Lỗi connector giữ tin khách, lưu failed/handoff và pause 30 phút, không tự gửi lại.
 - Chuẩn hóa ảnh/caption trong hai connector; ảnh không caption được nhắc nhập văn bản, chưa đọc/tải ảnh hay bổ sung video/audio/file; outbound chatbot chỉ gửi text.

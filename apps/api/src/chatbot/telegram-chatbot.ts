@@ -6,10 +6,13 @@ import { withBotTimeout, type ResolveBotAdapter } from "./channel-bot-adapter.js
 import { ChatbotOrchestrator } from "./chatbot-orchestrator.js";
 
 const personalBotSends = new Map<string, Set<Promise<string>>>();
+const personalBotSentIds = new Map<string, Set<string>>();
 
 // Đối chiếu ID thật kể cả echo đến trước kết quả gửi; không bỏ nhầm tin nhân viên có cùng nội dung.
 export async function isTelegramPersonalBotEcho(ownerId: string, channelId: string, externalMessageId: string): Promise<boolean> {
-  const pending = personalBotSends.get(`${ownerId}:${channelId}`);
+  const key = `${ownerId}:${channelId}`;
+  if (personalBotSentIds.get(key)?.has(externalMessageId)) return true;
+  const pending = personalBotSends.get(key);
   if (!pending) return false;
   const results = await Promise.allSettled([...pending]);
   return results.some((result) => result.status === "fulfilled" && result.value === externalMessageId);
@@ -33,7 +36,19 @@ export const resolveTelegramBotAdapter: ResolveBotAdapter = async ({ platform, o
         const key = `${ownerId}:${channelId}`;
         const pending = personalBotSends.get(key) ?? new Set<Promise<string>>();
         personalBotSends.set(key, pending);
-        const sent = withBotTimeout(async () => String((await client.sendMessage(channelId, { message: content })).id), 10_000);
+        // Theo dõi kết quả gốc riêng với timeout để vẫn nhận diện lần gửi thành công đến muộn.
+        const externalSend = Promise.resolve().then(() => client.sendMessage(channelId, { message: content })).then((message) => {
+          const id = String(message.id);
+          const ids = personalBotSentIds.get(key) ?? new Set<string>();
+          personalBotSentIds.set(key, ids);
+          ids.add(id);
+          setTimeout(() => {
+            ids.delete(id);
+            if (ids.size === 0) personalBotSentIds.delete(key);
+          }, 10_000).unref();
+          return id;
+        });
+        const sent = withBotTimeout(() => externalSend, 10_000);
         pending.add(sent);
         try {
           return { externalMessageId: await sent };

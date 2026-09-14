@@ -121,6 +121,25 @@ describe("Telegram channel routes", () => {
     expect(process).toHaveBeenCalledOnce();
   });
 
+  it.each(["rejection", "failed"])("records sanitized Bot diagnostics and handoff before claim on %s while acknowledging replay", async (kind) => {
+    const { conversation, fetchMock } = await enableBot();
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    if (kind === "rejection") vi.spyOn(ChatbotOrchestrator.prototype, "process").mockRejectedValue(new Error("private-token-and-prompt"));
+    else vi.spyOn(AssistantModel, "findOne").mockImplementationOnce(() => { throw new Error("private-token-and-prompt"); });
+    const path = "/api/v1/channels/telegram/webhook/telegram-webhook-secret-value";
+    expect((await request(createApp()).post(path).send(textUpdate)).status).toBe(204);
+    const first = await MessageModel.findOne({ senderType: "customer" }).lean();
+    expect(first).toMatchObject({ metadata: { botFailure: { code: "PROCESSING_FAILED" } } });
+    expect(await ConversationModel.findById(conversation._id).lean()).toMatchObject({ status: "pending", botPausedUntil: expect.any(Date) });
+    expect(await BotProcessingModel.countDocuments()).toBe(0);
+    expect((await request(createApp()).post(path).send(textUpdate)).status).toBe(204);
+    expect((await MessageModel.findOne({ senderType: "customer" }).lean())?.metadata.botFailure).toEqual(first!.metadata.botFailure);
+    expect(log).toHaveBeenCalledOnce();
+    expect(JSON.stringify(log.mock.calls)).toContain("PROCESSING_FAILED");
+    expect(JSON.stringify(log.mock.calls)).not.toContain("private-token-and-prompt");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("ignores bot-originated updates even when a channel assistant is enabled", async () => {
     const { fetchMock } = await enableBot();
     const update = { ...textUpdate, message: { ...textUpdate.message, from: { ...textUpdate.message.from, is_bot: true } } };

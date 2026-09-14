@@ -211,6 +211,10 @@ Giới hạn owner: Telegram cá nhân lấy owner từ session. Telegram Bot hi
 
 ## 6. Kiểm thử và kiểm chứng
 
+Hậu kiểm connector: unread Telegram cá nhân dùng document trả về từ phép tăng atomic để tin đồng thời phát đúng các giá trị đếm riêng. Khi orchestrator reject hoặc trả `failed`, caller giữ ack/idempotency, ghi `metadata.botFailure` (`PROCESSING_FAILED`, thời điểm) trên tin khách và thử chuyển hội thoại đúng owner sang `pending`/pause 30 phút. Diagnostics và handoff ghi độc lập; log chỉ có mã lỗi/ID và kết quả ghi, không chứa lỗi gốc hoặc secret. Replay không chạy bot lại và giữ diagnostics; database lỗi có thể ngăn lưu hoặc handoff, khi đó log cho biết kết quả phục hồi.
+
+Echo của tài khoản cá nhân dùng ID kết quả gửi thực tế, kể cả kết quả thành công đến sau timeout. ID thành công được giữ trong bộ nhớ 10 giây từ khi nhận kết quả; không retry hay đổi trạng thái delivery đã timeout. Giới hạn vẫn là một process và thời gian lưu ngắn; chưa có đối soát delivery bền vững sau restart/echo quá muộn.
+
 Các lệnh thường dùng:
 
 ```bash

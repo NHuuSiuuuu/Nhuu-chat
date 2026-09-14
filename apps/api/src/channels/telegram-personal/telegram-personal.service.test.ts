@@ -9,6 +9,8 @@ import { MessageModel } from "../../models/message.model.js";
 import { TelegramPersonalSessionModel } from "./telegram-personal.model.js";
 import { startTestDatabase, stopTestDatabase } from "../../test/mongo-repl-set.js";
 import { ChatbotOrchestrator } from "../../chatbot/chatbot-orchestrator.js";
+import * as realtime from "../../realtime/socket.js";
+import { resolveTelegramBotAdapter } from "../../chatbot/telegram-chatbot.js";
 
 import {
   buildTelegramQrUrl,
@@ -149,6 +151,69 @@ describe("Telegram personal inbound chatbot integration", () => {
     expect(await ConversationModel.findOne().lean()).toMatchObject({ status: "pending", botPausedUntil: expect.any(Date), unreadCount: 1 });
     expect(await BotProcessingModel.findOne().lean()).toMatchObject({ status: "failed" });
     expect(telegram.sendMessage).toHaveBeenCalledOnce();
+  });
+
+  it("publishes atomic unread counts for concurrent distinct personal messages", async () => {
+    const { ownerId, event } = await connect();
+    await AssistantModel.updateMany({}, { enabled: false });
+    const customer = await CustomerModel.create({ platform: "telegram_personal", platformId: "123", name: "Khách" });
+    await ConversationModel.create({ ownerId, platform: "telegram_personal", channelId: "456", customerId: customer._id });
+    const emit = vi.spyOn(realtime, "emitInboxEventToRecipients");
+    const create = MessageModel.create.bind(MessageModel);
+    let release!: () => void;
+    const bothReady = new Promise<void>((resolve) => { release = resolve; });
+    let arrivals = 0;
+    // Chặn ngay trước ghi tin để cả hai listener đều đã đọc snapshot unread=0.
+    vi.spyOn(MessageModel, "create").mockImplementation(async (...args: Parameters<typeof create>) => {
+      if (++arrivals === 2) release();
+      await bothReady;
+      return create(...args);
+    });
+    await Promise.all([telegram.listener!(event), telegram.listener!({ message: { ...event.message, id: 101 } })]);
+    expect(await ConversationModel.findOne().lean()).toMatchObject({ unreadCount: 2 });
+    expect(emit.mock.calls.map(([, , payload]) => (payload as { unreadCount: number }).unreadCount).sort()).toEqual([1, 2]);
+  });
+
+  it("suppresses a late successful echo after the personal send timed out without retrying", async () => {
+    const { ownerId, event } = await connect();
+    let finish!: (message: { id: number }) => void;
+    telegram.sendMessage.mockImplementation(() => new Promise<{ id: number }>((resolve) => { finish = resolve; }));
+    const adapter = await resolveTelegramBotAdapter({ ownerId, platform: "telegram_personal", channelId: "456" });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const sending = adapter!.sendText({ channelId: "456", content: "Chào từ tài khoản cá nhân" });
+      const rejected = expect(sending).rejects.toThrow("BOT_TIMEOUT");
+      await vi.advanceTimersByTimeAsync(10_000);
+      await rejected;
+      await vi.advanceTimersByTimeAsync(11_000);
+      finish({ id: 200 });
+      await vi.advanceTimersByTimeAsync(0);
+    } finally {
+      vi.useRealTimers();
+    }
+    const customer = await CustomerModel.create({ platform: "telegram_personal", platformId: "123", name: "Khách" });
+    await ConversationModel.create({ ownerId, platform: "telegram_personal", channelId: "456", customerId: customer._id });
+    await telegram.listener!({ message: { ...event.message, id: 200, out: true, senderId: "self", message: "Chào từ tài khoản cá nhân" } });
+    expect(await MessageModel.countDocuments({ senderType: "agent" })).toBe(0);
+    expect(telegram.sendMessage).toHaveBeenCalledOnce();
+  });
+
+  it.each(["rejection", "failed"])("records sanitized personal diagnostics and handoff before claim on %s, retained on replay", async (kind) => {
+    const { event } = await connect();
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    if (kind === "rejection") vi.spyOn(ChatbotOrchestrator.prototype, "process").mockRejectedValue(new Error("private-token-and-prompt"));
+    else vi.spyOn(AssistantModel, "findOne").mockImplementationOnce(() => { throw new Error("private-token-and-prompt"); });
+    await telegram.listener!(event);
+    const first = await MessageModel.findOne({ senderType: "customer" }).lean();
+    expect(first).toMatchObject({ metadata: { botFailure: { code: "PROCESSING_FAILED" } } });
+    expect(await ConversationModel.findOne().lean()).toMatchObject({ status: "pending", botPausedUntil: expect.any(Date) });
+    expect(await BotProcessingModel.countDocuments()).toBe(0);
+    await telegram.listener!(event);
+    expect((await MessageModel.findOne({ senderType: "customer" }).lean())?.metadata.botFailure).toEqual(first!.metadata.botFailure);
+    expect(log).toHaveBeenCalledOnce();
+    expect(JSON.stringify(log.mock.calls)).toContain("PROCESSING_FAILED");
+    expect(JSON.stringify(log.mock.calls)).not.toContain("private-token-and-prompt");
+    expect(telegram.sendMessage).not.toHaveBeenCalled();
   });
 
   it("does not create an agent copy when a bot echo arrives before sendMessage resolves", async () => {

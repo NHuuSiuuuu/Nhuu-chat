@@ -1,7 +1,7 @@
 import type { TelegramUpdate } from "../channels/telegram/telegram.schemas.js";
 import { normalizeTelegramUpdate } from "../channels/telegram/telegram.normalizer.js";
 import { TelegramClient } from "../channels/telegram/telegram.client.js";
-import { telegramChatbot } from "../chatbot/telegram-chatbot.js";
+import { processTelegramCustomerMessage } from "../chatbot/telegram-inbound.service.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { CustomerModel } from "../models/customer.model.js";
 import { MessageModel } from "../models/message.model.js";
@@ -81,7 +81,7 @@ export async function ingestTelegramUpdate(update: TelegramUpdate): Promise<void
     }
     if (conversation.ownerId) {
       // Lỗi bot không được biến webhook đã lưu thành retry gửi thêm câu trả lời.
-      await telegramChatbot.process({
+      await processTelegramCustomerMessage({
         ownerId: String(conversation.ownerId),
         conversationId: String(conversation._id),
         customerMessageId: String(storedMessage._id),
@@ -91,7 +91,7 @@ export async function ingestTelegramUpdate(update: TelegramUpdate): Promise<void
         senderType: "customer",
         type: normalized.type,
         content: normalized.content
-      }).catch(() => undefined);
+      });
     }
   } catch (error) {
     if (isDuplicateKey(error)) return;

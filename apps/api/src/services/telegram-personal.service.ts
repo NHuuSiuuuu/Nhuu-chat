@@ -4,7 +4,8 @@ import { randomUUID } from "node:crypto";
 import { Api, TelegramClient } from "telegram";
 import { NewMessage } from "telegram/events/index.js";
 import { StringSession } from "telegram/sessions/index.js";
-import { isTelegramPersonalBotEcho, telegramChatbot } from "../chatbot/telegram-chatbot.js";
+import { isTelegramPersonalBotEcho } from "../chatbot/telegram-chatbot.js";
+import { processTelegramCustomerMessage } from "../chatbot/telegram-inbound.service.js";
 
 import { createPasswordPrompt, isRetryableTelegramPasswordError, shouldReusePendingQr, type PasswordPrompt } from "../channels/telegram-personal/telegram-personal.auth.js";
 import { TelegramPersonalSessionModel } from "../channels/telegram-personal/telegram-personal.model.js";
@@ -275,7 +276,7 @@ function attachPersonalMessageSync(userId: string, client: TelegramClient): void
         lastMessageSnippet: content
       }
     };
-    const conversation = await ConversationModel.findOneAndUpdate(
+    let conversation = await ConversationModel.findOneAndUpdate(
       { platform: "telegram_personal", channelId, ownerId: userId },
       conversationUpdate,
       { upsert: true, new: true }
@@ -285,8 +286,12 @@ function attachPersonalMessageSync(userId: string, client: TelegramClient): void
       const storedMessage = await MessageModel.create({ conversationId: conversation._id, platform: "telegram_personal", externalMessageId: String(message.id), senderType: personalMessageSenderType(isOutgoing), senderId, type, content, deliveryStatus: "delivered", metadata: { senderName } });
       // Chỉ tin vừa ghi thành công mới tăng unread, kể cả khi replay đến đồng thời.
       if (!isOutgoing) {
-        await ConversationModel.updateOne({ _id: conversation._id }, { $inc: { unreadCount: 1 } });
-        conversation.unreadCount += 1;
+        conversation = await ConversationModel.findOneAndUpdate(
+          { _id: conversation._id, ownerId: userId },
+          { $inc: { unreadCount: 1 } },
+          { returnDocument: "after" }
+        );
+        if (!conversation) return;
       }
       await conversation.populate("customerId", "name avatarUrl");
       await conversation.populate("tagIds", "name color");
@@ -294,8 +299,8 @@ function attachPersonalMessageSync(userId: string, client: TelegramClient): void
       emitChatEvent("chat:message_received", String(conversation._id), toMessage(storedMessage.toObject()));
       emitInboxEventToRecipients("chat:conversation_updated", [userId, conversation.assignedAgentId ? String(conversation.assignedAgentId) : ""], conversationPayload);
       if (!isOutgoing) {
-        // Giữ tin khách và bỏ qua lỗi ngoài dự kiến của bot để replay không tạo lần gửi mới.
-        await telegramChatbot.process({
+        // Ghi nhận lỗi và bàn giao an toàn mà không tạo lần gửi mới khi replay.
+        await processTelegramCustomerMessage({
           ownerId: userId,
           conversationId: String(conversation._id),
           customerMessageId: String(storedMessage._id),
@@ -305,7 +310,7 @@ function attachPersonalMessageSync(userId: string, client: TelegramClient): void
           senderType: "customer",
           type,
           content
-        }).catch(() => undefined);
+        });
       }
     } catch (error) {
       if (!isDuplicateKey(error)) throw error;
