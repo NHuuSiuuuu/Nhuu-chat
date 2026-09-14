@@ -29,7 +29,6 @@ const automationTemplateFields = {
 
 export const automationTemplateCreateSchema = z.object({
   ...automationTemplateFields,
-  assistantId: automationTemplateFields.assistantId.optional(),
   allowAiRewrite: automationTemplateFields.allowAiRewrite.default(false),
   priority: automationTemplateFields.priority.default(0),
   enabled: automationTemplateFields.enabled.default(true),

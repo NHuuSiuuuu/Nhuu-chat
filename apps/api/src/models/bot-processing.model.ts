@@ -4,7 +4,7 @@ const botProcessingSchema = new Schema(
   {
     ownerId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     conversationId: { type: Schema.Types.ObjectId, ref: "Conversation", required: true },
-    customerMessageId: { type: Schema.Types.ObjectId, ref: "Message" },
+    customerMessageId: { type: Schema.Types.ObjectId, ref: "Message", required: true },
     externalMessageId: { type: String, trim: true },
     status: { type: String, enum: ["processing", "sent", "handed_off", "failed"], required: true },
     assistantId: { type: Schema.Types.ObjectId, ref: "Assistant", required: true },

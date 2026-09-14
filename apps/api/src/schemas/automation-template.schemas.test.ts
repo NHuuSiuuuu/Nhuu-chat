@@ -28,6 +28,14 @@ describe("automation template schemas", () => {
     }).success).toBe(false);
   });
 
+  it("requires an assistant id when creating a template", () => {
+    expect(automationTemplateCreateSchema.safeParse({
+      name: "Mẫu",
+      keywords: ["giá"],
+      responseTemplate: "Trả lời"
+    }).success).toBe(false);
+  });
+
   it("allows patch fields independently", () => {
     expect(automationTemplatePatchSchema.parse({ priority: 5 })).toEqual({ priority: 5 });
   });

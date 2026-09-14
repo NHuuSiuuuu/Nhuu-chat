@@ -21,18 +21,18 @@ describe("chatbot models", () => {
     expect(assistant.channelScope.toObject()).toEqual({ mode: "all", identifiers: [] });
   });
 
-  it("validates assistant and template enums", () => {
+  it("rejects invalid assistant and template enum values through Mongoose validation", async () => {
     const assistant = new AssistantModel({ modelTier: "invalid" });
     const template = new AutomationTemplateModel({
       channelScope: { mode: "invalid", identifiers: [] }
     });
 
-    expect(AssistantModel.schema.path("modelTier").enumValues).toEqual([
-      "smart", "balanced", "economy"
-    ]);
-    expect(AutomationTemplateModel.schema.path("channelScope.mode")).toBeDefined();
-    expect(assistant.modelTier).toBe("invalid");
-    expect(template.channelScope?.mode).toBe("invalid");
+    await expect(assistant.validate()).rejects.toMatchObject({
+      errors: { modelTier: expect.anything() }
+    });
+    await expect(template.validate()).rejects.toMatchObject({
+      errors: { "channelScope.mode": expect.anything() }
+    });
   });
 
   it("requires owner fields for assistant and template documents", () => {
@@ -51,6 +51,19 @@ describe("chatbot models", () => {
     expect(index).toBeDefined();
     expect(index?.[1].partialFilterExpression).toEqual({
       customerMessageId: { $type: "objectId" }
+    });
+  });
+
+  it("requires a customer message for processing records", async () => {
+    const processing = new BotProcessingModel({
+      ownerId: new mongoose.Types.ObjectId(),
+      conversationId: new mongoose.Types.ObjectId(),
+      assistantId: new mongoose.Types.ObjectId(),
+      status: "processing"
+    });
+
+    await expect(processing.validate()).rejects.toMatchObject({
+      errors: { customerMessageId: expect.anything() }
     });
   });
 });
