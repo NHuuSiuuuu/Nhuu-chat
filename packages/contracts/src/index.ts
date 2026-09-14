@@ -12,6 +12,46 @@ export type AiModelTier = "smart" | "balanced" | "economy";
 export type AiSuggestionMode = "off" | "manual" | "on_open" | "on_customer_message";
 export type AiSentimentWindow = 3 | 6 | 10;
 
+export interface ChannelScopeContract {
+  mode: "all" | "channels";
+  identifiers: string[];
+}
+
+export interface AssistantContract {
+  id: string;
+  ownerId: string;
+  name: string;
+  instructions: string;
+  modelTier: AiModelTier;
+  enabled: boolean;
+  fallbackMessage: string;
+  channelScope: ChannelScopeContract;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AutomationTemplateContract {
+  id: string;
+  ownerId: string;
+  assistantId: string;
+  name: string;
+  keywords: string[];
+  responseTemplate: string;
+  allowAiRewrite: boolean;
+  priority: number;
+  enabled: boolean;
+  channelScope: ChannelScopeContract;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BotPreviewResponse {
+  answer: string;
+  source: "template" | "ai" | "fallback";
+  handoff: boolean;
+}
+
 export interface AiSettingsContract {
   modelTier: AiModelTier;
   enabled: boolean;
