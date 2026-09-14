@@ -7,6 +7,7 @@ const database = vi.hoisted(() => ({
   findOneAndDelete: vi.fn(),
   findOneAndUpdate: vi.fn(),
   updateMany: vi.fn(),
+  collection: { createIndex: vi.fn() },
   db: { transaction: vi.fn() }
 }));
 const templateDatabase = vi.hoisted(() => ({
@@ -84,6 +85,7 @@ function leanQuery<T>(value: T) {
 describe("assistant service", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    database.collection.createIndex.mockResolvedValue("unique_default_assistant_per_owner");
     database.db.transaction.mockImplementation(async (work: (session: object) => unknown) => work({ id: "session" }));
   });
 
@@ -131,6 +133,33 @@ describe("assistant service", () => {
     expect(database.create).toHaveBeenCalledWith(
       [expect.objectContaining({ ownerId, isDefault: true })],
       { session: { id: "session" } }
+    );
+  });
+
+  it("rejects a concurrent default collision through a database partial unique index", async () => {
+    database.updateMany.mockResolvedValue({ acknowledged: true });
+    database.create.mockRejectedValue(Object.assign(new Error("duplicate default"), { code: 11000 }));
+
+    await expect(createAssistant(ownerId, {
+      name: "Tư vấn đồng thời",
+      instructions: "Trả lời ngắn gọn",
+      modelTier: "balanced",
+      enabled: true,
+      fallbackMessage: "Mình sẽ chuyển bạn đến nhân viên hỗ trợ nhé.",
+      channelScope: { mode: "all", identifiers: [] },
+      isDefault: true
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "DUPLICATE_RESOURCE",
+      message: "Resource already exists"
+    });
+    expect(database.collection.createIndex).toHaveBeenCalledWith(
+      { ownerId: 1, isDefault: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { isDefault: true },
+        name: "unique_default_assistant_per_owner"
+      }
     );
   });
 

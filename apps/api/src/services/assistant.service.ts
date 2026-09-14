@@ -6,6 +6,8 @@ import { AssistantModel } from "../models/assistant.model.js";
 export type AssistantInput = Omit<AssistantContract, "id" | "ownerId" | "createdAt" | "updatedAt">;
 export type AssistantPatch = Partial<AssistantInput>;
 
+const DEFAULT_ASSISTANT_INDEX = "unique_default_assistant_per_owner";
+
 interface AssistantRow extends AssistantInput {
   _id: unknown;
   ownerId: unknown;
@@ -15,6 +17,30 @@ interface AssistantRow extends AssistantInput {
 
 function assistantNotFound(): AppError {
   return new AppError(404, "ASSISTANT_NOT_FOUND", "Assistant was not found");
+}
+
+function isDuplicateKey(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === 11000;
+}
+
+async function withDefaultAssistantConstraint<T>(mutation: () => Promise<T>): Promise<T> {
+  try {
+    // Tạo ràng buộc tại MongoDB để hai request đồng thời không thể cùng tạo mặc định.
+    await AssistantModel.collection.createIndex(
+      { ownerId: 1, isDefault: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { isDefault: true },
+        name: DEFAULT_ASSISTANT_INDEX
+      }
+    );
+    return await mutation();
+  } catch (error) {
+    if (isDuplicateKey(error)) {
+      throw new AppError(409, "DUPLICATE_RESOURCE", "Resource already exists");
+    }
+    throw error;
+  }
 }
 
 function toIsoString(value: Date | string): string {
@@ -51,7 +77,7 @@ export async function createAssistant(ownerId: string, input: AssistantInput): P
     return toAssistant(row as unknown as AssistantRow);
   }
 
-  return AssistantModel.db.transaction(async (session) => {
+  return withDefaultAssistantConstraint(() => AssistantModel.db.transaction(async (session) => {
     // Đổi trợ lý mặc định trong cùng transaction để không lộ trạng thái có hai mặc định.
     await AssistantModel.updateMany(
       { ownerId, isDefault: true },
@@ -60,7 +86,7 @@ export async function createAssistant(ownerId: string, input: AssistantInput): P
     );
     const [row] = await AssistantModel.create([{ ownerId, ...input }], { session });
     return toAssistant(row as unknown as AssistantRow);
-  });
+  }));
 }
 
 export async function updateAssistant(
@@ -78,7 +104,7 @@ export async function updateAssistant(
     return toAssistant(row as unknown as AssistantRow);
   }
 
-  return AssistantModel.db.transaction(async (session) => {
+  return withDefaultAssistantConstraint(() => AssistantModel.db.transaction(async (session) => {
     await AssistantModel.updateMany(
       { ownerId, isDefault: true, _id: { $ne: assistantId } },
       { $set: { isDefault: false } },
@@ -91,7 +117,7 @@ export async function updateAssistant(
     ).lean();
     if (!row) throw assistantNotFound();
     return toAssistant(row as unknown as AssistantRow);
-  });
+  }));
 }
 
 export async function deleteAssistant(ownerId: string, assistantId: string): Promise<void> {
