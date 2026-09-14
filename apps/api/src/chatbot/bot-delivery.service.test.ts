@@ -46,6 +46,88 @@ async function arrange() {
 }
 
 describe("bot delivery", () => {
+  it.each(["conversation lookup", "reservation"])(
+    "terminates the claim and hands off after a transient %s failure before reservation",
+    async (stage) => {
+      const { command, service, sendText } = await arrange();
+      if (stage === "conversation lookup") {
+        vi.spyOn(ConversationModel, "findOne").mockImplementationOnce(() => {
+          throw new Error("transient lookup failure");
+        });
+      } else {
+        vi.spyOn(BotProcessingModel, "findOneAndUpdate").mockImplementationOnce(() => {
+          throw new Error("transient reservation failure");
+        });
+      }
+
+      expect(await service.deliver(command)).toEqual({ status: "failed" });
+      expect(await BotProcessingModel.findById(command.processingId)).toMatchObject({
+        status: "failed",
+        errorCode: "PERSISTENCE_FAILED"
+      });
+      expect(await ConversationModel.findById(command.conversationId)).toMatchObject({
+        status: "pending",
+        botPausedUntil: new Date(now.getTime() + 1_800_000)
+      });
+      expect(await service.deliver(command)).toEqual({ status: "skipped" });
+      expect(await MessageModel.countDocuments({ senderType: "bot" })).toBe(0);
+      expect(sendText).not.toHaveBeenCalled();
+      expect(realtime.emitChatEvent).not.toHaveBeenCalled();
+      expect(realtime.emitInboxEventToRecipients).not.toHaveBeenCalled();
+    }
+  );
+
+  it("does not overwrite or pause a concurrent reservation winner during pre-reservation recovery", async () => {
+    const { command, service, sendText } = await arrange();
+    let failLookup!: (error: Error) => void;
+    const lookup = new Promise<never>((_resolve, reject) => {
+      failLookup = reject;
+    });
+    const failedLookup = ConversationModel.findOne({ _id: command.conversationId });
+    vi.spyOn(failedLookup, "exec").mockImplementationOnce(() => lookup);
+    vi.spyOn(ConversationModel, "findOne").mockReturnValueOnce(failedLookup);
+    const loser = service.deliver(command);
+
+    let reachedAdapter!: () => void;
+    const adapterReached = new Promise<void>((resolve) => {
+      reachedAdapter = resolve;
+    });
+    let releaseAdapter!: (adapter: ChannelBotAdapter) => void;
+    const adapter = new Promise<ChannelBotAdapter>((resolve) => {
+      releaseAdapter = resolve;
+    });
+    const winnerService = new BotDeliveryService({
+      resolveAdapter: () => {
+        reachedAdapter();
+        return adapter;
+      },
+      now: () => now,
+      timeoutMs: 1_000
+    });
+    const winner = winnerService.deliver(command);
+    await adapterReached;
+    const reserved = await BotProcessingModel.findById(command.processingId).lean();
+    failLookup(new Error("transient lookup failure"));
+    expect(await loser).toEqual({ status: "failed" });
+    const afterRecovery = await BotProcessingModel.findById(command.processingId).lean();
+    expect(afterRecovery).toMatchObject({
+      status: "processing",
+      botMessageId: reserved!.botMessageId
+    });
+    expect(afterRecovery!.errorCode).toBeUndefined();
+    expect(await ConversationModel.findById(command.conversationId)).toMatchObject({
+      status: "open",
+      botPausedUntil: null
+    });
+    releaseAdapter({ sendText });
+    expect(await winner).toEqual({ status: "sent" });
+    expect(await BotProcessingModel.findById(command.processingId)).toMatchObject({
+      status: "sent"
+    });
+    expect(sendText).toHaveBeenCalledOnce();
+    expect(await MessageModel.countDocuments({ senderType: "bot" })).toBe(1);
+  });
+
   it("does not start a late send after adapter resolution has already timed out", async () => {
     const { command, sendText } = await arrange();
     let resolveAdapter!: (adapter: ChannelBotAdapter) => void;

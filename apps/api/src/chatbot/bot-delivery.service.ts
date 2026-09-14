@@ -213,6 +213,26 @@ export class BotDeliveryService {
             $max: { botPausedUntil: new Date(now().getTime() + 1_800_000) }
           }
         ).catch(() => undefined);
+      } else {
+        // Chỉ kết thúc claim chưa được giữ chỗ; không bàn giao đè lên lượt gửi thắng đồng thời.
+        await BotProcessingModel.db
+          .transaction(async (session) => {
+            const recovered = await BotProcessingModel.updateOne(
+              { ...filter, botMessageId: { $exists: false } },
+              { $set: { status: "failed", errorCode: "PERSISTENCE_FAILED" } },
+              { session }
+            );
+            if (recovered.modifiedCount !== 1) return;
+            await ConversationModel.updateOne(
+              { _id: input.conversationId, ownerId: input.ownerId },
+              {
+                $set: { status: "pending" },
+                $max: { botPausedUntil: new Date(now().getTime() + 1_800_000) }
+              },
+              { session }
+            );
+          })
+          .catch(() => undefined);
       }
       return { status: "failed" };
     }
