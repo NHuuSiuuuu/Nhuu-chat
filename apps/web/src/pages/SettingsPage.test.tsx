@@ -100,6 +100,66 @@ describe("Settings page", () => {
   it("passes access token and refresh handler into SettingsPage", () => {
     const source = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain("<SettingsPage token={auth.accessToken} refresh={refresh}");
+    expect(source).toContain("<SettingsPage {...topbarProps} token={auth.accessToken} refresh={refresh}");
+  });
+
+  it("renders the quick replies settings page and add modal", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('activeTab === "Hỗ trợ trả lời"');
+    expect(source).toContain("isAddQuickReplyModalOpen");
+    expect(source).toContain("Trả lời nhanh");
+    expect(source).toContain("Thêm mẫu");
+    expect(source).toContain("Tìm kiếm tin nhắn");
+    expect(source).toContain("Ký tự tắt");
+    expect(source).toContain("Nội dung sẽ được chèn khi gõ ký tự tắt ở trên");
+    expect(source).toContain("Chưa có mẫu trả lời nhanh");
+  });
+
+  it("supports selecting an attached image in the quick reply modal", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('type="file"');
+    expect(source).toContain('accept="image/*"');
+    expect(source).toContain("attachment");
+    expect(source).toContain("Xoá ảnh đính kèm");
+  });
+
+  it("loads persisted quick replies and exposes loading, error, and empty states", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("QuickReplyContract");
+    expect(source).toContain('"/api/v1/quick-replies"');
+    expect(source).toContain('method: "GET"');
+    expect(source).toContain("loadQuickReplies");
+    expect(source).toContain("Đang tải mẫu trả lời nhanh...");
+    expect(source).toContain("Không thể tải danh sách trả lời nhanh");
+    expect(source).toContain("Chưa có mẫu trả lời nhanh");
+  });
+
+  it("submits quick replies as multipart fields without a JSON content type", () => {
+    const settingsSource = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const apiSource = readFileSync(new URL("../lib/api.ts", import.meta.url), "utf8");
+
+    expect(settingsSource).toContain("new FormData()");
+    expect(settingsSource).toContain('formData.append("shortcut", reply.shortcut)');
+    expect(settingsSource).toContain('formData.append("message", reply.message)');
+    expect(settingsSource).toContain('formData.append("attachment", reply.attachment)');
+    expect(settingsSource).toContain("body: formData");
+    expect(apiSource).toContain("init.body instanceof FormData");
+  });
+
+  it("renders saved attachment URLs and supports editing or deleting quick replies", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("reply.attachment.secureUrl");
+    expect(source).toContain("Ảnh đính kèm của mẫu trả lời nhanh");
+    expect(source).toContain("Sửa ${reply.shortcut}");
+    expect(source).toContain("Xóa ${reply.shortcut}");
+    expect(source).toContain('method: "PATCH"');
+    expect(source).toContain('method: "DELETE"');
+    expect(source).toContain("Không thể tải ảnh đính kèm");
+    expect(source).toContain("Đang lưu...");
+    expect(source).toContain("if (saved) setAttachment(null)");
   });
 });
