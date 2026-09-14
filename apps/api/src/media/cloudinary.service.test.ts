@@ -103,13 +103,21 @@ describe("CloudinaryMediaService", () => {
     );
   });
 
-  it("rejects construction without complete Cloudinary configuration", async () => {
+  it("defers missing Cloudinary configuration until an image upload", async () => {
     stubEnvironment({ CLOUDINARY_API_SECRET: "" });
     const { CloudinaryMediaService } = await importService();
+    const uploader = createUploader();
+    const service = new CloudinaryMediaService({ uploader });
 
-    expect(() => new CloudinaryMediaService({ uploader: createUploader() })).toThrow(
-      "Cloudinary is not configured"
-    );
+    await expect(service.uploadImage({
+      buffer: Buffer.from("image"),
+      filename: "sample.png",
+      mimeType: "image/png",
+      userId: "user-1",
+      folder: "nhuu-chat/quick-replies"
+    })).rejects.toThrow("Cloudinary is not configured");
+
+    expect(uploader.upload_stream).not.toHaveBeenCalled();
   });
 
   it("rejects a non-image MIME type before uploading", async () => {

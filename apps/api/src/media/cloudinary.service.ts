@@ -80,21 +80,25 @@ function createDefaultUploader(): CloudinaryUploader {
 }
 
 export class CloudinaryMediaService {
+  private readonly configuration: CloudinaryConfiguration;
   private readonly uploader: CloudinaryUploader;
 
   constructor(options: CloudinaryMediaServiceOptions = {}) {
-    const configuration = options.configuration ?? env;
+    this.configuration = options.configuration ?? env;
+    this.uploader = options.uploader ?? createDefaultUploader();
+  }
 
-    if (!isConfigured(configuration)) {
+  // Chỉ xác thực cấu hình khi một thao tác thực sự cần gọi Cloudinary.
+  private configureCloudinary(): void {
+    if (!isConfigured(this.configuration)) {
       throw new Error("Cloudinary is not configured");
     }
 
     cloudinary.config({
-      cloud_name: configuration.CLOUDINARY_CLOUD_NAME,
-      api_key: configuration.CLOUDINARY_API_KEY,
-      api_secret: configuration.CLOUDINARY_API_SECRET
+      cloud_name: this.configuration.CLOUDINARY_CLOUD_NAME,
+      api_key: this.configuration.CLOUDINARY_API_KEY,
+      api_secret: this.configuration.CLOUDINARY_API_SECRET
     });
-    this.uploader = options.uploader ?? createDefaultUploader();
   }
 
   // Tải ảnh hợp lệ lên thư mục riêng của người dùng và trả metadata dùng chung.
@@ -112,6 +116,8 @@ export class CloudinaryMediaService {
     if (input.buffer.byteLength > MAX_IMAGE_BYTES) {
       throw new Error("Image exceeds 5 MiB limit");
     }
+
+    this.configureCloudinary();
 
     return new Promise<MediaUploadResult>((resolve, reject) => {
       const stream = this.uploader.upload_stream({
@@ -144,6 +150,7 @@ export class CloudinaryMediaService {
   }
 
   async destroyMedia(publicId: string, resourceType: "image" | "video"): Promise<void> {
+    this.configureCloudinary();
     await this.uploader.destroy(publicId, { resource_type: resourceType });
   }
 }
