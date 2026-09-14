@@ -168,11 +168,16 @@ describe("Settings page", () => {
     expect(source).toContain("actionError && <p");
   });
 
-  it("keeps the committed Settings page independent of dirty dashboard account props", () => {
+  it("preserves dashboard account callbacks through a local compatible props boundary", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
-    expect(source).not.toContain("DashboardAccount");
-    expect(source).not.toContain("onLogout?:");
-    expect(source).not.toContain("onProfile?:");
+    expect(source).not.toContain('import type { DashboardAccount');
+    expect(source).toContain("type SettingsDashboardAccount");
+    expect(source).toContain("user?: SettingsDashboardAccount | null");
+    expect(source).toContain("onLogout?: () => void");
+    expect(source).toContain("onProfile?: () => void");
+    expect(source).toContain("function SettingsDashboardTopbar");
+    expect(source).toContain("props as React.ComponentProps<typeof DashboardTopbar>");
+    expect(source).toContain("<SettingsDashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}");
   });
 });

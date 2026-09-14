@@ -69,3 +69,31 @@ Kết quả GREEN: 15/15 tests pass; Vite build pass, 127 modules transformed. K
 
 - Tách `pageError`, `actionError`, và `modalError`: GET error thay vùng bảng thay vì hiện empty state; lỗi upload/lưu hiển thị bên trong modal z-50.
 - Bỏ `DashboardAccount`, `user`, `onLogout`, `onProfile` khỏi code và source test Task 4, nên Settings commit không cần symbol Dashboard/App chưa commit.
+
+## Bổ sung sau re-review: giữ ngữ cảnh tài khoản Dashboard
+
+### RED
+
+Thay source regression test để yêu cầu `SettingsPage` giữ `user`, `onLogout`, `onProfile`, dùng type tài khoản cấu trúc cục bộ và không import `DashboardAccount` từ `DashboardTopbar`:
+
+```text
+npm test -- --run apps/web/src/pages/SettingsPage.test.tsx
+```
+
+Kết quả RED: 1/15 test fail vì thiếu `SettingsDashboardAccount` và lớp tương thích truyền props sang topbar.
+
+### GREEN
+
+```text
+npm test -- --run apps/web/src/pages/SettingsPage.test.tsx
+pnpm --dir apps/web run build
+git diff --check
+```
+
+Kết quả GREEN: 15/15 SettingsPage tests pass; Vite production build pass (127 modules transformed); kiểm tra whitespace pass.
+
+### Nội dung sửa
+
+- Khôi phục optional `user`, `onLogout`, `onProfile` bằng `SettingsDashboardAccount` cấu trúc cục bộ; không import type từ `DashboardTopbar`.
+- `SettingsDashboardTopbar` cast props về `React.ComponentProps<typeof DashboardTopbar>` để vẫn typecheck với DashboardTopbar ở committed base, đồng thời spread giữ nguyên các props ở runtime cho DashboardTopbar dirty hiện tại.
+- Cả ba nhánh render Settings đều truyền account và callbacks qua lớp tương thích; không chạm `App.tsx` hoặc `DashboardTopbar.tsx` dirty.
