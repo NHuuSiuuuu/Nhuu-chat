@@ -7,6 +7,7 @@ import {
   listAssistants,
   updateAssistant
 } from "../controllers/assistant.controller.js";
+import { previewAssistant } from "../controllers/assistant-preview.controller.js";
 import {
   createAutomationTemplate,
   deleteAutomationTemplate,
@@ -19,6 +20,7 @@ export const assistantRouter = Router();
 assistantRouter.use(requireRole("admin", "agent"));
 assistantRouter.get("/", listAssistants);
 assistantRouter.post("/", createAssistant);
+assistantRouter.post("/:assistantId/preview", previewAssistant);
 assistantRouter.patch("/:assistantId", updateAssistant);
 assistantRouter.delete("/:assistantId", deleteAssistant);
 assistantRouter.get("/:assistantId/templates", listAutomationTemplates);
