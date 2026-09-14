@@ -76,4 +76,28 @@ describe("production server bootstrap", () => {
     expect(restorePersonalClients).not.toHaveBeenCalled();
     expect(listen).not.toHaveBeenCalled();
   });
+
+  it("preserves the hydration failure when disconnect cleanup also fails", async () => {
+    const hydrationFailure = new Error("knowledge hydration failed");
+    const disconnectFailure = new Error("database disconnect failed");
+    const disconnectDatabase = vi.fn(async () => {
+      throw disconnectFailure;
+    });
+    const restorePersonalClients = vi.fn(async () => undefined);
+    const listen = vi.fn(async () => undefined);
+
+    await expect(startServer({
+      connectDatabase: async () => undefined,
+      hydrateKnowledge: async () => {
+        throw hydrationFailure;
+      },
+      restorePersonalClients,
+      disconnectDatabase,
+      listen
+    })).rejects.toBe(hydrationFailure);
+
+    expect(disconnectDatabase).toHaveBeenCalledOnce();
+    expect(restorePersonalClients).not.toHaveBeenCalled();
+    expect(listen).not.toHaveBeenCalled();
+  });
 });

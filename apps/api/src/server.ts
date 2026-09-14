@@ -51,7 +51,7 @@ export async function startServer(dependencies: ServerDependencies = {}): Promis
     await hydrateKnowledge();
     await restore();
   } catch (error) {
-    await disconnect();
+    await disconnect().catch(() => undefined);
     throw error;
   }
   const httpServer = createServer(createApp());
