@@ -11,6 +11,7 @@ MVP quản lý inbox chăm sóc khách hàng Telegram và trợ lý RAG. MongoDB
 - Telegram webhook có secret và idempotency.
 - REST conversation/message API và Socket.IO room authentication.
 - CRUD danh mục thẻ hội thoại dùng chung cho admin/agent tại `/api/v1/conversation-tags`.
+- CRUD mẫu trả lời nhanh dùng chung cho admin/agent tại `/api/v1/quick-replies`, hỗ trợ lưu một ảnh đính kèm qua Cloudinary.
 - Knowledge chunking, TXT/Markdown/PDF/DOCX parser, provider-independent RAG.
 - Bot Pause 30 phút và retry outbound 0s/1s/4s.
 - Inbox React tối thiểu.
@@ -38,6 +39,27 @@ GEMINI_CHAT_MODEL=gemini-3.5-flash-lite
 `GEMINI_API_KEY` là cấu hình backend bắt buộc khi muốn gọi Gemini; `GEMINI_CHAT_MODEL` là tùy chọn và mặc định là `gemini-3.5-flash-lite`. API key chỉ được đặt trong `apps/api/.env`, không đưa vào frontend, request của trình duyệt hoặc repository.
 
 Endpoint `POST /api/v1/conversations/:id/ai-suggestions` yêu cầu quyền `admin` hoặc `agent`, lấy 6 tin nhắn cuối của cả khách hàng và nhân viên theo thứ tự thời gian để tạo ngữ cảnh, rồi trả tối đa 3 gợi ý cùng `source` (`gemini` hoặc `fallback`). Nếu chưa cấu hình key, không có tin nhắn phù hợp, Gemini timeout/lỗi quota hoặc trả dữ liệu không hợp lệ, backend tự dùng gợi ý cục bộ để composer vẫn hoạt động. Prompt và response gửi tới Gemini chỉ được dùng trong request, không được lưu vào database.
+
+### Trả lời nhanh và ảnh Cloudinary
+
+Để lưu ảnh đính kèm cho mẫu trả lời nhanh, điền đủ ba biến sau trong `apps/api/.env` (có thể để trống nếu không dùng ảnh):
+
+```dotenv
+CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=your-cloudinary-api-key
+CLOUDINARY_API_SECRET=your-cloudinary-api-secret
+```
+
+Các route `/api/v1/quick-replies` chỉ cho `admin` và `agent`, đồng thời mọi thao tác chỉ thuộc về tài khoản đã xác thực:
+
+- `GET /api/v1/quick-replies`: liệt kê mẫu của tài khoản hiện tại.
+- `POST /api/v1/quick-replies`: tạo mẫu với field text `shortcut`, `message` và tùy chọn file `attachment`.
+- `PATCH /api/v1/quick-replies/:id`: cập nhật một hoặc nhiều field; nếu không gửi `attachment` thì giữ ảnh cũ.
+- `DELETE /api/v1/quick-replies/:id`: xóa mẫu và ảnh liên kết.
+
+`POST` và `PATCH` dùng `multipart/form-data`; `attachment` phải là ảnh (`image/*`) và không vượt quá 5 MiB. Backend nhận file trong memory rồi stream lên Cloudinary vào thư mục riêng `nhuu-chat/quick-replies/<userId>`, lưu metadata `secureUrl`, `publicId`, loại tài nguyên, MIME type, kích thước và kích thước ảnh. Khi thay hoặc xóa mẫu, asset cũ được dọn khỏi Cloudinary; upload mồ côi sau khi MongoDB ghi thất bại cũng được dọn best-effort, còn lỗi dọn media không làm thay đổi kết quả persistence.
+
+Tính năng này mới chỉ lưu ảnh cho mẫu trả lời nhanh. Composer chưa gửi media trong message và chưa hỗ trợ upload video.
 
 Mở hai terminal riêng để chạy API và web:
 

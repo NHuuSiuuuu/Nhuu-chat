@@ -35,6 +35,7 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
 - Socket.IO room authentication và event realtime cho message/conversation.
 - API đọc/ghi hội thoại, message, customer và knowledge.
 - API CRUD danh mục thẻ hội thoại dùng chung cho admin/agent tại `/api/v1/conversation-tags`.
+- API CRUD mẫu trả lời nhanh dùng chung cho admin/agent tại `/api/v1/quick-replies`, hỗ trợ một ảnh đính kèm lưu trên Cloudinary.
 - Chunking và parser cho TXT, Markdown, PDF, DOCX; RAG adapter độc lập với provider.
 - Bot Pause 30 phút và retry outbound theo các mốc `0s`, `1s`, `4s`.
 - Frontend đã chuyển sang Tailwind CSS v4; entry CSS duy nhất là `apps/web/src/styles/tailwind.css`.
@@ -136,10 +137,27 @@ cp .env.example apps/api/.env
 - `MONGODB_TEST_URI` nếu muốn chạy integration test Mongo ổn định.
 - `GEMINI_API_KEY` nếu muốn bật gợi ý trả lời Gemini.
 - `GEMINI_CHAT_MODEL` tùy chọn; mặc định là `gemini-2.5-flash-lite`.
+- `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` và `CLOUDINARY_API_SECRET` nếu muốn lưu ảnh đính kèm mẫu trả lời nhanh.
 
 Không commit `.env`, token, secret hoặc encryption key.
 
 `GEMINI_API_KEY` chỉ được lưu ở backend trong `apps/api/.env`; không đưa key vào frontend, request của trình duyệt hoặc repository. Endpoint `POST /api/v1/conversations/:id/ai-suggestions` chỉ cho `admin` và `agent`, đọc 6 tin nhắn cuối của cả khách hàng và nhân viên theo thứ tự thời gian, rồi trả tối đa 3 gợi ý kèm `source` là `gemini` hoặc `fallback`. Khi thiếu key, không có tin nhắn phù hợp, Gemini timeout/lỗi quota hoặc trả dữ liệu không hợp lệ, backend trả gợi ý cục bộ để không chặn composer. Prompt và response của request Gemini không được lưu vào database.
+
+### Trả lời nhanh và ảnh Cloudinary
+
+Khi dùng ảnh đính kèm, cần điền đủ các biến sau trong `apps/api/.env`:
+
+```dotenv
+CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=your-cloudinary-api-key
+CLOUDINARY_API_SECRET=your-cloudinary-api-secret
+```
+
+Các route `/api/v1/quick-replies` yêu cầu role `admin` hoặc `agent`, nhưng dữ liệu vẫn được giới hạn theo user đã xác thực: `GET` chỉ liệt kê mẫu của user đó, `PATCH` và `DELETE` không truy cập mẫu của user khác. `POST` tạo mẫu, `PATCH /:id` cập nhật một phần, và `DELETE /:id` xóa mẫu. Hai route ghi dữ liệu dùng `multipart/form-data` với field text `shortcut`, `message` và field file tùy chọn `attachment`; `PATCH` không có file sẽ giữ ảnh hiện tại.
+
+`attachment` chỉ nhận MIME type `image/*`, tối đa 5 MiB (5 × 1024 × 1024 byte). Backend stream ảnh từ memory lên Cloudinary vào `nhuu-chat/quick-replies/<userId>` và lưu URL bảo mật, public ID, resource type, MIME type, số byte cùng metadata kích thước ảnh. Khi thay ảnh, xóa mẫu hoặc dọn upload mồ côi sau khi MongoDB thất bại, asset Cloudinary tương ứng được xóa theo cơ chế best-effort; lỗi cleanup được ghi log và không rollback trạng thái MongoDB đã quyết định. Nếu chưa cấu hình Cloudinary, các thao tác không kèm ảnh vẫn không cần khởi tạo media service, còn request có ảnh sẽ lỗi cấu hình.
+
+Đây chưa phải luồng gửi media: message composer hiện chưa gửi ảnh/media và hệ thống cũng chưa hỗ trợ upload video.
 
 Khởi động Redis local:
 
@@ -201,6 +219,7 @@ Các test quan trọng của Inbox kiểm tra tự cuộn, unread state, metadat
 - Vector store hiện vẫn là adapter in-memory cho MVP; MongoDB Atlas Vector Search chưa được bật cho production.
 - Redis adapter và Mongo integration cần xác minh lại trong CI/Atlas sạch.
 - Nút `+ Tạo đơn`, ghi chú và một số toolbar hiện mới là UI placeholder; chưa có luồng persistence/order backend hoàn chỉnh.
+- Ảnh Cloudinary hiện chỉ dùng cho mẫu trả lời nhanh; gửi media trong message và upload video chưa được triển khai.
 - Meta/Instagram OAuth, Zalo connector, WebRTC và load test thực tế chưa thuộc MVP hiện tại.
 
 ## 8. Kế hoạch tiếp theo

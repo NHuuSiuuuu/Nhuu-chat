@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Tích hợp Cloudinary cho ảnh đính kèm của mẫu trả lời nhanh với các biến `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`; chỉ nhận ảnh tối đa 5 MiB qua CRUD `/api/v1/quick-replies`.
+- Ghi rõ giới hạn hiện tại: việc gửi media trong message và upload video chưa được triển khai.
 - Ẩn thanh scrollbar trên các vùng cuộn của Inbox, gợi ý AI, sidebar và modal nhưng vẫn giữ thao tác cuộn.
 - Kết nối phần Trợ lý AI với backend: bật/tắt mô hình và gợi ý, chọn tier Gemini, trigger gợi ý theo thao tác, và cấu hình cửa sổ cảm xúc 3/6/10 tin nhắn.
 - Sửa layout switch và nhóm nút điều khiển Trợ lý AI để không tràn hoặc lệch trên màn hình hẹp.
