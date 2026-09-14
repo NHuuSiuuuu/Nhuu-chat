@@ -47,8 +47,13 @@ export async function startServer(dependencies: ServerDependencies = {}): Promis
   const restore = dependencies.restorePersonalClients ?? restoreActivePersonalClients;
   const disconnect = dependencies.disconnectDatabase ?? disconnectDatabase;
   await connect(env.MONGODB_URI);
-  await hydrateKnowledge();
-  await restore();
+  try {
+    await hydrateKnowledge();
+    await restore();
+  } catch (error) {
+    await disconnect();
+    throw error;
+  }
   const httpServer = createServer(createApp());
 
   const socketServer = createRealtimeServer(httpServer);

@@ -55,4 +55,25 @@ describe("production server bootstrap", () => {
 
     expect(disconnectDatabase).toHaveBeenCalledOnce();
   });
+
+  it("disconnects without restoring or listening when knowledge hydration fails", async () => {
+    const failure = new Error("knowledge hydration failed");
+    const disconnectDatabase = vi.fn(async () => undefined);
+    const restorePersonalClients = vi.fn(async () => undefined);
+    const listen = vi.fn(async () => undefined);
+
+    await expect(startServer({
+      connectDatabase: async () => undefined,
+      hydrateKnowledge: async () => {
+        throw failure;
+      },
+      restorePersonalClients,
+      disconnectDatabase,
+      listen
+    })).rejects.toBe(failure);
+
+    expect(disconnectDatabase).toHaveBeenCalledOnce();
+    expect(restorePersonalClients).not.toHaveBeenCalled();
+    expect(listen).not.toHaveBeenCalled();
+  });
 });
