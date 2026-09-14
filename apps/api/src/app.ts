@@ -12,6 +12,7 @@ import { customerRouter } from "./routes/customers.routes.js";
 import { knowledgeRouter } from "./routes/knowledge.routes.js";
 import { conversationTagRouter } from "./routes/conversation-tags.routes.js";
 import { aiSettingsRouter } from "./routes/ai-settings.routes.js";
+import { quickReplyRouter } from "./routes/quick-reply.routes.js";
 import { corsAllowlist, rateLimit, requestId, securityHeaders } from "./common/security.middleware.js";
 
 export function createApp(): Express {
@@ -36,6 +37,7 @@ export function createApp(): Express {
   app.use("/api/v1/knowledge", knowledgeRouter);
   app.use("/api/v1/conversation-tags", conversationTagRouter);
   app.use("/api/v1/ai-settings", aiSettingsRouter);
+  app.use("/api/v1/quick-replies", quickReplyRouter);
   app.use(errorHandler);
 
   return app;
