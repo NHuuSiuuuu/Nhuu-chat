@@ -62,6 +62,24 @@ export interface ConversationContract {
   tags?: ConversationTagContract[];
 }
 
+export interface QuickReplyAttachmentContract {
+  secureUrl: string;
+  publicId: string;
+  resourceType: "image" | "video";
+  mimeType: string;
+  bytes: number;
+  width?: number;
+  height?: number;
+  duration?: number;
+}
+
+export interface QuickReplyContract {
+  id: string;
+  shortcut: string;
+  message: string;
+  attachment?: QuickReplyAttachmentContract;
+}
+
 export const chatEvents = {
   messageReceived: "chat:message_received",
   conversationUpdated: "chat:conversation_updated",

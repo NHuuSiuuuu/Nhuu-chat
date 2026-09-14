@@ -56,6 +56,18 @@ describe("environment configuration", () => {
     expect(env.GEMINI_CHAT_MODEL).toBe("gemini-test-model");
   });
 
+  it("parses optional Cloudinary configuration", async () => {
+    const { env } = await importEnv({
+      CLOUDINARY_CLOUD_NAME: "cloudinary-cloud",
+      CLOUDINARY_API_KEY: "cloudinary-api-key",
+      CLOUDINARY_API_SECRET: "cloudinary-api-secret"
+    });
+
+    expect(env.CLOUDINARY_CLOUD_NAME).toBe("cloudinary-cloud");
+    expect(env.CLOUDINARY_API_KEY).toBe("cloudinary-api-key");
+    expect(env.CLOUDINARY_API_SECRET).toBe("cloudinary-api-secret");
+  });
+
   it.each([
     ["NODE_ENV", "staging"],
     ["MONGODB_URI", "mongodb-nope://localhost/nhuu-chat"],

@@ -30,6 +30,9 @@ const appEnvSchema = z.object({
   TELEGRAM_API_ID: z.coerce.number().int().positive().optional(),
   TELEGRAM_API_HASH: z.string().min(1).optional(),
   GEMINI_API_KEY: z.string().min(1).optional(),
+  CLOUDINARY_CLOUD_NAME: z.string().min(1).optional(),
+  CLOUDINARY_API_KEY: z.string().min(1).optional(),
+  CLOUDINARY_API_SECRET: z.string().min(1).optional(),
   // Gemini 3.5 Flash Lite is the default low-latency model for reply suggestions.
   GEMINI_CHAT_MODEL: z.string().min(1).default("gemini-3.5-flash-lite")
 });
