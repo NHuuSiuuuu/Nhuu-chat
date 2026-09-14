@@ -7,13 +7,14 @@ const dependencyMocks = vi.hoisted(() => ({
   botSendText: vi.fn(),
   createMessage: vi.fn(),
   findConversationById: vi.fn(),
+  pauseConversation: vi.fn(),
   getActivePersonalClient: vi.fn(),
   personalSendMessage: vi.fn(),
   readProviderSecretByName: vi.fn()
 }));
 
 vi.mock("../models/conversation.model.js", () => ({
-  ConversationModel: { findById: dependencyMocks.findConversationById }
+  ConversationModel: { findById: dependencyMocks.findConversationById, findByIdAndUpdate: dependencyMocks.pauseConversation }
 }));
 
 vi.mock("../models/message.model.js", () => ({
@@ -94,6 +95,20 @@ describe("sendOutboundMessage", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("pauses the bot before an authorized agent calls the connector", async () => {
+    arrangeConversation(conversation());
+    arrangeStoredMessage();
+    dependencyMocks.readProviderSecretByName.mockResolvedValue("test-token");
+    dependencyMocks.botSendText.mockImplementation(async () => {
+      expect(dependencyMocks.pauseConversation).toHaveBeenCalledWith("conversation-1", {
+        $max: { botPausedUntil: new Date("2026-09-10T05:00:00.000Z") }
+      });
+      return { externalMessageId: "123" };
+    });
+    await sendOutboundMessage({ conversationId: "conversation-1", content: "Hello" }, agentAuth);
+    expect(dependencyMocks.botSendText).toHaveBeenCalledOnce();
   });
 
   it("delivers through the Telegram bot and persists the external message id", async () => {
@@ -335,6 +350,7 @@ describe("sendOutboundMessage", () => {
       message: "You do not own this Telegram connection"
     } satisfies Partial<AppError>);
 
+    expect(dependencyMocks.pauseConversation).not.toHaveBeenCalled();
     expect(dependencyMocks.getActivePersonalClient).not.toHaveBeenCalled();
     expect(dependencyMocks.createMessage).not.toHaveBeenCalled();
   });

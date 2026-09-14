@@ -4,6 +4,37 @@ import { OutboundQueue } from "./outbound.queue.js";
 import { OutboundWorker } from "./outbound.worker.js";
 
 describe("outbound worker", () => {
+  it("supports one attempt for adapters without idempotency keys", async () => {
+    const queue = new OutboundQueue();
+    let calls = 0;
+    const states: string[] = [];
+    const worker = new OutboundWorker({
+      queue, now: () => new Date(), maxAttempts: 1,
+      deliver: async () => { calls++; throw new Error("ambiguous delivery"); },
+      updateDelivery: async (_command, state) => { states.push(state.status); }
+    });
+    const id = await queue.enqueue({ messageId: "m", conversationId: "c", platform: "telegram", channelId: "42", content: "Hi" });
+    await worker.runNext();
+    expect(queue.get(id)).toMatchObject({ status: "failed", attempts: 1 });
+    expect(states).toEqual(["failed"]);
+    expect(await worker.runNext()).toBe(false);
+    expect(calls).toBe(1);
+  });
+
+  it("never retries an acknowledged send when delivery-state persistence fails", async () => {
+    const queue = new OutboundQueue();
+    let calls = 0;
+    const worker = new OutboundWorker({
+      queue, now: () => new Date(),
+      deliver: async () => { calls++; return {}; },
+      updateDelivery: async () => { throw new Error("database unavailable"); }
+    });
+    const id = await queue.enqueue({ messageId: "m", conversationId: "c", platform: "telegram", channelId: "42", content: "Hi" });
+    await expect(worker.runNext()).rejects.toThrow("database unavailable");
+    expect(queue.get(id)).toMatchObject({ status: "completed", attempts: 1 });
+    expect(await worker.runNext()).toBe(false);
+    expect(calls).toBe(1);
+  });
   it("retries at 1s and 4s before marking a delivery failed", async () => {
     let now = new Date("2026-09-09T10:00:00.000Z");
     const queue = new OutboundQueue(() => now, () => "job-1");

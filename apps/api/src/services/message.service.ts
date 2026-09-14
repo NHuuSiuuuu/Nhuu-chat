@@ -2,6 +2,7 @@ import { TelegramClient } from "../channels/telegram/telegram.client.js";
 import { AppError } from "../common/errors.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { MessageModel } from "../models/message.model.js";
+import { pauseBot } from "../orchestration/bot-pause.service.js";
 import { canJoinConversation } from "../realtime/access.js";
 import type { AuthUser } from "./auth.service.js";
 import { toConversation } from "./conversation.service.js";
@@ -52,14 +53,16 @@ export async function sendOutboundMessage(
     throw new AppError(403, "FORBIDDEN", "You do not have access to this conversation");
   }
 
+  if (conversation.platform === "telegram_personal" && String(conversation.ownerId) !== auth.id) {
+    throw new AppError(403, "FORBIDDEN", "You do not own this Telegram connection");
+  }
+  // Tạm dừng bot sau kiểm tra quyền và trước connector để nhân viên tiếp quản cả khi gửi bị lỗi.
+  await pauseBot(conversationId, new Date());
   let deliveryStatus: "pending" | "sent" | "failed" = "sent";
   let externalMessageId: string | undefined;
   if (conversation.platform === "telegram_personal") {
     const userId = auth.id;
-    if (!userId || String(conversation.ownerId) !== userId) {
-      throw new AppError(403, "FORBIDDEN", "You do not own this Telegram connection");
-    }
-    // The personal connector uses toMessage for inbound messages; load it only for delivery.
+    // Connector cá nhân dùng toMessage cho tin đến; chỉ nạp khi gửi để tránh import vòng.
     const { getActivePersonalClient } = await import("./telegram-personal.service.js");
     const client = await getActivePersonalClient(userId);
     if (!client) {
