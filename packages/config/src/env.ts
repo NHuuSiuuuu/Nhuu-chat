@@ -12,6 +12,11 @@ function usesProtocol(protocols: readonly string[]) {
   };
 }
 
+const optionalCloudinaryEnv = z.preprocess(
+  (value) => value === "" ? undefined : value,
+  z.string().min(1).optional()
+);
+
 const appEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]),
   PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
@@ -30,9 +35,9 @@ const appEnvSchema = z.object({
   TELEGRAM_API_ID: z.coerce.number().int().positive().optional(),
   TELEGRAM_API_HASH: z.string().min(1).optional(),
   GEMINI_API_KEY: z.string().min(1).optional(),
-  CLOUDINARY_CLOUD_NAME: z.string().min(1).optional(),
-  CLOUDINARY_API_KEY: z.string().min(1).optional(),
-  CLOUDINARY_API_SECRET: z.string().min(1).optional(),
+  CLOUDINARY_CLOUD_NAME: optionalCloudinaryEnv,
+  CLOUDINARY_API_KEY: optionalCloudinaryEnv,
+  CLOUDINARY_API_SECRET: optionalCloudinaryEnv,
   // Gemini 3.5 Flash Lite is the default low-latency model for reply suggestions.
   GEMINI_CHAT_MODEL: z.string().min(1).default("gemini-3.5-flash-lite")
 });

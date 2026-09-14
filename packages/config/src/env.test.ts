@@ -68,6 +68,18 @@ describe("environment configuration", () => {
     expect(env.CLOUDINARY_API_SECRET).toBe("cloudinary-api-secret");
   });
 
+  it("treats blank Cloudinary configuration as unconfigured", async () => {
+    const { env } = await importEnv({
+      CLOUDINARY_CLOUD_NAME: "",
+      CLOUDINARY_API_KEY: "",
+      CLOUDINARY_API_SECRET: ""
+    });
+
+    expect(env.CLOUDINARY_CLOUD_NAME).toBeUndefined();
+    expect(env.CLOUDINARY_API_KEY).toBeUndefined();
+    expect(env.CLOUDINARY_API_SECRET).toBeUndefined();
+  });
+
   it.each([
     ["NODE_ENV", "staging"],
     ["MONGODB_URI", "mongodb-nope://localhost/nhuu-chat"],
