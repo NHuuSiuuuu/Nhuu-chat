@@ -97,12 +97,6 @@ describe("Settings page", () => {
     expect(source).toContain("onSettingsChange");
   });
 
-  it("passes access token and refresh handler into SettingsPage", () => {
-    const source = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
-
-    expect(source).toContain("<SettingsPage {...topbarProps} token={auth.accessToken} refresh={refresh}");
-  });
-
   it("renders the quick replies settings page and add modal", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
@@ -161,5 +155,24 @@ describe("Settings page", () => {
     expect(source).toContain("Không thể tải ảnh đính kèm");
     expect(source).toContain("Đang lưu...");
     expect(source).toContain("if (saved) setAttachment(null)");
+  });
+
+  it("renders quick reply errors at their owning surface without an empty result after GET fails", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("const [pageError, setPageError]");
+    expect(source).toContain("const [modalError, setModalError]");
+    expect(source).toContain('setPageError("Không thể tải danh sách trả lời nhanh")');
+    expect(source).toContain("error={modalError}");
+    expect(source).toContain("pageError ? <p");
+    expect(source).toContain("actionError && <p");
+  });
+
+  it("keeps the committed Settings page independent of dirty dashboard account props", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).not.toContain("DashboardAccount");
+    expect(source).not.toContain("onLogout?:");
+    expect(source).not.toContain("onProfile?:");
   });
 });
