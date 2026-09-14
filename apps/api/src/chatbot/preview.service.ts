@@ -1,15 +1,12 @@
 import type { AutomationTemplateContract, BotPreviewResponse } from "@nhuu-chat/contracts";
 
-import { DeterministicEmbeddingProvider } from "../ai/embedding.provider.js";
-import { InMemoryVectorStore } from "../ai/vector.store.js";
+import { knowledgeEmbedding, knowledgeVectorStore } from "../ai/knowledge-runtime.js";
 import type { BotConversationTurn, BotReplyContext } from "./bot-reply.provider.js";
 import { matchAutomationTemplate } from "./template-matcher.js";
 import { AppError } from "../common/errors.js";
 import { AssistantModel } from "../models/assistant.model.js";
 import { AutomationTemplateModel } from "../models/automation-template.model.js";
-import { KnowledgeChunkModel } from "../models/knowledge.model.js";
 
-const MAX_KNOWLEDGE_CANDIDATES = 50;
 const MAX_CONTEXT_CHUNKS = 5;
 
 export interface AssistantPreviewInput {
@@ -25,32 +22,10 @@ interface AssistantRow {
   fallbackMessage: string;
 }
 
-interface KnowledgeChunkRow {
-  ownerId: unknown;
-  documentId: unknown;
-  chunkIndex: number;
-  content: string;
-  embedding: number[];
-}
-
-// Đọc hữu hạn các chunk đúng owner rồi xếp hạng bằng vector store hiện có.
+// Tìm trên toàn bộ index đúng owner rồi chỉ lấy năm chunk xếp hạng cao nhất.
 async function retrieveContext(ownerId: string, message: string): Promise<BotReplyContext[]> {
-  const rows = await KnowledgeChunkModel.find({ ownerId })
-    .limit(MAX_KNOWLEDGE_CANDIDATES)
-    .lean();
-  if (rows.length === 0) return [];
-
-  const embedding = new DeterministicEmbeddingProvider();
-  const store = new InMemoryVectorStore();
-  await store.upsert((rows as unknown as KnowledgeChunkRow[]).map((row) => ({
-    ownerId: String(row.ownerId),
-    documentId: String(row.documentId),
-    chunkIndex: row.chunkIndex,
-    content: row.content,
-    embedding: row.embedding
-  })));
-  return store.search(
-    await embedding.embed(message),
+  return knowledgeVectorStore.search(
+    await knowledgeEmbedding.embed(message),
     MAX_CONTEXT_CHUNKS,
     { ownerId }
   );

@@ -1,14 +1,10 @@
 import type { RequestHandler } from "express";
 
-import { DeterministicEmbeddingProvider } from "../ai/embedding.provider.js";
-import { InMemoryVectorStore } from "../ai/vector.store.js";
+import { knowledgeEmbedding, knowledgeVectorStore } from "../ai/knowledge-runtime.js";
 import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
 import { AppError } from "../common/errors.js";
 import { knowledgeIdSchema, knowledgeInputSchema } from "../schemas/knowledge.schemas.js";
 import { deleteKnowledge, ingestKnowledge } from "../services/knowledge.service.js";
-
-const embedding = new DeterministicEmbeddingProvider();
-const store = new InMemoryVectorStore();
 
 function authenticatedOwnerId(request: Parameters<RequestHandler>[0]): string {
   const id = (request as AuthenticatedRequest).auth?.id;
@@ -24,7 +20,7 @@ export const createKnowledge: RequestHandler = async (request, response, next) =
     }
 
     response.status(201).json(await ingestKnowledge(
-      authenticatedOwnerId(request), result.data, embedding, store
+      authenticatedOwnerId(request), result.data, knowledgeEmbedding, knowledgeVectorStore
     ));
   } catch (error) {
     next(error);
@@ -38,7 +34,7 @@ export const removeKnowledge: RequestHandler = async (request, response, next) =
       throw new AppError(400, "INVALID_REQUEST", "Knowledge id is required");
     }
 
-    await deleteKnowledge(authenticatedOwnerId(request), result.data.id, store);
+    await deleteKnowledge(authenticatedOwnerId(request), result.data.id, knowledgeVectorStore);
     response.status(204).send();
   } catch (error) {
     next(error);

@@ -5,8 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const services = vi.hoisted(() => ({ ingestKnowledge: vi.fn(), deleteKnowledge: vi.fn() }));
 vi.mock("../services/knowledge.service.js", () => services);
 
-import { DeterministicEmbeddingProvider } from "../ai/embedding.provider.js";
-import { InMemoryVectorStore } from "../ai/vector.store.js";
+import { knowledgeEmbedding, knowledgeVectorStore } from "../ai/knowledge-runtime.js";
 import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
 import { AppError, errorHandler } from "../common/errors.js";
 import { createKnowledge, removeKnowledge } from "./knowledge.controller.js";
@@ -44,8 +43,10 @@ describe("knowledge controller without Mongo", () => {
     expect(services.ingestKnowledge).toHaveBeenCalledWith(
       "owner-1",
       { title: " FAQ ", content: " Answer " },
-      expect.any(DeterministicEmbeddingProvider), expect.any(InMemoryVectorStore)
+      expect.anything(), expect.anything()
     );
+    expect(services.ingestKnowledge.mock.calls[0][2]).toBe(knowledgeEmbedding);
+    expect(services.ingestKnowledge.mock.calls[0][3]).toBe(knowledgeVectorStore);
     expect(response.status).toBe(201);
     expect(response.body).toEqual({
       _id: "knowledge-1", title: "FAQ", content: " Answer ", sourceType: "text", status: "ready"
@@ -56,8 +57,9 @@ describe("knowledge controller without Mongo", () => {
     const response = await request(createTestApp()).delete("/knowledge/knowledge-1");
 
     expect(services.deleteKnowledge).toHaveBeenCalledWith(
-      "owner-1", "knowledge-1", expect.any(InMemoryVectorStore)
+      "owner-1", "knowledge-1", expect.anything()
     );
+    expect(services.deleteKnowledge.mock.calls[0][2]).toBe(knowledgeVectorStore);
     expect(response.status).toBe(204);
     expect(response.text).toBe("");
   });

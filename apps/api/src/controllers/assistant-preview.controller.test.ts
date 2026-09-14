@@ -8,6 +8,7 @@ const dependencies = vi.hoisted(() => ({
   templateFind: vi.fn(),
   knowledgeFind: vi.fn(),
   embed: vi.fn(),
+  vectorSearch: vi.fn(),
   reply: vi.fn(),
   messageCreate: vi.fn(),
   processingCreate: vi.fn(),
@@ -28,6 +29,10 @@ vi.mock("../models/knowledge.model.js", () => ({
 }));
 vi.mock("../ai/embedding.provider.js", () => ({
   DeterministicEmbeddingProvider: vi.fn(() => ({ embed: dependencies.embed }))
+}));
+vi.mock("../ai/knowledge-runtime.js", () => ({
+  knowledgeEmbedding: { embed: dependencies.embed },
+  knowledgeVectorStore: { search: dependencies.vectorSearch }
 }));
 vi.mock("../chatbot/gemini-bot.provider.js", () => ({
   GeminiBotProvider: vi.fn(() => ({ reply: dependencies.reply }))
@@ -93,6 +98,7 @@ describe("assistant preview controller and service", () => {
     dependencies.templateFind.mockReturnValue(sortedQueryResult([]));
     dependencies.knowledgeFind.mockReturnValue(limitedQueryResult([]));
     dependencies.embed.mockResolvedValue([1, 0]);
+    dependencies.vectorSearch.mockResolvedValue([]);
     dependencies.reply.mockResolvedValue({ answer: "Có căn cứ", handoff: false, sources: [] });
   });
 
@@ -148,13 +154,14 @@ describe("assistant preview controller and service", () => {
   });
 
   it("retrieves owner-scoped knowledge for a RAG preview and reports AI source", async () => {
-    dependencies.knowledgeFind.mockReturnValue(limitedQueryResult([{
+    dependencies.vectorSearch.mockResolvedValue([{
       ownerId,
       documentId: "507f1f77bcf86cd799439012",
       chunkIndex: 2,
       content: "Đổi hàng trong 7 ngày.",
-      embedding: [1, 0]
-    }]));
+      embedding: [1, 0],
+      score: 1
+    }]);
     dependencies.reply.mockResolvedValue({
       answer: "Bạn có thể đổi hàng trong 7 ngày.",
       handoff: false,
@@ -172,7 +179,8 @@ describe("assistant preview controller and service", () => {
       source: "ai",
       handoff: false
     });
-    expect(dependencies.knowledgeFind).toHaveBeenCalledWith({ ownerId });
+    expect(dependencies.vectorSearch).toHaveBeenCalledWith([1, 0], 5, { ownerId });
+    expect(dependencies.knowledgeFind).not.toHaveBeenCalled();
     expect(dependencies.reply).toHaveBeenCalledWith(expect.objectContaining({
       context: [expect.objectContaining({
         documentId: "507f1f77bcf86cd799439012",
@@ -181,6 +189,49 @@ describe("assistant preview controller and service", () => {
         score: 1
       })]
     }));
+  });
+
+  it("finds a matching indexed chunk after the first fifty persisted chunks", async () => {
+    const irrelevantChunks = Array.from({ length: 50 }, (_, index) => ({
+      ownerId,
+      documentId: `irrelevant-${index}`,
+      chunkIndex: 0,
+      content: `Nội dung không liên quan ${index}`,
+      embedding: [0, 1]
+    }));
+    const matchingChunk = {
+      ownerId,
+      documentId: "matching-after-fifty",
+      chunkIndex: 0,
+      content: "Đổi hàng trong 7 ngày.",
+      embedding: [1, 0],
+      score: 1
+    };
+    dependencies.knowledgeFind.mockReturnValue(limitedQueryResult(irrelevantChunks));
+    dependencies.vectorSearch.mockResolvedValue([matchingChunk]);
+    dependencies.reply.mockImplementation(async (input: {
+      assistant: { fallbackMessage: string };
+      context?: Array<{ documentId: string; chunkIndex: number }>;
+    }) => input.context?.some((chunk) => chunk.documentId === matchingChunk.documentId)
+      ? {
+          answer: "Bạn có thể đổi hàng trong 7 ngày.",
+          handoff: false,
+          sources: [{ documentId: matchingChunk.documentId, chunkIndex: 0 }]
+        }
+      : { answer: input.assistant.fallbackMessage, handoff: true, sources: [] });
+
+    const response = await request(createTestApp())
+      .post(`/api/v1/assistants/${assistantId}/preview`)
+      .set("Authorization", "Bearer agent-token")
+      .send({ message: "Tôi được đổi hàng trong bao lâu?" });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      answer: "Bạn có thể đổi hàng trong 7 ngày.",
+      source: "ai",
+      handoff: false
+    });
+    expect(dependencies.knowledgeFind).not.toHaveBeenCalled();
   });
 
   it("returns fallback source without leaking provider failures", async () => {
