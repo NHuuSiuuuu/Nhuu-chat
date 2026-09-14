@@ -17,6 +17,9 @@ describe("production server bootstrap", () => {
       connectDatabase: async () => {
         events.push("connect");
       },
+      hydrateKnowledge: async () => {
+        events.push("hydrate-knowledge");
+      },
       restorePersonalClients: async () => {
         events.push("restore-personal-sessions");
       },
@@ -28,9 +31,11 @@ describe("production server bootstrap", () => {
       }
     });
 
-    expect(events).toEqual(["connect", "restore-personal-sessions", "listen"]);
+    expect(events).toEqual(["connect", "hydrate-knowledge", "restore-personal-sessions", "listen"]);
     await handle.shutdown();
-    expect(events).toEqual(["connect", "restore-personal-sessions", "listen", "disconnect"]);
+    expect(events).toEqual([
+      "connect", "hydrate-knowledge", "restore-personal-sessions", "listen", "disconnect"
+    ]);
   });
 
   it("disconnects when listen fails after database connection", async () => {
@@ -39,6 +44,7 @@ describe("production server bootstrap", () => {
     await expect(
       startServer({
         connectDatabase: async () => undefined,
+        hydrateKnowledge: async () => undefined,
         restorePersonalClients: async () => undefined,
         disconnectDatabase,
         listen: async () => {

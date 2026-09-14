@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { env } from "@nhuu-chat/config";
 
 import { createApp } from "./app.js";
+import { hydrateKnowledgeVectorStore } from "./ai/knowledge-runtime.js";
 import { connectDatabase, disconnectDatabase } from "./db/mongoose.js";
 import { closeRealtimeServer, createRealtimeServer } from "./realtime/socket.js";
 import { restoreActivePersonalClients } from "./services/telegram-personal.service.js";
@@ -13,6 +14,7 @@ import type { Server as HttpServer } from "node:http";
 
 export interface ServerDependencies {
   connectDatabase?: (uri: string) => Promise<void>;
+  hydrateKnowledge?: () => Promise<void>;
   restorePersonalClients?: () => Promise<void>;
   disconnectDatabase?: () => Promise<void>;
   listen?: (server: HttpServer, port: number) => Promise<void>;
@@ -41,9 +43,11 @@ function listenHttpServer(server: HttpServer, port: number): Promise<void> {
 
 export async function startServer(dependencies: ServerDependencies = {}): Promise<ServerHandle> {
   const connect = dependencies.connectDatabase ?? connectDatabase;
+  const hydrateKnowledge = dependencies.hydrateKnowledge ?? hydrateKnowledgeVectorStore;
   const restore = dependencies.restorePersonalClients ?? restoreActivePersonalClients;
   const disconnect = dependencies.disconnectDatabase ?? disconnectDatabase;
   await connect(env.MONGODB_URI);
+  await hydrateKnowledge();
   await restore();
   const httpServer = createServer(createApp());
 
