@@ -14,6 +14,29 @@ export function createQuickReplyDraft(reply: QuickReplyContract): { content: str
   return { content: reply.message, attachmentUrl: reply.attachment?.secureUrl ?? null };
 }
 
+// Giữ lựa chọn bàn phím trong vùng nhìn thấy mà không chuyển focus khỏi ô soạn tin.
+export function scrollActiveComposerOption(menu: HTMLDivElement | null): void {
+  menu?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+}
+
+export function ComposerSuggestionMenu({ kind, quickReplies, activeIndex, onQuickReply, onMember }: {
+  kind: "quick-reply" | "members";
+  quickReplies: QuickReplyContract[];
+  activeIndex: number;
+  onQuickReply: (reply: QuickReplyContract) => void;
+  onMember: (member: string) => void;
+}) {
+  const menuRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    scrollActiveComposerOption(menuRef.current);
+  }, [kind, activeIndex, quickReplies]);
+
+  return <div ref={menuRef} className="absolute bottom-full left-3 right-3 z-20 mb-2 max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl" role="listbox" aria-label={kind === "quick-reply" ? "Mẫu trả lời nhanh" : "Gợi ý thành viên"}>
+    {kind === "quick-reply" ? quickReplies.map((reply, index) => <button className={`block w-full rounded-md px-3 py-2 text-left text-sm transition ${index === activeIndex ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`} type="button" role="option" aria-selected={index === activeIndex} key={reply.id} onClick={() => onQuickReply(reply)}><span className="block font-semibold">/{reply.shortcut}</span><span className="block truncate text-xs text-gray-500">{reply.message}</span></button>) : members.map((suggestion, index) => <button className={`block w-full rounded-md px-3 py-2 text-left text-sm transition ${index === activeIndex ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`} type="button" role="option" aria-selected={index === activeIndex} key={suggestion} onClick={() => onMember(suggestion)}>{suggestion}</button>)}
+    {kind === "quick-reply" && quickReplies.length === 0 && <p className="px-3 py-2 text-sm text-gray-500">Chưa có mẫu trả lời nhanh</p>}
+  </div>;
+}
+
 export interface ComposerBehaviorState {
   content: string;
   attachmentUrl: string | null;
@@ -109,10 +132,7 @@ export function MessageComposer({ onSend, quickReplies, disabled = false, aiSugg
         {displayedAiSuggestions.map((suggestion) => <button className="min-w-[190px] max-w-[250px] shrink-0 truncate rounded-full border border-violet-200 bg-violet-50 px-4 py-2 text-left text-xs font-semibold text-violet-700 transition hover:border-violet-300 hover:bg-violet-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-300" type="button" key={suggestion} onClick={() => selectSuggestion(suggestion)} title={suggestion}>{suggestion}</button>)}
       </div>}
       <div className="relative px-3 py-1.5">
-        {suggestionKind && <div className="absolute bottom-full left-3 right-3 z-20 mb-2 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl" role="listbox" aria-label={suggestionKind === "quick-reply" ? "Mẫu trả lời nhanh" : "Gợi ý thành viên"}>
-          {suggestionKind === "quick-reply" ? quickReplies.map((reply, index) => <button className={`block w-full rounded-md px-3 py-2 text-left text-sm transition ${index === suggestionIndex ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`} type="button" role="option" aria-selected={index === suggestionIndex} key={reply.id} onClick={() => selectQuickReply(reply)}><span className="block font-semibold">/{reply.shortcut}</span><span className="block truncate text-xs text-gray-500">{reply.message}</span></button>) : members.map((suggestion, index) => <button className={`block w-full rounded-md px-3 py-2 text-left text-sm transition ${index === suggestionIndex ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`} type="button" role="option" aria-selected={index === suggestionIndex} key={suggestion} onClick={() => selectSuggestion(suggestion)}>{suggestion}</button>)}
-          {suggestionKind === "quick-reply" && quickReplies.length === 0 && <p className="px-3 py-2 text-sm text-gray-500">Chưa có mẫu trả lời nhanh</p>}
-        </div>}
+        {suggestionKind && <ComposerSuggestionMenu kind={suggestionKind} quickReplies={quickReplies} activeIndex={suggestionIndex} onQuickReply={selectQuickReply} onMember={selectSuggestion} />}
         <textarea className="min-h-12 w-full resize-none border-0 bg-transparent text-sm leading-5 text-gray-800 outline-none placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-1" aria-label="Tin nhắn" value={content} onChange={(event) => setContent(event.target.value)} onKeyDown={handleKeyDown} placeholder="Nhập tin nhắn... (gõ / để chèn mẫu trả lời nhanh, Shift+Enter để xuống dòng)" disabled={disabled} rows={1} />
       </div>
       {selectedAttachmentUrl && <div className="mx-3 mb-1 flex min-w-0 items-center gap-2 rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700"><InboxIcon name="image" size={16} /><span className="shrink-0 font-semibold">Ảnh đính kèm:</span><a className="min-w-0 truncate underline" href={selectedAttachmentUrl} target="_blank" rel="noreferrer">{selectedAttachmentUrl}</a><button className="ml-auto shrink-0 rounded p-1 hover:bg-sky-100" type="button" aria-label="Xoá ảnh đính kèm" onClick={() => setSelectedAttachmentUrl(null)}><InboxIcon name="close" size={14} /></button></div>}

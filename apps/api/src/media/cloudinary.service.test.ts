@@ -115,7 +115,12 @@ describe("CloudinaryMediaService", () => {
       mimeType: "image/png",
       userId: "user-1",
       folder: "nhuu-chat/quick-replies"
-    })).rejects.toThrow("Cloudinary is not configured");
+    })).rejects.toMatchObject({
+      name: "AppError",
+      statusCode: 503,
+      code: "CLOUDINARY_NOT_CONFIGURED",
+      message: "Cloudinary is not configured"
+    });
 
     expect(uploader.upload_stream).not.toHaveBeenCalled();
   });
@@ -152,6 +157,19 @@ describe("CloudinaryMediaService", () => {
     })).rejects.toThrow("Image exceeds 5 MiB limit");
 
     expect(uploader.upload_stream).not.toHaveBeenCalled();
+  });
+
+  it("reports missing configuration safely before attempting cleanup", async () => {
+    stubEnvironment();
+    const { CloudinaryMediaService } = await importService();
+    const uploader = createUploader();
+    const service = new CloudinaryMediaService({ uploader, configuration: {} });
+    await expect(service.destroyMedia("asset", "image")).rejects.toMatchObject({
+      statusCode: 503,
+      code: "CLOUDINARY_NOT_CONFIGURED",
+      message: "Cloudinary is not configured"
+    });
+    expect(uploader.destroy).not.toHaveBeenCalled();
   });
 
   it("destroys media with its resource type", async () => {

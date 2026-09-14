@@ -139,6 +139,46 @@ describe("quick reply controller and routes", () => {
     expect(service.createQuickReply).not.toHaveBeenCalled();
   });
 
+  describe.each(["post", "patch"] as const)("multipart limits on %s", (method) => {
+    it.each(["fields", "fieldSize", "fieldName", "parts"])("rejects excess %s before persistence", async (kind) => {
+    const path = method === "post" ? "/api/v1/quick-replies" : "/api/v1/quick-replies/507f1f77bcf86cd799439011";
+      const upload = request(createTestApp())[method](path)
+        .set("Authorization", "Bearer agent-token")
+        .field(kind === "fieldName" ? "x".repeat(101) : "shortcut", "welcome")
+        .field("message", kind === "fieldSize" ? "x".repeat(64 * 1024 + 1) : "Welcome");
+      if (kind === "fields") upload.field("extra", "unexpected");
+      if (kind === "parts") {
+        upload.attach("attachment", Buffer.from("image"), "one.png");
+        upload.attach("attachment", Buffer.from("image"), "two.png");
+      }
+      const response = await upload;
+      expect(response.status, kind).toBe(400);
+      expect(response.body.error.code).toMatch(/^INVALID_(REQUEST|ATTACHMENT)$/);
+    expect(service.createQuickReply).not.toHaveBeenCalled();
+    expect(service.updateQuickReply).not.toHaveBeenCalled();
+    });
+  });
+
+  it.each(["post", "patch"] as const)("accepts the full bounded multipart payload on %s", async (method) => {
+    service.createQuickReply.mockResolvedValue({ id: "reply-1" });
+    service.updateQuickReply.mockResolvedValue({ id: "reply-1" });
+    const response = await request(createTestApp())[method](method === "post" ? "/api/v1/quick-replies" : "/api/v1/quick-replies/507f1f77bcf86cd799439011")
+      .set("Authorization", "Bearer agent-token")
+      .field("shortcut", "welcome")
+      .field("message", "x".repeat(64 * 1024 - 1))
+      .attach("attachment", Buffer.alloc(5 * 1024 * 1024), "image.png");
+    expect(response.status).toBe(method === "post" ? 201 : 200);
+  });
+
+  it.each([undefined, "customer-token"])("authorizes multipart requests before validating uploads for %s", async (token) => {
+    const upload = request(createTestApp()).post("/api/v1/quick-replies");
+    if (token) upload.set("Authorization", `Bearer ${token}`);
+    const response = await upload.field("shortcut", "welcome")
+      .attach("attachment", Buffer.from("text"), "notes.txt");
+    expect(response.status).toBe(token ? 403 : 401);
+    expect(service.createQuickReply).not.toHaveBeenCalled();
+  });
+
   it("updates and deletes an owned reply through the authenticated routes", async () => {
     const replyId = "507f1f77bcf86cd799439011";
     service.updateQuickReply.mockResolvedValue({

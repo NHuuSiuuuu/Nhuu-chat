@@ -162,7 +162,11 @@ describe("Settings page", () => {
 
     expect(source).toContain("const [pageError, setPageError]");
     expect(source).toContain("const [modalError, setModalError]");
-    expect(source).toContain('setPageError("Không thể tải danh sách trả lời nhanh")');
+    expect(source).toContain('callbacks.setLoadError("Không thể tải danh sách trả lời nhanh", background)');
+    expect(source).toContain("background ? setActionError(message) : setPageError(message)");
+    expect(source).toContain("return quickReplySync.load(fetchQuickReplies)");
+    expect(source.match(/quickReplySync\.mutate\(/g)).toHaveLength(2);
+    expect(source).toContain("return quickReplySync.invalidate");
     expect(source).toContain("error={modalError}");
     expect(source).toContain("pageError ? <p");
     expect(source).toContain("actionError && <p");

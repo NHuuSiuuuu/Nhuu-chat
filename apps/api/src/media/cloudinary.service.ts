@@ -2,6 +2,7 @@ import { env, type AppEnv } from "@nhuu-chat/config";
 import type { QuickReplyAttachmentContract } from "@nhuu-chat/contracts";
 import { v2 as cloudinary } from "cloudinary";
 import type { Writable } from "node:stream";
+import { AppError } from "../common/errors.js";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
@@ -91,7 +92,7 @@ export class CloudinaryMediaService {
   // Chỉ xác thực cấu hình khi một thao tác thực sự cần gọi Cloudinary.
   private configureCloudinary(): void {
     if (!isConfigured(this.configuration)) {
-      throw new Error("Cloudinary is not configured");
+      throw new AppError(503, "CLOUDINARY_NOT_CONFIGURED", "Cloudinary is not configured");
     }
 
     cloudinary.config({

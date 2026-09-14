@@ -137,6 +137,60 @@ function QuickReplyModal({ reply, isSaving, error, onClose, onSave }: { reply: Q
   </div>;
 }
 
+// Vô hiệu hóa GET cũ qua mỗi lần ghi và chỉ đồng bộ lại sau khi mọi thao tác ghi kết thúc.
+export function createQuickReplySync(callbacks: {
+  setReplies: (replies: QuickReplyContract[]) => void;
+  setLoading: (loading: boolean) => void;
+  setLoadError: (message: string | null, background: boolean) => void;
+}) {
+  let generation = 0;
+  let scope = 0;
+  let pendingMutations = 0;
+
+  async function load(fetchReplies: () => Promise<QuickReplyContract[]>, background = false) {
+    if (pendingMutations > 0) return;
+    const current = ++generation;
+    callbacks.setLoadError(null, background);
+    if (!background) callbacks.setLoading(true);
+    try {
+      const replies = await fetchReplies();
+      if (current === generation) callbacks.setReplies(replies);
+    } catch {
+      if (current === generation) callbacks.setLoadError("Không thể tải danh sách trả lời nhanh", background);
+    } finally {
+      if (current === generation && !background) callbacks.setLoading(false);
+    }
+  }
+
+  async function mutate<T>(write: () => Promise<T>, apply: (result: T) => void, fetchReplies: () => Promise<QuickReplyContract[]>) {
+    const currentScope = scope;
+    ++generation;
+    ++pendingMutations;
+    callbacks.setLoading(false);
+    callbacks.setLoadError(null, false);
+    try {
+      const result = await write();
+      if (currentScope !== scope) return false;
+      apply(result);
+      return true;
+    } finally {
+      if (currentScope === scope) {
+        ++generation;
+        --pendingMutations;
+        if (pendingMutations === 0) void load(fetchReplies, true);
+      }
+    }
+  }
+
+  function invalidate() {
+    ++generation;
+    ++scope;
+    pendingMutations = 0;
+  }
+
+  return { load, mutate, invalidate };
+}
+
 function QuickReplySettings({ token, refresh }: { token: string; refresh?: () => Promise<string | null> }) {
   const [quickReplies, setQuickReplies] = useState<QuickReplyContract[]>([]);
   const [search, setSearch] = useState("");
@@ -148,22 +202,24 @@ function QuickReplySettings({ token, refresh }: { token: string; refresh?: () =>
   const [pageError, setPageError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
+  const [quickReplySync] = useState(() => createQuickReplySync({
+    setReplies: setQuickReplies,
+    setLoading: setIsLoading,
+    setLoadError: (message, background) => background ? setActionError(message) : setPageError(message)
+  }));
   const filteredReplies = quickReplies.filter((reply) => `${reply.shortcut} ${reply.message}`.toLowerCase().includes(search.toLowerCase()));
 
-  async function loadQuickReplies() {
-    setIsLoading(true);
-    setPageError(null);
-    try {
-      const result = await apiRequest<{ quickReplies: QuickReplyContract[] }>(API_URL, QUICK_REPLIES_API_PATH, token, { method: "GET" }, refresh);
-      setQuickReplies(result.quickReplies);
-    } catch {
-      setPageError("Không thể tải danh sách trả lời nhanh");
-    } finally {
-      setIsLoading(false);
-    }
+  async function fetchQuickReplies() {
+    const result = await apiRequest<{ quickReplies: QuickReplyContract[] }>(API_URL, QUICK_REPLIES_API_PATH, token, { method: "GET" }, refresh);
+    return result.quickReplies;
   }
 
-  useEffect(() => { void loadQuickReplies(); }, [refresh, token]);
+  function loadQuickReplies() { return quickReplySync.load(fetchQuickReplies); }
+
+  useEffect(() => {
+    void loadQuickReplies();
+    return quickReplySync.invalidate;
+  }, [refresh, token]);
 
   function closeQuickReplyModal() { setIsAddQuickReplyModalOpen(false); setEditingQuickReply(null); }
   function openAddQuickReplyModal() { setEditingQuickReply(null); setModalError(null); setIsAddQuickReplyModalOpen(true); }
@@ -177,10 +233,14 @@ function QuickReplySettings({ token, refresh }: { token: string; refresh?: () =>
     setIsSaving(true);
     setModalError(null);
     try {
-      const saved = await apiRequest<QuickReplyContract>(API_URL, editingQuickReply ? `${QUICK_REPLIES_API_PATH}/${editingQuickReply.id}` : QUICK_REPLIES_API_PATH, token, { method: editingQuickReply ? "PATCH" : "POST", body: formData }, refresh);
-      setQuickReplies((current) => editingQuickReply ? current.map((item) => item.id === saved.id ? saved : item) : [...current, saved]);
-      closeQuickReplyModal();
-      return true;
+      return await quickReplySync.mutate(
+        () => apiRequest<QuickReplyContract>(API_URL, editingQuickReply ? `${QUICK_REPLIES_API_PATH}/${editingQuickReply.id}` : QUICK_REPLIES_API_PATH, token, { method: editingQuickReply ? "PATCH" : "POST", body: formData }, refresh),
+        (saved) => {
+          setQuickReplies((current) => editingQuickReply ? current.map((item) => item.id === saved.id ? saved : item) : [...current, saved]);
+          closeQuickReplyModal();
+        },
+        fetchQuickReplies
+      );
     } catch {
       setModalError(reply.attachment ? "Không thể tải ảnh đính kèm" : editingQuickReply ? "Không thể cập nhật mẫu trả lời nhanh" : "Không thể thêm mẫu trả lời nhanh");
       return false;
@@ -194,8 +254,11 @@ function QuickReplySettings({ token, refresh }: { token: string; refresh?: () =>
     setDeletingId(reply.id);
     setActionError(null);
     try {
-      await apiRequest<void>(API_URL, `${QUICK_REPLIES_API_PATH}/${reply.id}`, token, { method: "DELETE" }, refresh);
-      setQuickReplies((current) => current.filter((item) => item.id !== reply.id));
+      await quickReplySync.mutate(
+        () => apiRequest<void>(API_URL, `${QUICK_REPLIES_API_PATH}/${reply.id}`, token, { method: "DELETE" }, refresh),
+        () => setQuickReplies((current) => current.filter((item) => item.id !== reply.id)),
+        fetchQuickReplies
+      );
     } catch {
       setActionError("Không thể xóa mẫu trả lời nhanh");
     } finally {

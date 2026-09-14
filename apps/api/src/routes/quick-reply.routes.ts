@@ -13,7 +13,15 @@ import {
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const attachmentUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_IMAGE_BYTES, files: 1 },
+  limits: {
+    fileSize: MAX_IMAGE_BYTES,
+    files: 1,
+    fields: 2,
+    // Busboy báo partsLimit ngay khi đạt ngưỡng; cho phép đủ hai trường và một ảnh.
+    parts: 4,
+    fieldSize: 64 * 1024,
+    fieldNameSize: 100
+  },
   fileFilter(_request, file, callback) {
     if (!file.mimetype.startsWith("image/")) {
       callback(new Error("Only image attachments are supported"));
