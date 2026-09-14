@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { Api, TelegramClient } from "telegram";
 import { NewMessage } from "telegram/events/index.js";
 import { StringSession } from "telegram/sessions/index.js";
+import { isTelegramPersonalBotEcho, telegramChatbot } from "../chatbot/telegram-chatbot.js";
 
 import { createPasswordPrompt, isRetryableTelegramPasswordError, shouldReusePendingQr, type PasswordPrompt } from "../channels/telegram-personal/telegram-personal.auth.js";
 import { TelegramPersonalSessionModel } from "../channels/telegram-personal/telegram-personal.model.js";
@@ -76,7 +77,7 @@ async function refreshPersonalSessionAvatar(userId: string, client: TelegramClie
       { new: true }
     );
   } catch {
-    // Avatar refresh is best-effort and must never prevent message synchronization.
+    // Lỗi làm mới avatar không được cản trở đồng bộ tin nhắn.
   }
 }
 
@@ -89,7 +90,7 @@ function telegramCredentials(): { apiId: number; apiHash: string } {
   return { apiId, apiHash };
 }
 
-// Creates an expiring MTProto login session and keeps the QR/2FA state private to its owner.
+// Tạo phiên MTProto có hạn và giữ trạng thái QR/2FA riêng cho owner.
 export async function startPersonalQrLogin(userId: string) {
   const existing = [...pendingQrLogins.values()].find((item) => item.userId === userId && (item.status === "waiting" || item.status === "password_required"));
   if (existing && (existing.status === "waiting" || existing.status === "password_required") && shouldReusePendingQr(existing.status)) {
@@ -201,7 +202,7 @@ export async function getActivePersonalClient(userId: string): Promise<TelegramC
   return restorePersonalClient(userId, session.encryptedSession, session.avatarUrl);
 }
 
-// Reconnects every persisted Telegram session during API startup so inbound sync works after a restart.
+// Khôi phục các phiên đã lưu lúc khởi động để tiếp tục đồng bộ tin đến sau restart.
 export async function restoreActivePersonalClients(): Promise<void> {
   const sessions = await TelegramPersonalSessionModel.find({ status: "active" })
     .select("+encryptedSession")
@@ -215,7 +216,7 @@ export async function restoreActivePersonalClients(): Promise<void> {
   }));
 }
 
-// Restores one encrypted session only after Telegram confirms that it is still authorized.
+// Chỉ khôi phục phiên mã hóa sau khi Telegram xác nhận phiên còn quyền truy cập.
 async function restorePersonalClient(userId: string, encryptedSession: string, existingAvatarUrl?: string | null): Promise<TelegramClient | undefined> {
   const credentials = telegramCredentials();
   const client = new TelegramClient(new StringSession(decryptSecret(encryptedSession)), credentials.apiId, credentials.apiHash, {
@@ -233,22 +234,27 @@ async function restorePersonalClient(userId: string, encryptedSession: string, e
   return client;
 }
 
-// Converts incoming MTProto events into canonical customer, conversation, message, and realtime records.
+// Lưu tin MTProto đúng owner trước khi gọi bot; bỏ qua replay và tin do bot gửi.
 function attachPersonalMessageSync(userId: string, client: TelegramClient): void {
   client.addEventHandler(async (event) => {
     const message = event.message;
     if (!message) return;
     const channelId = String(message.chatId ?? "");
-    const content = message.message?.trim();
-    if (!channelId || !content) return;
+    const content = message.message?.trim() ?? "";
+    const type = message.photo ? "image" : "text";
+    if (!channelId || (!content && type === "text")) return;
     const account = await TelegramPersonalSessionModel.findOne({ userId, status: "active" }).lean();
+    if (!account) return;
+    if (await MessageModel.exists({ platform: "telegram_personal", externalMessageId: String(message.id) })) return;
     const isOutgoing = isPersonalOutgoingMessage(message, account?.telegramUserId);
+    if (isOutgoing && await isTelegramPersonalBotEcho(userId, channelId, String(message.id))) return;
     const existingConversation = isOutgoing
       ? await ConversationModel.findOne({ platform: "telegram_personal", channelId, ownerId: userId }).lean()
       : null;
-    // Telegram-originated outbound messages belong to an existing conversation; the web send flow already creates it.
+    // Tin gửi từ Telegram chỉ thuộc hội thoại đã có; luồng gửi web đã tạo hội thoại trước đó.
     if (isOutgoing && !existingConversation) return;
     const sender = await message.getSender().catch(() => null) as Api.User | null;
+    if (sender?.bot) return;
     const senderId = sender?.id ? String(sender.id) : channelId;
     const senderAvatar = !isOutgoing && sender ? await client.downloadProfilePhoto(sender, { isBig: false }).catch(() => undefined) : undefined;
     const senderAvatarUrl = Buffer.isBuffer(senderAvatar) ? toAvatarDataUrl(senderAvatar) : undefined;
@@ -269,20 +275,38 @@ function attachPersonalMessageSync(userId: string, client: TelegramClient): void
         lastMessageSnippet: content
       }
     };
-    if (!isOutgoing) conversationUpdate.$inc = { unreadCount: 1 };
     const conversation = await ConversationModel.findOneAndUpdate(
       { platform: "telegram_personal", channelId, ownerId: userId },
       conversationUpdate,
       { upsert: true, new: true }
     );
     try {
+      const senderName = isOutgoing ? account?.displayName ?? "Bạn" : [sender?.firstName, sender?.lastName].filter(Boolean).join(" ") || "Telegram user";
+      const storedMessage = await MessageModel.create({ conversationId: conversation._id, platform: "telegram_personal", externalMessageId: String(message.id), senderType: personalMessageSenderType(isOutgoing), senderId, type, content, deliveryStatus: "delivered", metadata: { senderName } });
+      // Chỉ tin vừa ghi thành công mới tăng unread, kể cả khi replay đến đồng thời.
+      if (!isOutgoing) {
+        await ConversationModel.updateOne({ _id: conversation._id }, { $inc: { unreadCount: 1 } });
+        conversation.unreadCount += 1;
+      }
       await conversation.populate("customerId", "name avatarUrl");
       await conversation.populate("tagIds", "name color");
-      const senderName = isOutgoing ? account?.displayName ?? "Bạn" : [sender?.firstName, sender?.lastName].filter(Boolean).join(" ") || "Telegram user";
-      const storedMessage = await MessageModel.create({ conversationId: conversation._id, platform: "telegram_personal", externalMessageId: String(message.id), senderType: personalMessageSenderType(isOutgoing), senderId, type: "text", content, deliveryStatus: "delivered", metadata: { senderName } });
       const conversationPayload = toConversation(conversation.toObject(), account ? { name: account.displayName, avatarUrl: account.avatarUrl ?? undefined } : undefined);
       emitChatEvent("chat:message_received", String(conversation._id), toMessage(storedMessage.toObject()));
       emitInboxEventToRecipients("chat:conversation_updated", [userId, conversation.assignedAgentId ? String(conversation.assignedAgentId) : ""], conversationPayload);
+      if (!isOutgoing) {
+        // Giữ tin khách và bỏ qua lỗi ngoài dự kiến của bot để replay không tạo lần gửi mới.
+        await telegramChatbot.process({
+          ownerId: userId,
+          conversationId: String(conversation._id),
+          customerMessageId: String(storedMessage._id),
+          externalMessageId: String(message.id),
+          platform: "telegram_personal",
+          channelId,
+          senderType: "customer",
+          type,
+          content
+        }).catch(() => undefined);
+      }
     } catch (error) {
       if (!isDuplicateKey(error)) throw error;
     }

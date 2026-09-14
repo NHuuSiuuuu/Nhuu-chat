@@ -5,6 +5,10 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Nối inbound Telegram Bot và Telegram cá nhân vào `ChatbotOrchestrator.process` sau khi lưu tin khách; dùng chung bot delivery, token mã hóa/client session theo owner, template theo định danh kênh chuẩn và RAG đúng owner.
+- Giữ webhook validation/ack/idempotency; chống reply trùng khi replay, bỏ qua bot sender và echo của bot cá nhân kể cả khi echo đến trước kết quả gửi. Lỗi connector giữ tin khách, lưu failed/handoff và pause 30 phút, không tự gửi lại.
+- Chuẩn hóa ảnh/caption trong hai connector; ảnh không caption được nhắc nhập văn bản, chưa đọc/tải ảnh hay bổ sung video/audio/file; outbound chatbot chỉ gửi text.
+- Ghi tài liệu CRUD trợ lý/template, preview không gửi tin thật, `GEMINI_API_KEY`, fallback/pause và các giới hạn: Telegram Bot cần hội thoại có owner từ trước, token Bot toàn hệ thống, unique index đa tài khoản chưa được migration, Facebook/Instagram/Zalo chưa có adapter tự gửi.
 - Tích hợp Cloudinary cho ảnh đính kèm của mẫu trả lời nhanh với các biến `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`; chỉ nhận ảnh tối đa 5 MiB qua CRUD `/api/v1/quick-replies`.
 - Ghi rõ giới hạn hiện tại: việc gửi media trong message và upload video chưa được triển khai.
 - Ẩn thanh scrollbar trên các vùng cuộn của Inbox, gợi ý AI, sidebar và modal nhưng vẫn giữ thao tác cuộn.

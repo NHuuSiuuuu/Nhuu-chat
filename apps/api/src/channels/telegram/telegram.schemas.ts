@@ -20,7 +20,9 @@ const telegramMessageSchema = z.object({
   date: z.number().int().nonnegative(),
   chat: telegramChatSchema,
   from: telegramUserSchema.optional(),
-  text: z.string().min(1).optional()
+  text: z.string().min(1).optional(),
+  caption: z.string().optional(),
+  photo: z.array(z.object({ file_id: z.string().min(1) })).optional()
 });
 
 export const telegramUpdateSchema = z
@@ -40,7 +42,7 @@ export interface NormalizedInboundMessage {
   senderName: string;
   senderUsername?: string;
   avatarUrl?: string;
-  type: "text";
+  type: "text" | "image";
   content: string;
   sentAt: Date;
   metadata: {
@@ -48,5 +50,6 @@ export interface NormalizedInboundMessage {
     chatType: "private" | "group" | "supergroup" | "channel";
     senderName: string;
     chatTitle?: string;
+    fileId?: string;
   };
 }

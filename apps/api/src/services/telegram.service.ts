@@ -1,6 +1,7 @@
 import type { TelegramUpdate } from "../channels/telegram/telegram.schemas.js";
 import { normalizeTelegramUpdate } from "../channels/telegram/telegram.normalizer.js";
 import { TelegramClient } from "../channels/telegram/telegram.client.js";
+import { telegramChatbot } from "../chatbot/telegram-chatbot.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { CustomerModel } from "../models/customer.model.js";
 import { MessageModel } from "../models/message.model.js";
@@ -15,6 +16,7 @@ export interface TelegramChannelConfigInput {
   webhookBaseUrl: string;
 }
 
+// Lưu tin khách trước khi gọi bot; chỉ owner trong hội thoại mới quyết định phạm vi kiến thức.
 export async function ingestTelegramUpdate(update: TelegramUpdate): Promise<void> {
   const normalized = normalizeTelegramUpdate(update);
   if (!normalized) return;
@@ -76,6 +78,20 @@ export async function ingestTelegramUpdate(update: TelegramUpdate): Promise<void
     if (updatedConversation) {
       emitChatEvent("chat:message_received", String(conversation._id), toMessage(storedMessage.toObject()));
       emitInboxEventToRecipients("chat:conversation_updated", [updatedConversation.ownerId ? String(updatedConversation.ownerId) : "", updatedConversation.assignedAgentId ? String(updatedConversation.assignedAgentId) : ""], toConversation(updatedConversation));
+    }
+    if (conversation.ownerId) {
+      // Lỗi bot không được biến webhook đã lưu thành retry gửi thêm câu trả lời.
+      await telegramChatbot.process({
+        ownerId: String(conversation.ownerId),
+        conversationId: String(conversation._id),
+        customerMessageId: String(storedMessage._id),
+        externalMessageId: normalized.externalMessageId,
+        platform: normalized.platform,
+        channelId: normalized.channelId,
+        senderType: "customer",
+        type: normalized.type,
+        content: normalized.content
+      }).catch(() => undefined);
     }
   } catch (error) {
     if (isDuplicateKey(error)) return;

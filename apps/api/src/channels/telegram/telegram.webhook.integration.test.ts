@@ -7,6 +7,11 @@ import { ConversationModel } from "../../models/conversation.model.js";
 import { CustomerModel } from "../../models/customer.model.js";
 import { MessageModel } from "../../models/message.model.js";
 import { ProviderSecretModel } from "../../models/provider-secret.model.js";
+import { AssistantModel } from "../../models/assistant.model.js";
+import { AutomationTemplateModel } from "../../models/automation-template.model.js";
+import { BotProcessingModel } from "../../models/bot-processing.model.js";
+import { ChatbotOrchestrator } from "../../chatbot/chatbot-orchestrator.js";
+import { createProviderSecret } from "../../services/provider-secret.service.js";
 import { startTestDatabase, stopTestDatabase } from "../../test/mongo-repl-set.js";
 
 process.env.JWT_SECRET ??= "test-jwt-secret-that-is-at-least-32-characters";
@@ -42,19 +47,111 @@ describe("Telegram channel routes", () => {
   }, 120_000);
 
   beforeEach(async () => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     await Promise.all([
       CustomerModel.deleteMany({}),
       ConversationModel.deleteMany({}),
       MessageModel.deleteMany({}),
-      ProviderSecretModel.deleteMany({})
+      ProviderSecretModel.deleteMany({}),
+      AssistantModel.deleteMany({}),
+      AutomationTemplateModel.deleteMany({}),
+      BotProcessingModel.deleteMany({})
     ]);
   });
 
   afterAll(async () => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     await stopTestDatabase();
   }, 30_000);
+
+  // Dùng owner đã lưu; payload Telegram không được quyết định phạm vi trợ lý.
+  async function enableBot() {
+    const customer = await CustomerModel.create({ platform: "telegram", platformId: "123", name: "Khách" });
+    const ownerId = "507f1f77bcf86cd799439011";
+    const conversation = await ConversationModel.create({ ownerId, customerId: customer._id, platform: "telegram", channelId: "456" });
+    const assistant = await AssistantModel.create({ ownerId, name: "Trợ lý", instructions: "Chỉ dùng dữ liệu cửa hàng", channelScope: { mode: "channels", identifiers: ["telegram:456"] } });
+    await AutomationTemplateModel.create({ ownerId, assistantId: assistant._id, name: "Chào", keywords: ["xin chào"], responseTemplate: "Chào bạn từ cửa hàng", channelScope: { mode: "channels", identifiers: ["telegram:456"] } });
+    await createProviderSecret("telegram", "bot-token", "123:test-encrypted-bot-token");
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => {
+      expect(await MessageModel.countDocuments({ senderType: "customer", content: "Xin chào" })).toBe(1);
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 100 } }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return { ownerId, conversation, fetchMock };
+  }
+
+  it("sends one shared bot delivery for concurrent webhook replays after persisting the customer", async () => {
+    const { conversation, fetchMock } = await enableBot();
+    const app = createApp();
+    const path = "/api/v1/channels/telegram/webhook/telegram-webhook-secret-value";
+    const responses = await Promise.all(Array.from({ length: 3 }, () => request(app).post(path).send(textUpdate)));
+    expect(responses.map((response) => response.status)).toEqual([204, 204, 204]);
+    expect((await request(app).post(path).send(textUpdate)).status).toBe(204);
+    expect(await MessageModel.countDocuments({ senderType: "customer" })).toBe(1);
+    expect(await MessageModel.countDocuments({ senderType: "bot" })).toBe(1);
+    expect(await MessageModel.findOne({ senderType: "bot" }).lean()).toMatchObject({ content: "Chào bạn từ cửa hàng", externalMessageId: "100", deliveryStatus: "sent" });
+    expect(await BotProcessingModel.findOne().lean()).toMatchObject({ status: "sent" });
+    expect(await ConversationModel.findById(conversation._id).lean()).toMatchObject({ unreadCount: 1 });
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith("https://api.telegram.org/bot123:test-encrypted-bot-token/sendMessage", expect.objectContaining({ body: JSON.stringify({ chat_id: "456", text: "Chào bạn từ cửa hàng" }) }));
+  });
+
+  it("acknowledges connector failure and replay while retaining the customer and failed handoff", async () => {
+    const { conversation, fetchMock } = await enableBot();
+    fetchMock.mockRejectedValue(new Error("private connector failure"));
+    const app = createApp();
+    const path = "/api/v1/channels/telegram/webhook/telegram-webhook-secret-value";
+    expect((await request(app).post(path).send(textUpdate)).status).toBe(204);
+    expect((await request(app).post(path).send(textUpdate)).status).toBe(204);
+    expect(await MessageModel.countDocuments({ senderType: "customer", deliveryStatus: "delivered" })).toBe(1);
+    expect(await MessageModel.findOne({ senderType: "bot" }).lean()).toMatchObject({ deliveryStatus: "failed", metadata: { handoff: true, errorCode: "DELIVERY_FAILED" } });
+    expect(await BotProcessingModel.findOne().lean()).toMatchObject({ status: "failed", errorCode: "DELIVERY_FAILED" });
+    expect(await ConversationModel.findById(conversation._id).lean()).toMatchObject({ status: "pending", botPausedUntil: expect.any(Date) });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("keeps webhook acknowledgement when orchestration unexpectedly rejects after persistence", async () => {
+    await enableBot();
+    const process = vi.spyOn(ChatbotOrchestrator.prototype, "process").mockRejectedValue(new Error("processing unavailable"));
+    const path = "/api/v1/channels/telegram/webhook/telegram-webhook-secret-value";
+    expect((await request(createApp()).post(path).send(textUpdate)).status).toBe(204);
+    expect((await request(createApp()).post(path).send(textUpdate)).status).toBe(204);
+    expect(await MessageModel.countDocuments({ senderType: "customer" })).toBe(1);
+    expect(process).toHaveBeenCalledOnce();
+  });
+
+  it("ignores bot-originated updates even when a channel assistant is enabled", async () => {
+    const { fetchMock } = await enableBot();
+    const update = { ...textUpdate, message: { ...textUpdate.message, from: { ...textUpdate.message.from, is_bot: true } } };
+    expect((await request(createApp()).post("/api/v1/channels/telegram/webhook/telegram-webhook-secret-value").send(update)).status).toBe(204);
+    expect(await MessageModel.countDocuments()).toBe(0);
+    expect(await BotProcessingModel.countDocuments()).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["unowned", "foreign", "paused", "out-of-scope"])("does not auto-send for an %s conversation", async (kind) => {
+    const { conversation, fetchMock } = await enableBot();
+    if (kind === "unowned") await ConversationModel.updateOne({ _id: conversation._id }, { ownerId: null });
+    if (kind === "foreign") await AssistantModel.updateMany({}, { ownerId: "507f1f77bcf86cd799439022" });
+    if (kind === "paused") await ConversationModel.updateOne({ _id: conversation._id }, { botPausedUntil: new Date(Date.now() + 60_000) });
+    if (kind === "out-of-scope") await AssistantModel.updateMany({}, { "channelScope.identifiers": ["telegram_personal:456"] });
+    const forged = { ...textUpdate, ownerId: "507f1f77bcf86cd799439022" };
+    expect((await request(createApp()).post("/api/v1/channels/telegram/webhook/telegram-webhook-secret-value").send(forged)).status).toBe(204);
+    expect(await MessageModel.countDocuments({ senderType: "customer" })).toBe(1);
+    expect(await BotProcessingModel.countDocuments()).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])("persists photo metadata and caption=%s before the shared text response", async (hasCaption) => {
+    const { fetchMock } = await enableBot();
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true, result: { message_id: 100 } }), { status: 200 }));
+    const update = { ...textUpdate, message: { ...textUpdate.message, text: undefined, photo: [{ file_id: "photo-1", file_unique_id: "photo-unique", width: 100, height: 100 }], ...(hasCaption ? { caption: "Xin chào" } : {}) } };
+    expect((await request(createApp()).post("/api/v1/channels/telegram/webhook/telegram-webhook-secret-value").send(update)).status).toBe(204);
+    expect(await MessageModel.findOne({ senderType: "customer" }).lean()).toMatchObject({ type: "image", content: hasCaption ? "Xin chào" : "", metadata: { fileId: "photo-1" } });
+    expect(await MessageModel.findOne({ senderType: "bot" }).lean()).toMatchObject({ deliveryStatus: "sent", content: hasCaption ? "Chào bạn từ cửa hàng" : expect.stringMatching(/văn bản/) });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
 
   it("rejects an incorrect webhook secret without writing data", async () => {
     const response = await request(createApp())

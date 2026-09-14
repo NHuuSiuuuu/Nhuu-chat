@@ -31,13 +31,14 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
 - JWT auth với role `admin`, `agent`, `customer`.
 - Provider secret được mã hóa trước khi lưu MongoDB bằng AES-256-GCM.
 - Telegram webhook có secret validation và idempotency.
+- Chatbot tự động trên hai connector Telegram dùng chung orchestrator, delivery, automation template và RAG theo owner.
 - Telegram cá nhân hỗ trợ QR login, xác minh 2FA, hủy phiên QR cũ và khôi phục session sau khi API restart.
 - Socket.IO room authentication và event realtime cho message/conversation.
 - API đọc/ghi hội thoại, message, customer và knowledge.
 - API CRUD danh mục thẻ hội thoại dùng chung cho admin/agent tại `/api/v1/conversation-tags`.
 - API CRUD mẫu trả lời nhanh dùng chung cho admin/agent tại `/api/v1/quick-replies`, hỗ trợ một ảnh đính kèm lưu trên Cloudinary.
 - Chunking và parser cho TXT, Markdown, PDF, DOCX; RAG adapter độc lập với provider.
-- Bot Pause 30 phút và retry outbound theo các mốc `0s`, `1s`, `4s`.
+- Bot Pause 30 phút; queue hỗ trợ retry `0s`, `1s`, `4s`, nhưng chatbot tự động chỉ gửi một lần do connector chưa hỗ trợ khóa idempotency.
 - Frontend đã chuyển sang Tailwind CSS v4; entry CSS duy nhất là `apps/web/src/styles/tailwind.css`.
 
 ### Inbox và giao diện chat
@@ -191,6 +192,22 @@ Mặc định:
 7. Khung chat tự tải lịch sử, merge với message realtime và cuộn tới tin cuối.
 8. Nhập tin nhắn trong composer và gửi bằng nút gửi hoặc `Enter`.
 9. Trên màn hình hẹp, mở danh sách bằng nút cạnh avatar để đổi hội thoại.
+
+### Vận hành chatbot tự động
+
+JWT của `admin`/`agent` cho phép CRUD trợ lý qua `GET/POST /api/v1/assistants`, `PATCH/DELETE /api/v1/assistants/:assistantId`. Automation template dùng `GET/POST /api/v1/assistants/:assistantId/templates` và `PATCH/DELETE /api/v1/assistants/:assistantId/templates/:templateId`. Các cấu hình và knowledge chỉ thuộc owner đã xác thực; không nhận owner tùy ý trong request.
+
+Tạo trợ lý có `name`, `instructions`, bật `enabled`, chọn `modelTier` (`smart`, `balanced`, `economy`), `fallbackMessage`, và đặt `isDefault: true` hoặc chỉ định `channelScope`. Định danh kênh có dạng `${platform}:${channelId}` như `telegram:456` hoặc `telegram_personal:456`. Trợ lý bật được gắn trực tiếp có ưu tiên cao hơn trợ lý mặc định cùng owner. Template khớp keyword/phạm vi được xét trước RAG; `allowAiRewrite: false` gửi nguyên `responseTemplate`, không cần Gemini. Mẫu trả lời nhanh `/quick-replies` là tính năng riêng, không tự trở thành automation template.
+
+`POST /api/v1/assistants/:assistantId/preview` nhận `message`, `history` tùy chọn, cùng `platform`/`channelId` để thử phạm vi template; trả `{ answer, source, handoff }`. Preview không tạo message, claim, job, không gửi tin thật và không thay đổi pause. Preview dùng được khi trợ lý đang tắt và không chứng minh connector đã kết nối. Khi bỏ thông tin kênh, template giới hạn kênh không khớp.
+
+Đặt `GEMINI_API_KEY` chỉ trong backend; chatbot dùng model theo tier, còn `GEMINI_CHAT_MODEL` dành cho gợi ý composer. Upload tài liệu bằng knowledge API của đúng owner trước khi dùng RAG. Index in-memory được khôi phục từ MongoDB khi API khởi động; chưa dùng Atlas Vector Search hoặc đồng bộ index giữa nhiều API process. Không có knowledge đủ tin cậy, thiếu key hay provider lỗi/timeout thì bot dùng fallback và bàn giao. Nếu Gemini không viết lại template được, bot dùng nguyên mẫu.
+
+Telegram Bot lấy token mã hóa từ đăng ký `POST /api/v1/channels/telegram` (`botToken`, `webhookBaseUrl`) và giữ `TELEGRAM_WEBHOOK_SECRET`. Telegram cá nhân dùng client của session QR đã xác thực, khôi phục sau restart. Cả hai lưu tin khách trước khi gọi chung `ChatbotOrchestrator.process`; bot sender và replay được bỏ qua, echo của bot từ tài khoản cá nhân không tạo tin agent thứ hai. Webhook hợp lệ vẫn trả `204` khi bot lỗi; request hiện chờ xử lý bot có timeout, chưa có queue inbound bền vững.
+
+Tin text và ảnh được nhận; caption ảnh đi vào template/RAG, ảnh không caption nhận lời nhắc nhập văn bản. Chưa đọc/tải nội dung ảnh, chưa tải/render attachment đầy đủ; bot chỉ gửi text và chưa bổ sung video/audio/file. Fallback hoặc lỗi gửi chuyển hội thoại sang `pending`, pause 30 phút; lỗi gửi giữ tin khách và lưu bot message `failed` với metadata handoff/error. Bot chỉ thử gửi một lần, kể cả timeout không biết Telegram đã nhận hay chưa. Gửi thủ công từ web kích hoạt pause; tin đến khi pause vẫn lưu nhưng không tự phát lại sau đó.
+
+Giới hạn owner: Telegram cá nhân lấy owner từ session. Telegram Bot hiện dùng một token toàn hệ thống và tạo hội thoại mới không có owner; bot tự động chỉ trả lời hội thoại đã có `ownerId` đáng tin cậy trong MongoDB. Đăng ký bot và gán agent chưa có chức năng cấp owner, không tự suy đoán owner từ webhook. Các unique index cũ `(platform, channelId)` và `(platform, externalMessageId)` vẫn có thể xung đột giữa nhiều chat/tài khoản; cần migration riêng cho triển khai nhiều tài khoản. Facebook/Instagram/Zalo vẫn chưa có connector tự gửi; preview hay cấu hình nền tảng đó không bật khả năng gửi thật.
 
 ## 6. Kiểm thử và kiểm chứng
 
