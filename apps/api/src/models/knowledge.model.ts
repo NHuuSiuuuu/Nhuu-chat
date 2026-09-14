@@ -2,6 +2,7 @@ import mongoose, { model, Schema, type InferSchemaType } from "mongoose";
 
 const knowledgeDocumentSchema = new Schema(
   {
+    ownerId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     title: { type: String, required: true, trim: true },
     sourceType: { type: String, enum: ["text", "file", "url"], required: true },
     sourceUrl: { type: String, default: "" },
@@ -19,6 +20,7 @@ const knowledgeDocumentSchema = new Schema(
 
 const knowledgeChunkSchema = new Schema(
   {
+    ownerId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     documentId: {
       type: Schema.Types.ObjectId,
       ref: "KnowledgeDocument",
@@ -34,6 +36,7 @@ const knowledgeChunkSchema = new Schema(
 );
 
 knowledgeChunkSchema.index({ documentId: 1, chunkIndex: 1 }, { unique: true });
+knowledgeChunkSchema.index({ ownerId: 1, documentId: 1 });
 
 export type KnowledgeDocument = InferSchemaType<typeof knowledgeDocumentSchema>;
 export type KnowledgeChunk = InferSchemaType<typeof knowledgeChunkSchema>;

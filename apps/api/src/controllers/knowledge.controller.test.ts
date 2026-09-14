@@ -7,12 +7,19 @@ vi.mock("../services/knowledge.service.js", () => services);
 
 import { DeterministicEmbeddingProvider } from "../ai/embedding.provider.js";
 import { InMemoryVectorStore } from "../ai/vector.store.js";
+import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
 import { AppError, errorHandler } from "../common/errors.js";
 import { createKnowledge, removeKnowledge } from "./knowledge.controller.js";
 
 function createTestApp(onError = (_error: unknown) => {}) {
   const app = express();
   app.use(express.json());
+  app.use((req, _res, next) => {
+    (req as AuthenticatedRequest).auth = {
+      id: "owner-1", email: "owner@example.com", role: "admin"
+    };
+    next();
+  });
   app.post("/knowledge", createKnowledge);
   app.delete("/knowledge/:id", removeKnowledge);
   const captureError: ErrorRequestHandler = (error, req, res, next) => {
@@ -35,6 +42,7 @@ describe("knowledge controller without Mongo", () => {
       .send({ title: " FAQ ", content: " Answer " });
 
     expect(services.ingestKnowledge).toHaveBeenCalledWith(
+      "owner-1",
       { title: " FAQ ", content: " Answer " },
       expect.any(DeterministicEmbeddingProvider), expect.any(InMemoryVectorStore)
     );
@@ -47,7 +55,9 @@ describe("knowledge controller without Mongo", () => {
   it("deletes the requested document and returns an empty 204 response", async () => {
     const response = await request(createTestApp()).delete("/knowledge/knowledge-1");
 
-    expect(services.deleteKnowledge).toHaveBeenCalledWith("knowledge-1", expect.any(InMemoryVectorStore));
+    expect(services.deleteKnowledge).toHaveBeenCalledWith(
+      "owner-1", "knowledge-1", expect.any(InMemoryVectorStore)
+    );
     expect(response.status).toBe(204);
     expect(response.text).toBe("");
   });
