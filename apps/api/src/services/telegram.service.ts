@@ -5,6 +5,7 @@ import { processTelegramCustomerMessage } from "../chatbot/telegram-inbound.serv
 import { ConversationModel } from "../models/conversation.model.js";
 import { CustomerModel } from "../models/customer.model.js";
 import { MessageModel } from "../models/message.model.js";
+import { ProviderSecretModel } from "../models/provider-secret.model.js";
 import { isBotPaused } from "../orchestration/bot-pause.service.js";
 import { emitChatEvent, emitInboxEventToRecipients } from "../realtime/socket.js";
 import { toConversation } from "./conversation.service.js";
@@ -26,6 +27,9 @@ export async function ingestTelegramUpdate(update: TelegramUpdate): Promise<void
     externalMessageId: normalized.externalMessageId
   });
   if (existing) return;
+
+  // Owner chỉ lấy từ đăng ký đã xác thực; không tin field owner trong update Telegram.
+  const registration = await ProviderSecretModel.findOne({ provider: "telegram", name: "bot-token" }).lean();
 
   const customer = await CustomerModel.findOneAndUpdate(
     { platform: normalized.platform, platformId: normalized.senderId },
@@ -50,7 +54,7 @@ export async function ingestTelegramUpdate(update: TelegramUpdate): Promise<void
         lastMessageAt: normalized.sentAt,
         lastMessageSnippet: normalized.content
       },
-      $setOnInsert: { platform: normalized.platform, channelId: normalized.channelId }
+      $setOnInsert: { platform: normalized.platform, channelId: normalized.channelId, ...(registration?.ownerId ? { ownerId: registration.ownerId } : {}) }
     },
     { upsert: true, new: true }
   );
@@ -99,12 +103,12 @@ export async function ingestTelegramUpdate(update: TelegramUpdate): Promise<void
   }
 }
 
-export async function registerTelegramChannel(config: TelegramChannelConfigInput) {
+export async function registerTelegramChannel(config: TelegramChannelConfigInput, ownerId: string) {
   const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
   if (!webhookSecret) throw new Error("TELEGRAM_WEBHOOK_SECRET is not configured");
 
   const webhookUrl = `${config.webhookBaseUrl.replace(/\/$/, "")}/api/v1/channels/telegram/webhook/${webhookSecret}`;
-  await createProviderSecret("telegram", "bot-token", config.botToken);
+  await createProviderSecret("telegram", "bot-token", config.botToken, ownerId);
   await new TelegramClient(config.botToken).setWebhook(webhookUrl, webhookSecret);
   return { provider: "telegram", webhookUrl } as const;
 }

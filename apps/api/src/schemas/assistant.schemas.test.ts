@@ -10,7 +10,7 @@ describe("assistant schemas", () => {
       modelTier: "smart"
     })).toMatchObject({
       modelTier: "smart",
-      fallbackMessage: "Mình sẽ chuyển bạn đến nhân viên hỗ trợ nhé."
+      fallbackMessage: "Em chưa có đủ thông tin, nhân viên sẽ hỗ trợ."
     });
   });
 

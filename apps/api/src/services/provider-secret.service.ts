@@ -10,9 +10,10 @@ export function buildProviderSecretDocument(provider: string, name: string, plai
 export async function createProviderSecret(
   provider: string,
   name: string,
-  plaintext: string
+  plaintext: string,
+  ownerId?: string
 ) {
-  return ProviderSecretModel.create(buildProviderSecretDocument(provider, name, plaintext));
+  return ProviderSecretModel.create({ ...buildProviderSecretDocument(provider, name, plaintext), ...(ownerId ? { ownerId } : {}) });
 }
 
 export async function readProviderSecret(id: string): Promise<string> {

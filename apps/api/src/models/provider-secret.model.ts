@@ -4,6 +4,7 @@ const providerSecretSchema = new Schema(
   {
     provider: { type: String, required: true, trim: true },
     name: { type: String, required: true, trim: true },
+    ownerId: { type: Schema.Types.ObjectId, ref: "User", default: null, index: true },
     ciphertext: { type: String, required: true, select: false }
   },
   { timestamps: true }

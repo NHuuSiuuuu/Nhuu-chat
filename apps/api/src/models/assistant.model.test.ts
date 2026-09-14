@@ -16,7 +16,7 @@ describe("chatbot models", () => {
 
     expect(assistant.ownerId).toBeDefined();
     expect(assistant.modelTier).toBe("balanced");
-    expect(assistant.fallbackMessage).toBe("Mình sẽ chuyển bạn đến nhân viên hỗ trợ nhé.");
+    expect(assistant.fallbackMessage).toBe("Em chưa có đủ thông tin, nhân viên sẽ hỗ trợ.");
     expect(assistant.enabled).toBe(true);
     expect(assistant.channelScope.toObject()).toEqual({ mode: "all", identifiers: [] });
   });

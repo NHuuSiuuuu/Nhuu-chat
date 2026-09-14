@@ -14,6 +14,7 @@ import { AppError } from "../common/errors.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { CustomerModel } from "../models/customer.model.js";
 import { MessageModel } from "../models/message.model.js";
+import { pauseBot } from "../orchestration/bot-pause.service.js";
 import { emitChatEvent, emitInboxEventToRecipients } from "../realtime/socket.js";
 import { toConversation } from "./conversation.service.js";
 import { toMessage } from "./message.service.js";
@@ -242,7 +243,9 @@ function attachPersonalMessageSync(userId: string, client: TelegramClient): void
     if (!message) return;
     const channelId = String(message.chatId ?? "");
     const content = message.message?.trim() ?? "";
-    const type = message.photo ? "image" : "text";
+    const media = message.photo ?? message.document ?? message.sticker ?? message.video ?? message.videoNote ?? message.gif ?? message.audio ?? message.voice ?? message.file;
+    const type = message.photo ? "image" : message.video || message.videoNote || message.gif ? "video"
+      : message.audio || message.voice ? "audio" : message.sticker ? "image" : media ? "file" : "text";
     if (!channelId || (!content && type === "text")) return;
     const account = await TelegramPersonalSessionModel.findOne({ userId, status: "active" }).lean();
     if (!account) return;
@@ -283,7 +286,9 @@ function attachPersonalMessageSync(userId: string, client: TelegramClient): void
     );
     try {
       const senderName = isOutgoing ? account?.displayName ?? "Bạn" : [sender?.firstName, sender?.lastName].filter(Boolean).join(" ") || "Telegram user";
-      const storedMessage = await MessageModel.create({ conversationId: conversation._id, platform: "telegram_personal", externalMessageId: String(message.id), senderType: personalMessageSenderType(isOutgoing), senderId, type, content, deliveryStatus: "delivered", metadata: { senderName } });
+      const storedMessage = await MessageModel.create({ conversationId: conversation._id, platform: "telegram_personal", externalMessageId: String(message.id), senderType: personalMessageSenderType(isOutgoing), senderId, type, content, deliveryStatus: "delivered", metadata: { senderName, ...(media ? { fileId: String(media.id), ...(message.file?.name ? { fileName: message.file.name } : {}), ...(message.file?.mimeType ? { mimeType: message.file.mimeType } : {}) } : {}) } });
+      // Echo bot đã bị loại trước đây; tin gửi thật của nhân viên phải kích hoạt chính sách tiếp quản.
+      if (isOutgoing) await pauseBot(String(conversation._id), new Date());
       // Chỉ tin vừa ghi thành công mới tăng unread, kể cả khi replay đến đồng thời.
       if (!isOutgoing) {
         conversation = await ConversationModel.findOneAndUpdate(

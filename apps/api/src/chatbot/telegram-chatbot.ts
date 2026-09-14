@@ -1,6 +1,7 @@
 import { TelegramClient } from "../channels/telegram/telegram.client.js";
 import { TelegramPersonalSessionModel } from "../channels/telegram-personal/telegram-personal.model.js";
 import { readProviderSecretByName } from "../services/provider-secret.service.js";
+import { ProviderSecretModel } from "../models/provider-secret.model.js";
 import { BotDeliveryService } from "./bot-delivery.service.js";
 import { withBotTimeout, type ResolveBotAdapter } from "./channel-bot-adapter.js";
 import { ChatbotOrchestrator } from "./chatbot-orchestrator.js";
@@ -21,6 +22,8 @@ export async function isTelegramPersonalBotEcho(ownerId: string, channelId: stri
 // Chỉ đăng ký hai connector thật; session cá nhân luôn được chọn theo owner đã xác thực.
 export const resolveTelegramBotAdapter: ResolveBotAdapter = async ({ platform, ownerId }) => {
   if (platform === "telegram") {
+    const registration = await ProviderSecretModel.findOne({ provider: "telegram", name: "bot-token" }).lean();
+    if (registration?.ownerId && String(registration.ownerId) !== ownerId) return undefined;
     const token = await readProviderSecretByName("telegram", "bot-token");
     const client = new TelegramClient(token);
     return { sendText: ({ channelId, content }) => client.sendText(channelId, content) };

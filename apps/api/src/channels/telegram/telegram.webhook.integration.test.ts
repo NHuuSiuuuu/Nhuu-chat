@@ -275,7 +275,48 @@ describe("Telegram channel routes", () => {
       .select("+ciphertext")
       .lean();
     expect(stored?.ciphertext).toBeTypeOf("string");
+    expect(String(stored?.ownerId)).toBe("507f1f77bcf86cd799439011");
     expect(stored?.ciphertext).not.toContain(botToken);
     expect(JSON.stringify(stored)).not.toContain(botToken);
+  });
+
+  it("assigns a fresh Bot conversation to the authenticated registration owner, ignoring forged inbound owner", async () => {
+    const ownerId = "507f1f77bcf86cd799439011";
+    const { accessToken } = await issueTokens({ id: ownerId, email: "owner@example.com", role: "admin" });
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (url) => new Response(JSON.stringify({ ok: true, result: String(url).endsWith("setWebhook") ? true : { message_id: 100 } }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const app = createApp();
+    expect((await request(app).post("/api/v1/channels/telegram").set("Authorization", `Bearer ${accessToken}`).send({ botToken: "123:owned-token", webhookBaseUrl: "https://example.com", ownerId: "507f1f77bcf86cd799439022" })).status).toBe(201);
+    const assistant = await AssistantModel.create({ ownerId, name: "Trợ lý", instructions: "Dùng mẫu", isDefault: true });
+    await AutomationTemplateModel.create({ ownerId, assistantId: assistant._id, name: "Chào", keywords: ["xin chào"], responseTemplate: "Chào đúng chủ cửa hàng" });
+    const path = "/api/v1/channels/telegram/webhook/telegram-webhook-secret-value";
+    expect((await request(app).post(path).send({ ...textUpdate, ownerId: "507f1f77bcf86cd799439022" })).status).toBe(204);
+    expect((await request(app).post(path).send(textUpdate)).status).toBe(204);
+    expect(String((await ConversationModel.findOne().lean())?.ownerId)).toBe(ownerId);
+    expect(await MessageModel.findOne({ senderType: "bot" }).lean()).toMatchObject({ content: "Chào đúng chủ cửa hàng", deliveryStatus: "sent" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not send another conversation owner's reply through an owned Bot registration", async () => {
+    const { fetchMock } = await enableBot();
+    await ProviderSecretModel.updateOne({ provider: "telegram", name: "bot-token" }, { ownerId: "507f1f77bcf86cd799439022" });
+    expect((await request(createApp()).post("/api/v1/channels/telegram/webhook/telegram-webhook-secret-value").send(textUpdate)).status).toBe(204);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await MessageModel.findOne({ senderType: "bot" }).lean()).toMatchObject({ deliveryStatus: "failed" });
+  });
+
+  it.each(["document", "sticker", "audio", "voice", "video", "video_note", "animation"])("persists Bot %s with/without caption and responds without inspecting media", async (kind) => {
+    const { fetchMock } = await enableBot();
+    let sentId = 500;
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify({ ok: true, result: { message_id: sentId++ } }), { status: 200 }));
+    for (const hasCaption of [true, false]) {
+      const id = hasCaption ? 99 : 101;
+      const update = { ...textUpdate, message: { ...textUpdate.message, message_id: id, text: undefined, [kind]: { file_id: "media-1", file_name: "media.bin", mime_type: "application/octet-stream", is_video: kind === "sticker" }, ...(hasCaption ? { caption: "Xin chào" } : {}) } };
+      expect((await request(createApp()).post("/api/v1/channels/telegram/webhook/telegram-webhook-secret-value").send(update)).status).toBe(204);
+      const type = ["video", "video_note", "animation", "sticker"].includes(kind) ? "video" : ["audio", "voice"].includes(kind) ? "audio" : "file";
+      expect(await MessageModel.findOne({ externalMessageId: String(id) }).lean()).toMatchObject({ type, content: hasCaption ? "Xin chào" : "", metadata: { fileId: "media-1" } });
+    }
+    expect(await MessageModel.find({ senderType: "bot" }).sort({ createdAt: 1 }).lean()).toEqual([expect.objectContaining({ content: "Chào bạn từ cửa hàng" }), expect.objectContaining({ content: expect.stringMatching(/văn bản/) })]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

@@ -7,6 +7,9 @@ import type { ChannelBotAdapter } from "./channel-bot-adapter.js";
 import { startTestDatabase, stopTestDatabase } from "../test/mongo-repl-set.js";
 import { BotDeliveryService } from "./bot-delivery.service.js";
 import { now, resetBotDatabase, seedBotConversation } from "./chatbot-test-helpers.js";
+import { sendOutboundMessage } from "../services/message.service.js";
+import { createProviderSecret } from "../services/provider-secret.service.js";
+import { ProviderSecretModel } from "../models/provider-secret.model.js";
 
 const realtime = vi.hoisted(() => ({
   emitChatEvent: vi.fn(),
@@ -20,7 +23,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   await resetBotDatabase();
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 async function arrange() {
   const { input, assistant } = await seedBotConversation();
@@ -46,6 +49,51 @@ async function arrange() {
 }
 
 describe("bot delivery", () => {
+  it("serializes the final pause read and bot send with a committed web agent takeover", async () => {
+    const { command, sendText } = await arrange();
+    await ProviderSecretModel.deleteMany({});
+    await createProviderSecret("telegram", "bot-token", "123:coordination-test");
+    let humanSent = false;
+    let botAfterTakeover = false;
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      humanSent = true;
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 300 } }), { status: 200 });
+    }));
+    sendText.mockImplementation(async () => {
+      botAfterTakeover = humanSent;
+      return { externalMessageId: "remote-42" };
+    });
+    let readReady!: () => void;
+    const ready = new Promise<void>((resolve) => { readReady = resolve; });
+    let resume!: () => void;
+    const gate = new Promise<void>((resolve) => { resume = resolve; });
+    const findOne = ConversationModel.findOne.bind(ConversationModel);
+    let reads = 0;
+    vi.spyOn(ConversationModel, "findOne").mockImplementation((...args: Parameters<typeof findOne>) => {
+      const query = findOne(...args);
+      if (++reads === 2) {
+        const exec = query.exec.bind(query);
+        vi.spyOn(query, "exec").mockImplementationOnce(async () => {
+          const snapshot = await exec();
+          readReady();
+          await gate;
+          return snapshot;
+        });
+      }
+      return query;
+    });
+    const service = new BotDeliveryService({ resolveAdapter: () => ({ sendText }), now: () => now, timeoutMs: 2000 });
+    const bot = service.deliver(command);
+    await ready;
+    const human = sendOutboundMessage({ conversationId: command.conversationId, content: "Nhân viên tiếp nhận" }, { id: command.ownerId, email: "owner@example.com", role: "admin" });
+    await Promise.race([human, new Promise((resolve) => setTimeout(resolve, 150))]);
+    resume();
+    await Promise.all([bot, human]);
+    expect(humanSent).toBe(true);
+    expect(botAfterTakeover).toBe(false);
+    expect(sendText.mock.calls.length).toBeLessThanOrEqual(1);
+    expect(await service.deliver(command)).toEqual({ status: "skipped" });
+  });
   it.each(["conversation lookup", "reservation"])(
     "terminates the claim and hands off after a transient %s failure before reservation",
     async (stage) => {

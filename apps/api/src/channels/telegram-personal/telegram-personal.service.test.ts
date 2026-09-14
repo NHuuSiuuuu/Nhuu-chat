@@ -33,6 +33,14 @@ interface PersonalTestEvent {
     date: number;
     out: boolean;
     photo?: object;
+    document?: { id: string };
+    sticker?: { id: string };
+    audio?: { id: string };
+    voice?: { id: string };
+    video?: { id: string };
+    videoNote?: { id: string };
+    gif?: { id: string };
+    file?: { id: string; mimeType?: string; name?: string };
     getSender: () => Promise<{ id: string; firstName: string; bot?: boolean }>;
     getChat: () => Promise<object>;
   };
@@ -249,6 +257,7 @@ describe("Telegram personal inbound chatbot integration", () => {
     event.message.id = 200;
     event.message.message = "Chào từ tài khoản cá nhân";
     await telegram.listener!(event);
+    expect((await ConversationModel.findOne().lean())?.botPausedUntil).toBeNull();
     event.message.id = 201;
     event.message.message = "Nhân viên tiếp nhận";
     await telegram.listener!(event);
@@ -256,6 +265,24 @@ describe("Telegram personal inbound chatbot integration", () => {
     expect(await MessageModel.findOne({ senderType: "agent" }).lean()).toMatchObject({ content: "Nhân viên tiếp nhận" });
     expect(process).not.toHaveBeenCalled();
     expect(telegram.sendMessage).toHaveBeenCalledOnce();
+    expect(await ConversationModel.findOne().lean()).toMatchObject({ botPausedUntil: expect.any(Date) });
+    await telegram.listener!({ message: { ...event.message, id: 202, out: false, senderId: "123", message: "Xin chào" } });
+    expect(telegram.sendMessage).toHaveBeenCalledOnce();
+  });
+
+  it.each(["document", "sticker", "audio", "voice", "video", "videoNote", "gif", "file"] as const)("persists personal %s with/without caption and requests text when absent", async (kind) => {
+    const { event } = await connect();
+    let nextId = 500;
+    telegram.sendMessage.mockImplementation(async () => ({ id: nextId++ }));
+    for (const hasCaption of [true, false]) {
+      const id = hasCaption ? 99 : 101;
+      const incoming = { message: { ...event.message, id, message: hasCaption ? "Xin chào" : "", [kind]: { id: "media-1" } } };
+      await telegram.listener!(incoming);
+      const type = ["video", "videoNote", "gif"].includes(kind) ? "video" : ["audio", "voice"].includes(kind) ? "audio" : kind === "sticker" ? "image" : "file";
+      expect(await MessageModel.findOne({ externalMessageId: String(id) }).lean()).toMatchObject({ type, content: hasCaption ? "Xin chào" : "", metadata: { fileId: "media-1" } });
+    }
+    expect(await MessageModel.find({ senderType: "bot" }).sort({ createdAt: 1 }).lean()).toEqual([expect.objectContaining({ content: "Chào từ tài khoản cá nhân" }), expect.objectContaining({ content: expect.stringMatching(/văn bản/) })]);
+    expect(telegram.sendMessage).toHaveBeenCalledTimes(2);
   });
 
   it.each([true, false])("preserves personal photo and caption=%s for orchestration", async (hasCaption) => {

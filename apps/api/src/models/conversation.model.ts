@@ -17,6 +17,8 @@ const conversationSchema = new Schema(
     unreadCount: { type: Number, default: 0, min: 0 },
     status: { type: String, enum: ["open", "pending", "closed"], default: "open", index: true },
     botPausedUntil: { type: Date, default: null },
+    sendLeaseId: { type: String, default: null },
+    sendLeaseAt: { type: Date, default: null },
     lastMessageAt: { type: Date, default: Date.now, index: true },
     lastMessageSnippet: { type: String, default: "" }
   },

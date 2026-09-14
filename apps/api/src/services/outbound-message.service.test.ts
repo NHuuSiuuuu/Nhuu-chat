@@ -8,13 +8,15 @@ const dependencyMocks = vi.hoisted(() => ({
   createMessage: vi.fn(),
   findConversationById: vi.fn(),
   pauseConversation: vi.fn(),
+  acquireSendLease: vi.fn(),
+  releaseSendLease: vi.fn(),
   getActivePersonalClient: vi.fn(),
   personalSendMessage: vi.fn(),
   readProviderSecretByName: vi.fn()
 }));
 
 vi.mock("../models/conversation.model.js", () => ({
-  ConversationModel: { findById: dependencyMocks.findConversationById, findByIdAndUpdate: dependencyMocks.pauseConversation }
+  ConversationModel: { findById: dependencyMocks.findConversationById, findByIdAndUpdate: dependencyMocks.pauseConversation, findOneAndUpdate: dependencyMocks.acquireSendLease, updateOne: dependencyMocks.releaseSendLease }
 }));
 
 vi.mock("../models/message.model.js", () => ({
@@ -91,6 +93,8 @@ describe("sendOutboundMessage", () => {
     vi.resetAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(now);
+    dependencyMocks.acquireSendLease.mockReturnValue({ lean: async () => ({ _id: "conversation-1" }) });
+    dependencyMocks.releaseSendLease.mockResolvedValue({ matchedCount: 1 });
   });
 
   afterEach(() => {

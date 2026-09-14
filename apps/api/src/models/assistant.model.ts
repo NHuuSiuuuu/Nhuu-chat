@@ -18,7 +18,7 @@ const assistantSchema = new Schema(
     fallbackMessage: {
       type: String,
       trim: true,
-      default: "Mình sẽ chuyển bạn đến nhân viên hỗ trợ nhé.",
+      default: "Em chưa có đủ thông tin, nhân viên sẽ hỗ trợ.",
       maxlength: 500
     },
     channelScope: { type: channelScopeSchema, default: () => ({}) },

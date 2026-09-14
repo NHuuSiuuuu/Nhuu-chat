@@ -5,7 +5,7 @@ import { OutboundWorker } from "../jobs/outbound.worker.js";
 import { BotProcessingModel } from "../models/bot-processing.model.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { MessageModel } from "../models/message.model.js";
-import { isBotPaused } from "../orchestration/bot-pause.service.js";
+import { isBotPaused, withConversationSendLock } from "../orchestration/bot-pause.service.js";
 import { emitChatEvent, emitInboxEventToRecipients } from "../realtime/socket.js";
 import { toConversation } from "../services/conversation.service.js";
 import { toMessage } from "../services/message.service.js";
@@ -94,19 +94,21 @@ export class BotDeliveryService {
             const adapter = await this.options.resolveAdapter(input);
             signal.throwIfAborted();
             if (!adapter) throw new Error("ADAPTER_UNAVAILABLE");
-            const latest = await ConversationModel.findOne({
-              _id: input.conversationId,
-              ownerId: input.ownerId,
-              platform: input.platform,
-              channelId: input.channelId
-            }).lean();
-            signal.throwIfAborted();
-            if (!latest || isBotPaused(latest.botPausedUntil, now())) throw new Error("BOT_PAUSED");
-            try {
-              return await adapter.sendText({ channelId: input.channelId, content: input.content });
-            } catch {
-              throw new Error("ADAPTER_FAILED");
-            }
+            return withConversationSendLock(input.conversationId, async () => {
+              const latest = await ConversationModel.findOne({
+                _id: input.conversationId,
+                ownerId: input.ownerId,
+                platform: input.platform,
+                channelId: input.channelId
+              }).lean();
+              signal.throwIfAborted();
+              if (!latest || isBotPaused(latest.botPausedUntil, now())) throw new Error("BOT_PAUSED");
+              try {
+                return await withBotTimeout(() => adapter.sendText({ channelId: input.channelId, content: input.content }), this.options.timeoutMs ?? 10_000);
+              } catch {
+                throw new Error("ADAPTER_FAILED");
+              }
+            }, signal);
           }, this.options.timeoutMs ?? 10_000),
         updateDelivery: async (_command, state) => {
           const failed = state.status === "failed";

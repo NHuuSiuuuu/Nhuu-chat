@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const fallbackMessage = "Mình sẽ chuyển bạn đến nhân viên hỗ trợ nhé.";
+const fallbackMessage = "Em chưa có đủ thông tin, nhân viên sẽ hỗ trợ.";
 const channelScopeSchema = z.object({
   mode: z.enum(["all", "channels"]),
   identifiers: z.array(z.string().trim().min(1)).default([])

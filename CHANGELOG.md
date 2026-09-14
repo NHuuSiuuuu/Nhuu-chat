@@ -5,11 +5,16 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Hoàn thiện owner cho hội thoại Telegram Bot mới từ đăng ký admin đã xác thực, giữ mã hóa token và chống dùng đăng ký có owner để gửi thay owner khác; không lấy owner từ webhook/body.
+- Áp dụng pause cho tin agent thật từ Telegram cá nhân, loại echo bot; phối hợp lần kiểm tra pause/gửi cuối bằng khóa atomic trên hội thoại dùng chung với takeover, không tự retry gửi mơ hồ hay cưỡng chiếm khóa còn giữ.
+- Bổ sung chuẩn hóa/lưu document/file, sticker, audio/voice, video/video note và animation/GIF cho hai connector, dùng caption hoặc nhắc nhập văn bản; outbound media vẫn chưa hỗ trợ.
+- Cách ly knowledge legacy thiếu owner hoặc không khớp owner của parent khỏi hydration, giữ nguyên MongoDB và hướng dẫn re-ingestion dưới owner đã xác minh; không mở lại truy xuất unscoped.
+- Đổi fallback mặc định của trợ lý mới thành `Em chưa có đủ thông tin, nhân viên sẽ hỗ trợ.`; không ghi đè fallback riêng đã lưu.
 - Sửa ba lỗi hậu kiểm chatbot Telegram: phát unread từ kết quả tăng atomic khi tin cá nhân đến đồng thời; ghi diagnostics đã loại secret và thử handoff/pause kể cả lỗi trước claim, giữ ack/replay; giữ ID gửi cá nhân thành công đến muộn sau timeout để lọc echo mà không retry.
 - Nối inbound Telegram Bot và Telegram cá nhân vào `ChatbotOrchestrator.process` sau khi lưu tin khách; dùng chung bot delivery, token mã hóa/client session theo owner, template theo định danh kênh chuẩn và RAG đúng owner.
 - Giữ webhook validation/ack/idempotency; chống reply trùng khi replay, bỏ qua bot sender và echo của bot cá nhân kể cả khi echo đến trước kết quả gửi. Lỗi connector giữ tin khách, lưu failed/handoff và pause 30 phút, không tự gửi lại.
-- Chuẩn hóa ảnh/caption trong hai connector; ảnh không caption được nhắc nhập văn bản, chưa đọc/tải ảnh hay bổ sung video/audio/file; outbound chatbot chỉ gửi text.
-- Ghi tài liệu CRUD trợ lý/template, preview không gửi tin thật, `GEMINI_API_KEY`, fallback/pause và các giới hạn: Telegram Bot cần hội thoại có owner từ trước, token Bot toàn hệ thống, unique index đa tài khoản chưa được migration, Facebook/Instagram/Zalo chưa có adapter tự gửi.
+- Chuẩn hóa ảnh/caption trong hai connector; ảnh không caption được nhắc nhập văn bản, chưa đọc/tải ảnh; outbound chatbot chỉ gửi text.
+- Ghi tài liệu CRUD trợ lý/template, preview không gửi tin thật, `GEMINI_API_KEY`, fallback/pause và các giới hạn: token Bot toàn hệ thống, dữ liệu legacy cần owner đáng tin cậy, unique index đa tài khoản chưa được migration, Facebook/Instagram/Zalo chưa có adapter tự gửi.
 - Tích hợp Cloudinary cho ảnh đính kèm của mẫu trả lời nhanh với các biến `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`; chỉ nhận ảnh tối đa 5 MiB qua CRUD `/api/v1/quick-replies`.
 - Ghi rõ giới hạn hiện tại: việc gửi media trong message và upload video chưa được triển khai.
 - Ẩn thanh scrollbar trên các vùng cuộn của Inbox, gợi ý AI, sidebar và modal nhưng vẫn giữ thao tác cuộn.

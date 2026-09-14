@@ -72,13 +72,14 @@ describe("Telegram controller", () => {
     const next = vi.fn();
 
     await registerChannel({
+      auth: { id: "507f1f77bcf86cd799439011" },
       body: { botToken: "  bot-token  ", webhookBaseUrl: "https://chat.example.com" }
     } as never, response as never, next);
 
     expect(serviceMocks.registerTelegramChannel).toHaveBeenCalledWith({
       botToken: "bot-token",
       webhookBaseUrl: "https://chat.example.com"
-    });
+    }, "507f1f77bcf86cd799439011");
     expect(state.statusCode).toBe(201);
     expect(state.body).toEqual(registered);
     expect(next).not.toHaveBeenCalled();

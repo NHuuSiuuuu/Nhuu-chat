@@ -1,4 +1,6 @@
 import type { RequestHandler } from "express";
+import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
+import { AppError } from "../common/errors.js";
 
 import {
   telegramChannelConfigSchema,
@@ -35,7 +37,9 @@ export const registerChannel: RequestHandler = async (request, response, next) =
   try {
     const input = telegramChannelConfigSchema.parse(request.body);
 
-    response.status(201).json(await registerTelegramChannel(input));
+    const ownerId = (request as AuthenticatedRequest).auth?.id;
+    if (!ownerId) throw new AppError(401, "AUTHENTICATION_REQUIRED", "Authentication is required");
+    response.status(201).json(await registerTelegramChannel(input, ownerId));
   } catch (error) {
     next(error);
   }
