@@ -14,5 +14,5 @@ export const quickReplyUpdateSchema = z.object({
 });
 
 export const quickReplyIdSchema = z.object({
-  id: z.string().min(1)
+  id: z.string().regex(/^[0-9a-f]{24}$/i)
 });

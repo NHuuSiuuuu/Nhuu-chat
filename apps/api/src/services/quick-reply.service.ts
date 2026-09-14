@@ -133,8 +133,8 @@ export async function updateQuickReply(
   id: string,
   input: QuickReplyUpdateInput
 ): Promise<QuickReplyContract> {
-  const existing = await QuickReplyModel.findOne({ _id: id, userId }).lean();
-  if (!existing) throw notFound();
+  const exists = await QuickReplyModel.exists({ _id: id, userId });
+  if (!exists) throw notFound();
 
   const attachment = input.attachment
     ? await uploadAttachment(userId, input.attachment)
@@ -145,19 +145,26 @@ export async function updateQuickReply(
   if (attachment) set.attachment = attachment;
 
   try {
-    const row = await QuickReplyModel.findOneAndUpdate(
+    const replaced = await QuickReplyModel.findOneAndUpdate(
       { _id: id, userId },
       { $set: set },
-      { new: true, runValidators: true }
+      { returnDocument: "before", runValidators: true }
     ).lean();
-    if (!row) throw notFound();
+    if (!replaced) throw notFound();
 
-    if (attachment && existing.attachment) {
+    if (attachment && replaced.attachment) {
       await destroyWithoutBreakingPersistence(
-        existing.attachment as unknown as QuickReplyAttachmentContract
+        replaced.attachment as unknown as QuickReplyAttachmentContract
       );
     }
-    return toQuickReply(row as unknown as QuickReplyRow);
+
+    // Dựng response từ đúng snapshot vừa bị thay thế và các giá trị đã ghi atomically.
+    return toQuickReply({
+      ...(replaced as unknown as QuickReplyRow),
+      ...(input.shortcut === undefined ? {} : { shortcut: input.shortcut.trim() }),
+      ...(input.message === undefined ? {} : { message: input.message.trim() }),
+      ...(attachment ? { attachment } : {})
+    });
   } catch (error) {
     if (attachment) await destroyWithoutBreakingPersistence(attachment);
     throw error;

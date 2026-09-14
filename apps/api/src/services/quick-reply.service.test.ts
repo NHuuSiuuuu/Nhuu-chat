@@ -6,7 +6,7 @@ const media = vi.hoisted(() => ({
 }));
 const model = vi.hoisted(() => ({
   find: vi.fn(),
-  findOne: vi.fn(),
+  exists: vi.fn(),
   create: vi.fn(),
   findOneAndUpdate: vi.fn(),
   findOneAndDelete: vi.fn()
@@ -64,6 +64,7 @@ describe("quick reply service", () => {
     vi.resetAllMocks();
     media.uploadImage.mockResolvedValue(uploadedAttachment);
     media.destroyMedia.mockResolvedValue(undefined);
+    model.exists.mockResolvedValue({ _id: "reply-1" });
   });
 
   it("creates and lists only the authenticated user's quick replies", async () => {
@@ -148,7 +149,7 @@ describe("quick reply service", () => {
   });
 
   it("returns 404 without uploading when an update targets another user's reply", async () => {
-    model.findOne.mockReturnValue(leanResult(null));
+    model.exists.mockResolvedValue(null);
 
     await expect(updateQuickReply(userId, "foreign-reply", {
       message: "Stolen",
@@ -157,7 +158,7 @@ describe("quick reply service", () => {
       statusCode: 404,
       code: "QUICK_REPLY_NOT_FOUND"
     }));
-    expect(model.findOne).toHaveBeenCalledWith({ _id: "foreign-reply", userId });
+    expect(model.exists).toHaveBeenCalledWith({ _id: "foreign-reply", userId });
     expect(media.uploadImage).not.toHaveBeenCalled();
   });
 
@@ -167,17 +168,11 @@ describe("quick reply service", () => {
       secureUrl: "https://res.cloudinary.com/example/old.png",
       publicId: "nhuu-chat/quick-replies/user/old"
     };
-    model.findOne.mockReturnValue(leanResult({
+    model.findOneAndUpdate.mockReturnValue(leanResult({
       _id: "reply-1",
       shortcut: "photo",
       message: "Old photo",
       attachment: oldAttachment
-    }));
-    model.findOneAndUpdate.mockReturnValue(leanResult({
-      _id: "reply-1",
-      shortcut: "photo",
-      message: "New photo",
-      attachment: uploadedAttachment
     }));
 
     await expect(updateQuickReply(userId, "reply-1", {
@@ -199,18 +194,71 @@ describe("quick reply service", () => {
     expect(model.findOneAndUpdate).toHaveBeenCalledWith(
       { _id: "reply-1", userId },
       { $set: { message: "New photo", attachment: uploadedAttachment } },
-      { new: true, runValidators: true }
+      { returnDocument: "before", runValidators: true }
     );
     expect(media.destroyMedia).toHaveBeenCalledWith(oldAttachment.publicId, "image");
   });
 
+  it("cleans the exact attachments atomically replaced by overlapping updates", async () => {
+    const oldAttachment = {
+      ...uploadedAttachment,
+      secureUrl: "https://res.cloudinary.com/example/old.png",
+      publicId: "nhuu-chat/quick-replies/user/old"
+    };
+    const firstReplacement = {
+      ...uploadedAttachment,
+      secureUrl: "https://res.cloudinary.com/example/first.png",
+      publicId: "nhuu-chat/quick-replies/user/first"
+    };
+    const secondReplacement = {
+      ...uploadedAttachment,
+      secureUrl: "https://res.cloudinary.com/example/second.png",
+      publicId: "nhuu-chat/quick-replies/user/second"
+    };
+    const oldRow = {
+      _id: "reply-1",
+      shortcut: "photo",
+      message: "Old photo",
+      attachment: oldAttachment
+    };
+    media.uploadImage
+      .mockResolvedValueOnce(firstReplacement)
+      .mockResolvedValueOnce(secondReplacement);
+    model.findOneAndUpdate
+      .mockReturnValueOnce(leanResult(oldRow))
+      .mockReturnValueOnce(leanResult({
+        ...oldRow,
+        message: "First replacement",
+        attachment: firstReplacement
+      }));
+
+    const [first, second] = await Promise.all([
+      updateQuickReply(userId, "reply-1", {
+        message: "First replacement",
+        attachment: image
+      }),
+      updateQuickReply(userId, "reply-1", {
+        message: "Second replacement",
+        attachment: image
+      })
+    ]);
+
+    expect(first).toMatchObject({
+      message: "First replacement",
+      attachment: firstReplacement
+    });
+    expect(second).toMatchObject({
+      message: "Second replacement",
+      attachment: secondReplacement
+    });
+    expect(media.destroyMedia.mock.calls.map(([publicId]) => publicId)).toEqual([
+      oldAttachment.publicId,
+      firstReplacement.publicId
+    ]);
+  });
+
   it("removes the replacement upload if Mongo rejects an update", async () => {
     const duplicateError = Object.assign(new Error("duplicate shortcut"), { code: 11000 });
-    model.findOne.mockReturnValue(leanResult({
-      _id: "reply-1",
-      shortcut: "first",
-      message: "First"
-    }));
     model.findOneAndUpdate.mockReturnValue({
       lean: vi.fn().mockRejectedValue(duplicateError)
     });

@@ -140,8 +140,9 @@ describe("quick reply controller and routes", () => {
   });
 
   it("updates and deletes an owned reply through the authenticated routes", async () => {
+    const replyId = "507f1f77bcf86cd799439011";
     service.updateQuickReply.mockResolvedValue({
-      id: "reply-1",
+      id: replyId,
       shortcut: "updated",
       message: "Updated"
     });
@@ -149,18 +150,37 @@ describe("quick reply controller and routes", () => {
     const app = createTestApp();
 
     const updated = await request(app)
-      .patch("/api/v1/quick-replies/reply-1")
+      .patch(`/api/v1/quick-replies/${replyId}`)
       .set("Authorization", "Bearer agent-token")
       .field("shortcut", " updated ");
     const deleted = await request(app)
-      .delete("/api/v1/quick-replies/reply-1")
+      .delete(`/api/v1/quick-replies/${replyId}`)
       .set("Authorization", "Bearer agent-token");
 
     expect(updated.status).toBe(200);
-    expect(service.updateQuickReply).toHaveBeenCalledWith("agent-1", "reply-1", {
+    expect(service.updateQuickReply).toHaveBeenCalledWith("agent-1", replyId, {
       shortcut: "updated"
     });
     expect(deleted.status).toBe(204);
-    expect(service.deleteQuickReply).toHaveBeenCalledWith("agent-1", "reply-1");
+    expect(service.deleteQuickReply).toHaveBeenCalledWith("agent-1", replyId);
+  });
+
+  it("rejects malformed Mongo ids before update or delete reaches the service", async () => {
+    const app = createTestApp();
+
+    const updated = await request(app)
+      .patch("/api/v1/quick-replies/not-an-object-id")
+      .set("Authorization", "Bearer agent-token")
+      .field("message", "Updated");
+    const deleted = await request(app)
+      .delete("/api/v1/quick-replies/not-an-object-id")
+      .set("Authorization", "Bearer agent-token");
+
+    expect(updated.status).toBe(400);
+    expect(updated.body.error.code).toBe("INVALID_REQUEST");
+    expect(deleted.status).toBe(400);
+    expect(deleted.body.error.code).toBe("INVALID_REQUEST");
+    expect(service.updateQuickReply).not.toHaveBeenCalled();
+    expect(service.deleteQuickReply).not.toHaveBeenCalled();
   });
 });
