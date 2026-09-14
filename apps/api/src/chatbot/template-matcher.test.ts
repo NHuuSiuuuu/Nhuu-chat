@@ -30,7 +30,7 @@ describe("matchAutomationTemplate", () => {
 
     expect(matchAutomationTemplate({
       message: "Khách nhắn XIN CHAO shop!",
-      platform: "telegram",
+      channelIdentifier: "telegram:shop-a",
       templates: [greeting]
     })).toBe(greeting);
   });
@@ -38,7 +38,7 @@ describe("matchAutomationTemplate", () => {
   it("does not match a keyword inside another word", () => {
     expect(matchAutomationTemplate({
       message: "Shop có giao hàng không?",
-      platform: "telegram",
+      channelIdentifier: "telegram:shop-a",
       templates: [template("price", { keywords: ["giá"] })]
     })).toBeNull();
   });
@@ -50,32 +50,49 @@ describe("matchAutomationTemplate", () => {
 
     expect(matchAutomationTemplate({
       message: "xin chào",
-      platform: "telegram",
+      channelIdentifier: "telegram:shop-a",
       templates: [lowerPriority, firstCreated, samePriorityLater]
     })).toBe(firstCreated);
   });
 
-  it("ignores disabled templates and templates outside the current platform", () => {
+  it("ignores disabled templates and templates outside the current channel", () => {
     const disabled = template("disabled", { enabled: false, priority: 100 });
     const wrongPlatform = template("facebook", {
       priority: 50,
-      channelScope: { mode: "channels", identifiers: ["facebook"] }
+      channelScope: { mode: "channels", identifiers: ["facebook:page-a"] }
     });
     const telegram = template("telegram", {
-      channelScope: { mode: "channels", identifiers: ["telegram"] }
+      channelScope: { mode: "channels", identifiers: ["telegram:shop-a"] }
     });
 
     expect(matchAutomationTemplate({
       message: "xin chao",
-      platform: "telegram",
+      channelIdentifier: "telegram:shop-a",
       templates: [disabled, wrongPlatform, telegram]
     })).toBe(telegram);
+  });
+
+  it("matches an exact canonical channel identifier only", () => {
+    const shopA = template("shop-a", {
+      channelScope: { mode: "channels", identifiers: ["telegram:shop-a"] }
+    });
+
+    expect(matchAutomationTemplate({
+      message: "xin chao",
+      channelIdentifier: "telegram:shop-a",
+      templates: [shopA]
+    })).toBe(shopA);
+    expect(matchAutomationTemplate({
+      message: "xin chao",
+      channelIdentifier: "telegram:shop-b",
+      templates: [shopA]
+    })).toBeNull();
   });
 
   it.each(["", "   "])("returns null for empty or media-only text input %j", (message) => {
     expect(matchAutomationTemplate({
       message,
-      platform: "telegram",
+      channelIdentifier: "telegram:shop-a",
       templates: [template("greeting")]
     })).toBeNull();
   });

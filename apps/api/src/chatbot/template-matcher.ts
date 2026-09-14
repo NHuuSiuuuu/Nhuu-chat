@@ -24,15 +24,15 @@ function containsWholeKeyword(message: string, keyword: string): boolean {
   return pattern.test(message);
 }
 
-function supportsPlatform(template: AutomationTemplate, platform: string): boolean {
+function supportsChannel(template: AutomationTemplate, channelIdentifier: string): boolean {
   return template.channelScope.mode === "all" ||
-    template.channelScope.identifiers.includes(platform);
+    template.channelScope.identifiers.includes(channelIdentifier);
 }
 
 // Chọn mẫu bật có độ ưu tiên cao nhất; thứ tự đầu vào được giữ nguyên khi đồng hạng.
 export function matchAutomationTemplate(input: {
   message: string;
-  platform: string;
+  channelIdentifier: string;
   templates: AutomationTemplate[];
 }): AutomationTemplate | null {
   const message = normalizeText(input.message);
@@ -40,7 +40,7 @@ export function matchAutomationTemplate(input: {
 
   let match: AutomationTemplate | null = null;
   for (const template of input.templates) {
-    if (!template.enabled || !supportsPlatform(template, input.platform)) continue;
+    if (!template.enabled || !supportsChannel(template, input.channelIdentifier)) continue;
     if (!template.keywords.some((keyword) => containsWholeKeyword(message, keyword))) continue;
     if (match === null || template.priority > match.priority) match = template;
   }
