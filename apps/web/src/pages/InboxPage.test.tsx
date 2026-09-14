@@ -129,6 +129,25 @@ describe("Inbox Tailwind migration", () => {
     expect(chat).toContain("onRefreshAiSuggestions");
   });
 
+  it("loads authenticated quick replies once with a stale-response guard", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+    expect(source).toContain("QuickReplyContract");
+    expect(source).toContain('const QUICK_REPLIES_API_URL = "/api/v1/quick-replies"');
+    expect(source).toContain("useState<QuickReplyContract[]>([])");
+    expect(source).toContain("apiRequest<{ quickReplies: QuickReplyContract[] }>(API_URL, QUICK_REPLIES_API_URL, token, {}, refresh)");
+    expect(source).toContain("if (!cancelled) setQuickReplies(result.quickReplies)");
+    expect(source).toContain("return () => { cancelled = true; }");
+  });
+
+  it("passes backend quick replies through ChatWindow to MessageComposer", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+    const chat = readFileSync(new URL("../components/conversations/ChatWindow.tsx", import.meta.url), "utf8");
+    expect(source).toContain("quickReplies={quickReplies}");
+    expect(chat).toContain("quickReplies: QuickReplyContract[]");
+    expect(chat).toContain("<MessageComposer");
+    expect(chat).toContain("quickReplies={quickReplies}");
+  });
+
   it("loads AI settings and sends the configured suggestion trigger", () => {
     const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
     const composer = readFileSync(new URL("../components/conversations/MessageComposer.tsx", import.meta.url), "utf8");

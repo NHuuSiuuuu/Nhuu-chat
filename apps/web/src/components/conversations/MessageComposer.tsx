@@ -1,11 +1,7 @@
 import * as React from "react";
 import { useState } from "react";
 import { InboxIcon } from "./InboxIcon.js";
-
-const quickReplies = [
-  "Xin chào, em có thể hỗ trợ gì cho anh/chị?",
-  "Em đã tiếp nhận yêu cầu và sẽ phản hồi sớm nhất ạ."
-];
+import type { QuickReplyContract } from "@nhuu-chat/contracts";
 
 const members = ["Nguyễn Văn Hữu", "Đội hỗ trợ"];
 
@@ -14,24 +10,38 @@ export function getDisplayedAiSuggestions(aiSuggestions: string[] | null | undef
   return isLoading || !aiSuggestions?.length ? [] : aiSuggestions;
 }
 
-export function MessageComposer({ onSend, disabled = false, aiSuggestions, aiSuggestionsEnabled = true, isAiSuggestionsLoading = false, aiSuggestionsError, onRefreshAiSuggestions }: { onSend: (content: string) => Promise<void>; disabled?: boolean; aiSuggestions?: string[] | null; aiSuggestionsEnabled?: boolean; isAiSuggestionsLoading?: boolean; aiSuggestionsError?: string | null; onRefreshAiSuggestions?: () => void }) {
+export function createQuickReplyDraft(reply: QuickReplyContract): { content: string; attachmentUrl: string | null } {
+  return { content: reply.message, attachmentUrl: reply.attachment?.secureUrl ?? null };
+}
+
+export function MessageComposer({ onSend, quickReplies, disabled = false, aiSuggestions, aiSuggestionsEnabled = true, isAiSuggestionsLoading = false, aiSuggestionsError, onRefreshAiSuggestions }: { onSend: (content: string) => Promise<void>; quickReplies: QuickReplyContract[]; disabled?: boolean; aiSuggestions?: string[] | null; aiSuggestionsEnabled?: boolean; isAiSuggestionsLoading?: boolean; aiSuggestionsError?: string | null; onRefreshAiSuggestions?: () => void }) {
   const [content, setContent] = useState("");
+  const [selectedAttachmentUrl, setSelectedAttachmentUrl] = useState<string | null>(null);
   const [isShortcutModalOpen, setIsShortcutModalOpen] = useState(false);
   const [suggestionKind, setSuggestionKind] = useState<"quick-reply" | "members" | null>(null);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
 
-  const suggestions = suggestionKind === "quick-reply" ? quickReplies : members;
+  const suggestionCount = suggestionKind === "quick-reply" ? quickReplies.length : members.length;
   const displayedAiSuggestions = getDisplayedAiSuggestions(aiSuggestions, isAiSuggestionsLoading);
 
   async function submitMessage() {
     if (disabled || !content.trim()) return;
     await onSend(content.trim());
     setContent("");
+    setSelectedAttachmentUrl(null);
     setSuggestionKind(null);
   }
 
   function selectSuggestion(value: string) {
     setContent(value);
+    setSelectedAttachmentUrl(null);
+    setSuggestionKind(null);
+  }
+
+  function selectQuickReply(reply: QuickReplyContract) {
+    const draft = createQuickReplyDraft(reply);
+    setContent(draft.content);
+    setSelectedAttachmentUrl(draft.attachmentUrl);
     setSuggestionKind(null);
   }
 
@@ -41,15 +51,21 @@ export function MessageComposer({ onSend, disabled = false, aiSuggestions, aiSug
       setIsShortcutModalOpen(false);
       return;
     }
-    if (suggestionKind && (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Tab")) {
+    if (suggestionKind && suggestionCount > 0 && (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Tab")) {
       event.preventDefault();
       const direction = event.key === "ArrowUp" ? -1 : 1;
-      setSuggestionIndex((current) => (current + direction + suggestions.length) % suggestions.length);
+      setSuggestionIndex((current) => (current + direction + suggestionCount) % suggestionCount);
       return;
     }
-    if (suggestionKind && event.key === "Enter" && !event.shiftKey) {
+    if (suggestionKind && suggestionCount > 0 && event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      selectSuggestion(suggestions[suggestionIndex] ?? suggestions[0]);
+      if (suggestionKind === "quick-reply") {
+        const reply = quickReplies[suggestionIndex] ?? quickReplies[0];
+        if (reply) selectQuickReply(reply);
+      } else {
+        const member = members[suggestionIndex] ?? members[0];
+        if (member) selectSuggestion(member);
+      }
       return;
     }
     if (event.key === "/") {
@@ -84,10 +100,12 @@ export function MessageComposer({ onSend, disabled = false, aiSuggestions, aiSug
       </div>}
       <div className="relative px-3 py-1.5">
         {suggestionKind && <div className="absolute bottom-full left-3 right-3 z-20 mb-2 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl" role="listbox" aria-label={suggestionKind === "quick-reply" ? "Mẫu trả lời nhanh" : "Gợi ý thành viên"}>
-          {suggestions.map((suggestion, index) => <button className={`block w-full rounded-md px-3 py-2 text-left text-sm transition ${index === suggestionIndex ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`} type="button" role="option" aria-selected={index === suggestionIndex} key={suggestion} onClick={() => selectSuggestion(suggestion)}>{suggestion}</button>)}
+          {suggestionKind === "quick-reply" ? quickReplies.map((reply, index) => <button className={`block w-full rounded-md px-3 py-2 text-left text-sm transition ${index === suggestionIndex ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`} type="button" role="option" aria-selected={index === suggestionIndex} key={reply.id} onClick={() => selectQuickReply(reply)}><span className="block font-semibold">/{reply.shortcut}</span><span className="block truncate text-xs text-gray-500">{reply.message}</span></button>) : members.map((suggestion, index) => <button className={`block w-full rounded-md px-3 py-2 text-left text-sm transition ${index === suggestionIndex ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`} type="button" role="option" aria-selected={index === suggestionIndex} key={suggestion} onClick={() => selectSuggestion(suggestion)}>{suggestion}</button>)}
+          {suggestionKind === "quick-reply" && quickReplies.length === 0 && <p className="px-3 py-2 text-sm text-gray-500">Chưa có mẫu trả lời nhanh</p>}
         </div>}
         <textarea className="min-h-12 w-full resize-none border-0 bg-transparent text-sm leading-5 text-gray-800 outline-none placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-1" aria-label="Tin nhắn" value={content} onChange={(event) => setContent(event.target.value)} onKeyDown={handleKeyDown} placeholder="Nhập tin nhắn... (gõ / để chèn mẫu trả lời nhanh, Shift+Enter để xuống dòng)" disabled={disabled} rows={1} />
       </div>
+      {selectedAttachmentUrl && <div className="mx-3 mb-1 flex min-w-0 items-center gap-2 rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700"><InboxIcon name="image" size={16} /><span className="shrink-0 font-semibold">Ảnh đính kèm:</span><a className="min-w-0 truncate underline" href={selectedAttachmentUrl} target="_blank" rel="noreferrer">{selectedAttachmentUrl}</a><button className="ml-auto shrink-0 rounded p-1 hover:bg-sky-100" type="button" aria-label="Xoá ảnh đính kèm" onClick={() => setSelectedAttachmentUrl(null)}><InboxIcon name="close" size={14} /></button></div>}
       <div className="flex items-center justify-between border-t border-gray-100 px-3 py-1.5">
         <button className="grid size-8 place-items-center rounded-full bg-gray-100 text-gray-500 transition hover:bg-gray-200 hover:text-gray-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" onClick={() => setIsShortcutModalOpen(true)} aria-label="Mở phím tắt"><span className="text-sm font-bold">?</span></button>
         <div className="flex items-center gap-1">

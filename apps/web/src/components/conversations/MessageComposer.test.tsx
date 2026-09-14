@@ -106,4 +106,23 @@ describe("MessageComposer accessibility", () => {
     expect(source).toContain("onClick={() => selectSuggestion(suggestion)}");
     expect(source).toContain("onSend(content.trim())");
   });
+
+  it("builds a backend quick-reply draft without sending it", () => {
+    expect(typeof composerModule.createQuickReplyDraft).toBe("function");
+    if (typeof composerModule.createQuickReplyDraft === "function") {
+      expect(composerModule.createQuickReplyDraft({ id: "reply-1", shortcut: "bao-gia", message: "Em gửi anh/chị bảng giá mới nhất ạ.", attachment: { secureUrl: "https://res.cloudinary.com/nhuu/image/upload/bang-gia.png", publicId: "quick-replies/bang-gia", resourceType: "image", mimeType: "image/png", bytes: 2048, width: 800, height: 600 } })).toEqual({ content: "Em gửi anh/chị bảng giá mới nhất ạ.", attachmentUrl: "https://res.cloudinary.com/nhuu/image/upload/bang-gia.png" });
+    }
+  });
+
+  it("lists backend shortcuts and exposes the selected attachment URL", () => {
+    const source = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
+    expect(source).toContain("quickReplies: QuickReplyContract[]");
+    expect(source).toContain("quickReplies.map((reply, index)");
+    expect(source).toContain("reply.shortcut");
+    expect(source).toContain("reply.message");
+    expect(source).toContain("selectedAttachmentUrl");
+    expect(source).toContain("href={selectedAttachmentUrl}");
+    expect(source).not.toContain('const quickReplies = [');
+    expect(source).not.toContain("Xin chào, em có thể hỗ trợ gì cho anh/chị?");
+  });
 });
