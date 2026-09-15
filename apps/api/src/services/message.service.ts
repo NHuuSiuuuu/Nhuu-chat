@@ -68,8 +68,13 @@ export async function sendOutboundMessage(
     throw new AppError(403, "FORBIDDEN", "You do not have access to this conversation");
   }
 
-  if (conversation.platform === "telegram_personal" && String(conversation.ownerId) !== auth.id) {
-    throw new AppError(403, "FORBIDDEN", "You do not own this Telegram connection");
+  // Kết nối cá nhân chỉ owner mới được gửi để không dùng chéo session giữa các tài khoản.
+  if ((conversation.platform === "telegram_personal" || conversation.platform === "zalo_personal") && String(conversation.ownerId) !== auth.id) {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      conversation.platform === "telegram_personal" ? "You do not own this Telegram connection" : "You do not own this Zalo connection"
+    );
   }
   // Tạm dừng bot sau kiểm tra quyền và trước connector để nhân viên tiếp quản cả khi gửi bị lỗi.
   await pauseBot(conversationId, new Date());
@@ -86,6 +91,20 @@ export async function sendOutboundMessage(
     const recipient = await resolveTelegramPersonalRecipient(client, conversation.channelId);
     const sent = await client.sendMessage(recipient, { message: content });
     externalMessageId = String(sent.id);
+  } else if (conversation.platform === "zalo_personal") {
+    // Chỉ gọi API Zalo qua session manager để credentials runtime không đi vào outbound flow.
+    const { getActiveZaloPersonalClient } = await import("./zalo-personal.service.js");
+    try {
+      const client = await getActiveZaloPersonalClient(auth.id);
+      if (!client) {
+        throw new AppError(409, "ZALO_PERSONAL_DISCONNECTED", "Zalo personal session is not active");
+      }
+      const sent = await client.sendMessage(conversation.channelId, content);
+      externalMessageId = sent.id;
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError(502, "ZALO_PERSONAL_DELIVERY_FAILED", "Zalo personal message delivery failed");
+    }
   } else if (conversation.platform === "telegram") {
     const botToken = await readProviderSecretByName("telegram", "bot-token");
     const delivery = await new TelegramClient(botToken).sendText(conversation.channelId, content);

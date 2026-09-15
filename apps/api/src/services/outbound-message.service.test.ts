@@ -12,6 +12,8 @@ const dependencyMocks = vi.hoisted(() => ({
   releaseSendLease: vi.fn(),
   getActivePersonalClient: vi.fn(),
   personalSendMessage: vi.fn(),
+  getActiveZaloPersonalClient: vi.fn(),
+  zaloPersonalSendMessage: vi.fn(),
   readProviderSecretByName: vi.fn()
 }));
 
@@ -25,6 +27,10 @@ vi.mock("../models/message.model.js", () => ({
 
 vi.mock("./telegram-personal.service.js", () => ({
   getActivePersonalClient: dependencyMocks.getActivePersonalClient
+}));
+
+vi.mock("./zalo-personal.service.js", () => ({
+  getActiveZaloPersonalClient: dependencyMocks.getActiveZaloPersonalClient
 }));
 
 vi.mock("../channels/telegram/telegram.client.js", () => ({
@@ -224,6 +230,112 @@ describe("sendOutboundMessage", () => {
       createdAt: "2026-09-10T04:30:01.000Z"
     });
     expect(result.recipients).toEqual(["customer-1", ""]);
+  });
+
+  it("sends through Zalo personal after pausing the bot and persists the external id", async () => {
+    arrangeConversation(conversation({
+      platform: "zalo_personal",
+      assignedAgentId: null
+    }));
+    dependencyMocks.getActiveZaloPersonalClient.mockResolvedValue({
+      sendMessage: dependencyMocks.zaloPersonalSendMessage
+    });
+    dependencyMocks.zaloPersonalSendMessage.mockImplementation(async () => {
+      expect(dependencyMocks.pauseConversation).toHaveBeenCalledWith("conversation-1", {
+        $max: { botPausedUntil: new Date("2026-09-10T05:00:00.000Z") }
+      });
+      return { id: "zalo-9001" };
+    });
+    arrangeStoredMessage();
+    const ownerAuth = { id: "customer-1", email: "owner@example.com", role: "customer" } as const;
+
+    const result = await sendOutboundMessage(
+      { conversationId: "conversation-1", content: "Hello from Zalo support" },
+      ownerAuth
+    );
+
+    expect(dependencyMocks.getActiveZaloPersonalClient).toHaveBeenCalledWith("customer-1");
+    expect(dependencyMocks.zaloPersonalSendMessage).toHaveBeenCalledWith("chat-42", "Hello from Zalo support");
+    expect(dependencyMocks.zaloPersonalSendMessage).toHaveBeenCalledOnce();
+    expect(dependencyMocks.getActivePersonalClient).not.toHaveBeenCalled();
+    expect(dependencyMocks.botSendText).not.toHaveBeenCalled();
+    expect(dependencyMocks.createMessage).toHaveBeenCalledWith({
+      conversationId: "conversation-1",
+      platform: "zalo_personal",
+      senderId: "agent",
+      content: "Hello from Zalo support",
+      externalMessageId: "zalo-9001",
+      deliveryStatus: "sent",
+      senderType: "agent",
+      type: "text"
+    });
+    expect(result.message).toMatchObject({
+      platform: "zalo_personal",
+      content: "Hello from Zalo support",
+      deliveryStatus: "sent"
+    });
+  });
+
+  it("rejects a disconnected Zalo personal session without persisting", async () => {
+    arrangeConversation(conversation({
+      platform: "zalo_personal",
+      assignedAgentId: null
+    }));
+    dependencyMocks.getActiveZaloPersonalClient.mockResolvedValue(undefined);
+    const ownerAuth = { id: "customer-1", email: "owner@example.com", role: "customer" } as const;
+
+    await expect(sendOutboundMessage(
+      { conversationId: "conversation-1", content: "Hello from Zalo support" },
+      ownerAuth
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "ZALO_PERSONAL_DISCONNECTED",
+      message: "Zalo personal session is not active"
+    } satisfies Partial<AppError>);
+
+    expect(dependencyMocks.zaloPersonalSendMessage).not.toHaveBeenCalled();
+    expect(dependencyMocks.createMessage).not.toHaveBeenCalled();
+  });
+
+  it.each([agentAuth, { id: "admin-1", email: "admin@example.com", role: "admin" as const }])(
+    "denies a non-owner %j from using a Zalo personal connection", async (auth) => {
+      arrangeConversation(conversation({ platform: "zalo_personal" }));
+
+      await expect(sendOutboundMessage(
+        { conversationId: "conversation-1", content: "Hello from Zalo support" }, auth
+      )).rejects.toMatchObject({
+        statusCode: 403,
+        code: "FORBIDDEN",
+        message: "You do not own this Zalo connection"
+      } satisfies Partial<AppError>);
+
+      expect(dependencyMocks.pauseConversation).not.toHaveBeenCalled();
+      expect(dependencyMocks.getActiveZaloPersonalClient).not.toHaveBeenCalled();
+      expect(dependencyMocks.createMessage).not.toHaveBeenCalled();
+    }
+  );
+
+  it("hides a Zalo personal connector failure behind a stable error", async () => {
+    arrangeConversation(conversation({
+      platform: "zalo_personal",
+      assignedAgentId: null
+    }));
+    dependencyMocks.getActiveZaloPersonalClient.mockResolvedValue({
+      sendMessage: dependencyMocks.zaloPersonalSendMessage
+    });
+    dependencyMocks.zaloPersonalSendMessage.mockRejectedValue(new Error("connector credential=secret-cookie failed"));
+    const ownerAuth = { id: "customer-1", email: "owner@example.com", role: "customer" } as const;
+
+    await expect(sendOutboundMessage(
+      { conversationId: "conversation-1", content: "Hello from Zalo support" },
+      ownerAuth
+    )).rejects.toMatchObject({
+      statusCode: 502,
+      code: "ZALO_PERSONAL_DELIVERY_FAILED",
+      message: "Zalo personal message delivery failed"
+    } satisfies Partial<AppError>);
+
+    expect(dependencyMocks.createMessage).not.toHaveBeenCalled();
   });
 
   it("persists unsupported-platform delivery as pending without an external id", async () => {
