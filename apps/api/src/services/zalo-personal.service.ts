@@ -72,6 +72,15 @@ export async function startZaloPersonalQr(userId: string): Promise<ZaloPersonalQ
       return toQrStatus(existing);
     }
 
+    // Sau restart chỉ Mongo biết owner đang bị chặn, nên phải đọc trạng thái trước khi tạo adapter mới.
+    let persisted: ZaloPersonalStatus | undefined;
+    try {
+      persisted = await getPersistedZaloPersonalSessionStatus(userId);
+    } catch {
+      throw new AppError(503, "ZALO_PERSONAL_SESSION_LOOKUP_FAILED", "Zalo personal session is temporarily unavailable");
+    }
+    if (persisted && persisted.status !== "expired" && persisted.status !== "disconnected") return persisted;
+
     const pending: PendingZaloPersonalSession = {
       id: randomUUID(),
       ownerId: userId,
@@ -115,14 +124,7 @@ export async function getZaloPersonalSessionStatus(userId: string): Promise<Zalo
   const pending = pendingSessionsByOwner.get(userId);
   if (pending) return toQrStatus(pending);
 
-  const session = await ZaloPersonalSessionModel.findOne({ ownerId: userId }).lean();
-  if (!session) return { id: userId, status: "disconnected" };
-
-  return {
-    id: stringValue(session._id) ?? userId,
-    status: publicStatus(session.status),
-    ...safeAccountMetadata(session)
-  };
+  return await getPersistedZaloPersonalSessionStatus(userId) ?? { id: userId, status: "disconnected" };
 }
 
 export async function logoutZaloPersonal(userId: string): Promise<void> {
@@ -155,10 +157,11 @@ export async function getActiveZaloPersonalClient(userId: string): Promise<ZaloP
     if (existing) return existing;
     if (runtimeErrorsByOwner.has(userId)) return undefined;
 
-    const session = await ZaloPersonalSessionModel.findOne({ ownerId: userId, status: "connected" })
+    // Không restore document có mã lỗi vì listener cũ có thể chưa dừng được.
+    const session = await ZaloPersonalSessionModel.findOne({ ownerId: userId, status: "connected", lastErrorCode: null })
       .select("+encryptedCredentials")
       .lean();
-    if (!session?.encryptedCredentials) return undefined;
+    if (!session?.encryptedCredentials || session.lastErrorCode != null) return undefined;
 
     return restoreZaloPersonalClient(userId, session.encryptedCredentials);
   });
@@ -166,16 +169,17 @@ export async function getActiveZaloPersonalClient(userId: string): Promise<ZaloP
 
 // Khôi phục từng owner độc lập; lỗi một session chỉ được lưu mã an toàn và không chặn owner khác.
 export async function restoreActiveZaloPersonalClients(): Promise<void> {
-  const sessions = await ZaloPersonalSessionModel.find({ status: "connected" })
+  const sessions = await ZaloPersonalSessionModel.find({ status: "connected", lastErrorCode: null })
     .select("+encryptedCredentials")
     .lean();
 
   await Promise.all(sessions.map(async (session) => {
     const ownerId = stringValue(session.ownerId);
-    if (!ownerId || !session.encryptedCredentials) return;
+    // Query là lớp đầu; kiểm tra lại dữ liệu đọc được để không restore document lỗi hoặc owner đã bị chặn.
+    if (!ownerId || !session.encryptedCredentials || session.status !== "connected" || session.lastErrorCode != null || runtimeErrorsByOwner.has(ownerId)) return;
     try {
       await runOwnerLifecycle(ownerId, async () => {
-        if (activeClientsByOwner.has(ownerId)) return;
+        if (activeClientsByOwner.has(ownerId) || runtimeErrorsByOwner.has(ownerId)) return;
         await restoreZaloPersonalClient(ownerId, session.encryptedCredentials);
       });
     } catch {
@@ -185,6 +189,21 @@ export async function restoreActiveZaloPersonalClients(): Promise<void> {
       );
     }
   }));
+}
+
+// Chỉ chuyển document Mongo thành payload công khai; lastErrorCode ưu tiên hơn status cũ để fail-closed.
+async function getPersistedZaloPersonalSessionStatus(userId: string): Promise<ZaloPersonalStatus | undefined> {
+  const session = await ZaloPersonalSessionModel.findOne({ ownerId: userId }).lean();
+  if (!session) return undefined;
+
+  const errorCode = stringValue(session.lastErrorCode);
+  const status: PublicStatus = errorCode ? "error" : publicStatus(session.status);
+  return {
+    id: stringValue(session._id) ?? userId,
+    status,
+    ...(status === "error" && errorCode ? { errorCode } : {}),
+    ...safeAccountMetadata(session)
+  };
 }
 
 export async function shutdownActiveZaloPersonalClients(): Promise<void> {

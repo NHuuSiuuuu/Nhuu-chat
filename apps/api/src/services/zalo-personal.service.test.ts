@@ -69,6 +69,10 @@ describe("Zalo personal QR session lifecycle", () => {
     dependencies.findOneAndUpdate.mockResolvedValue(undefined);
     dependencies.updateOne.mockResolvedValue(undefined);
     dependencies.deleteOne.mockResolvedValue(undefined);
+    dependencies.findOne.mockReturnValue({
+      lean: async () => null,
+      select: () => ({ lean: async () => null })
+    });
   });
 
   afterEach(async () => {
@@ -212,7 +216,7 @@ describe("Zalo personal QR session lifecycle", () => {
       return api;
     });
     dependencies.createClient.mockReturnValue(lateClient);
-    dependencies.findOne.mockReturnValue({ select: () => ({ lean: async () => null }) });
+    dependencies.findOne.mockReturnValue({ lean: async () => null, select: () => ({ lean: async () => null }) });
     api.getAccountInfo.mockImplementation(() => new Promise((resolve) => {
       finishAccountLookup = () => resolve({ id: "zalo-1", displayName: "Nhuu", username: "nhuu" });
     }));
@@ -368,7 +372,7 @@ describe("Zalo personal QR session lifecycle", () => {
   it("compensates a QR write that becomes expired before Mongo confirms it", async () => {
     let resolveWrite!: () => void;
     dependencies.findOneAndUpdate.mockImplementation(() => new Promise<void>((resolve) => { resolveWrite = resolve; }));
-    dependencies.findOne.mockReturnValue({ select: () => ({ lean: async () => null }) });
+    dependencies.findOne.mockReturnValue({ lean: async () => null, select: () => ({ lean: async () => null }) });
     const { getActiveZaloPersonalClient, getZaloPersonalQrStatus, getZaloPersonalSessionStatus, startZaloPersonalQr } = await import("./zalo-personal.service.js");
 
     const qr = await startZaloPersonalQr("owner-write-expiry");
@@ -417,5 +421,107 @@ describe("Zalo personal QR session lifecycle", () => {
     });
     expect(dependencies.createClient).toHaveBeenCalledOnce();
     expect(api.startListener).toHaveBeenCalledOnce();
+  });
+
+  it("blocks a fresh QR from a persisted owner error without exposing credentials", async () => {
+    dependencies.findOne.mockReturnValue({
+      lean: async () => ({
+        _id: "session-persisted-error",
+        status: "error",
+        lastErrorCode: "ZALO_PERSONAL_QR_COMPENSATION_STOP_FAILED",
+        encryptedCredentials: "ciphertext:secret",
+        zaloUserId: "zalo-1",
+        displayName: "Nhuu",
+        username: "nhuu"
+      }),
+      select: () => ({
+        lean: async () => ({
+          _id: "session-persisted-error",
+          status: "error",
+          lastErrorCode: "ZALO_PERSONAL_QR_COMPENSATION_STOP_FAILED",
+          encryptedCredentials: "ciphertext:secret",
+          zaloUserId: "zalo-1",
+          displayName: "Nhuu",
+          username: "nhuu"
+        })
+      })
+    });
+    const { getActiveZaloPersonalClient, shutdownActiveZaloPersonalClients, startZaloPersonalQr } = await import("./zalo-personal.service.js");
+    dependencies.decryptSecret.mockReturnValue(JSON.stringify({ imei: "imei-1" }));
+
+    await shutdownActiveZaloPersonalClients();
+    const status = await startZaloPersonalQr("owner-persisted-error");
+
+    expect(status).toEqual({
+      id: "session-persisted-error",
+      status: "error",
+      errorCode: "ZALO_PERSONAL_QR_COMPENSATION_STOP_FAILED",
+      zaloUserId: "zalo-1",
+      displayName: "Nhuu",
+      username: "nhuu"
+    });
+    expect(JSON.stringify(status)).not.toContain("ciphertext:secret");
+    expect(await getActiveZaloPersonalClient("owner-persisted-error")).toBeUndefined();
+    expect(dependencies.createClient).not.toHaveBeenCalled();
+  });
+
+  it("returns persisted connected status instead of creating a competing QR", async () => {
+    dependencies.findOne.mockReturnValue({
+      lean: async () => ({
+        _id: "session-persisted-connected",
+        status: "connected",
+        lastErrorCode: null,
+        zaloUserId: "zalo-1",
+        displayName: "Nhuu",
+        username: "nhuu"
+      })
+    });
+    const { shutdownActiveZaloPersonalClients, startZaloPersonalQr } = await import("./zalo-personal.service.js");
+
+    await shutdownActiveZaloPersonalClients();
+    await expect(startZaloPersonalQr("owner-persisted-connected")).resolves.toEqual({
+      id: "session-persisted-connected",
+      status: "connected",
+      zaloUserId: "zalo-1",
+      displayName: "Nhuu",
+      username: "nhuu"
+    });
+    expect(dependencies.createClient).not.toHaveBeenCalled();
+  });
+
+  it("bulk restores only persisted connected owners without an error guard", async () => {
+    let resolveWrite!: () => void;
+    const blockedClient = createQrClient();
+    const restoredClient = createQrClient();
+    dependencies.createClient.mockReturnValueOnce(blockedClient).mockReturnValue(restoredClient);
+    dependencies.findOneAndUpdate.mockImplementation(() => new Promise<void>((resolve) => { resolveWrite = resolve; }));
+    dependencies.findOne.mockReturnValue({ lean: async () => null });
+    api.stopListener.mockRejectedValueOnce(new Error("native listener did not stop"));
+    const { getZaloPersonalQrStatus, restoreActiveZaloPersonalClients, startZaloPersonalQr } = await import("./zalo-personal.service.js");
+
+    const qr = await startZaloPersonalQr("owner-runtime-blocked");
+    await flushLifecycleQueue();
+    vi.setSystemTime(new Date("2026-09-15T16:01:41.000Z"));
+    expect(getZaloPersonalQrStatus(qr.id, "owner-runtime-blocked").status).toBe("expired");
+    resolveWrite();
+    await flushLifecycleQueue();
+
+    dependencies.find.mockReturnValue({
+      select: () => ({
+        lean: async () => [
+          { ownerId: "owner-runtime-blocked", status: "connected", lastErrorCode: null, encryptedCredentials: "ciphertext:runtime" },
+          { ownerId: "owner-persisted-error", status: "error", lastErrorCode: "ZALO_PERSONAL_QR_COMPENSATION_STOP_FAILED", encryptedCredentials: "ciphertext:error" },
+          { ownerId: "owner-stale-error", status: "connected", lastErrorCode: "ZALO_PERSONAL_LOGOUT_STOP_FAILED", encryptedCredentials: "ciphertext:stale" },
+          { ownerId: "owner-normal", status: "connected", lastErrorCode: null, encryptedCredentials: "ciphertext:normal" }
+        ]
+      })
+    });
+    dependencies.decryptSecret.mockReturnValue(JSON.stringify({ imei: "imei-1" }));
+
+    await restoreActiveZaloPersonalClients();
+
+    expect(dependencies.find).toHaveBeenCalledWith({ status: "connected", lastErrorCode: null });
+    expect(restoredClient.login).toHaveBeenCalledOnce();
+    expect(restoredClient.login).toHaveBeenCalledWith({ imei: "imei-1" });
   });
 });
