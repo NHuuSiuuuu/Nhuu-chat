@@ -35,7 +35,7 @@ function safeStatus(value: unknown): ZaloPersonalStatus {
   return result.data;
 }
 
-function safeError(error: unknown): AppError | unknown {
+function safeError(error: unknown): AppError {
   return error instanceof AppError
     ? error
     : new AppError(503, "ZALO_PERSONAL_UNAVAILABLE", "Zalo personal service is temporarily unavailable");

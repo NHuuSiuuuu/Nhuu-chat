@@ -60,9 +60,14 @@ function createQrClient() {
 }
 
 describe("Zalo personal QR session lifecycle", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-15T16:00:00.000Z"));
+    vi.clearAllMocks();
+    resetApi();
+    const { setZaloPersonalRedisLock, shutdownActiveZaloPersonalClients } = await import("./zalo-personal.service.js");
+    await shutdownActiveZaloPersonalClients();
+    setZaloPersonalRedisLock(undefined);
     vi.clearAllMocks();
     resetApi();
     dependencies.createClient.mockImplementation(createQrClient);
@@ -523,5 +528,46 @@ describe("Zalo personal QR session lifecycle", () => {
     expect(dependencies.find).toHaveBeenCalledWith({ status: "connected", lastErrorCode: null });
     expect(restoredClient.login).toHaveBeenCalledOnce();
     expect(restoredClient.login).toHaveBeenCalledWith({ imei: "imei-1" });
+  });
+
+  it("holds one Redis lease across QR login and releases it after logout", async () => {
+    const release = vi.fn(async () => undefined);
+    const acquire = vi.fn(async () => ({ release }));
+    const { logoutZaloPersonal, setZaloPersonalRedisLock, startZaloPersonalQr } = await import("./zalo-personal.service.js");
+    setZaloPersonalRedisLock({ acquire });
+
+    await startZaloPersonalQr("owner-held-login-lease");
+    await flushLifecycleQueue();
+    expect(acquire).toHaveBeenCalledOnce();
+    expect(release).not.toHaveBeenCalled();
+
+    await startZaloPersonalQr("owner-held-login-lease");
+    expect(acquire).toHaveBeenCalledOnce();
+    expect(release).not.toHaveBeenCalled();
+
+    await logoutZaloPersonal("owner-held-login-lease");
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it("holds a restored Redis lease and releases it once after shutdown", async () => {
+    const release = vi.fn(async () => undefined);
+    const acquire = vi.fn(async () => ({ release }));
+    const restoredClient = createQrClient();
+    dependencies.createClient.mockReturnValue(restoredClient);
+    dependencies.findOne.mockReturnValue({
+      select: () => ({ lean: async () => ({ encryptedCredentials: "ciphertext:stored", status: "connected", lastErrorCode: null }) })
+    });
+    dependencies.decryptSecret.mockReturnValue(JSON.stringify({ imei: "imei-1" }));
+    const { getActiveZaloPersonalClient, setZaloPersonalRedisLock, shutdownActiveZaloPersonalClients } = await import("./zalo-personal.service.js");
+    setZaloPersonalRedisLock({ acquire });
+
+    expect(await getActiveZaloPersonalClient("owner-held-restore-lease")).toBe(api);
+    expect(acquire).toHaveBeenCalledOnce();
+    expect(release).not.toHaveBeenCalled();
+
+    await shutdownActiveZaloPersonalClients();
+    expect(restoredClient.login).toHaveBeenCalledOnce();
+    expect(api.stopListener).toHaveBeenCalledOnce();
+    expect(release).toHaveBeenCalledOnce();
   });
 });

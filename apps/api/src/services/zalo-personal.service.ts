@@ -42,6 +42,7 @@ type PendingZaloPersonalSession = {
 
 const pendingSessionsByOwner = new Map<string, PendingZaloPersonalSession>();
 const activeClientsByOwner = new Map<string, ZaloPersonalApi>();
+const heldLeasesByOwner = new Map<string, ZaloPersonalRedisLease>();
 const runtimeErrorsByOwner = new Map<string, string>();
 const ownerLifecycleTails = new Map<string, Promise<void>>();
 let redisLock: ZaloPersonalRedisLock | undefined;
@@ -207,14 +208,31 @@ async function getPersistedZaloPersonalSessionStatus(userId: string): Promise<Za
 }
 
 export async function shutdownActiveZaloPersonalClients(): Promise<void> {
-  const pending = [...pendingSessionsByOwner.values()];
-  pendingSessionsByOwner.clear();
-  await Promise.all(pending.map((session) => session.client.disconnect().catch(() => undefined)));
-
-  const active = [...activeClientsByOwner.values()];
-  activeClientsByOwner.clear();
-  runtimeErrorsByOwner.clear();
-  await Promise.all(active.map((client) => client.stopListener().catch(() => undefined)));
+  const owners = new Set([
+    ...pendingSessionsByOwner.keys(),
+    ...activeClientsByOwner.keys(),
+    ...heldLeasesByOwner.keys()
+  ]);
+  await Promise.all([...owners].map(async (ownerId) => {
+    try {
+      await runOwnerLifecycle(ownerId, async () => {
+        const pending = pendingSessionsByOwner.get(ownerId);
+        const active = activeClientsByOwner.get(ownerId);
+        if (active) {
+          // Pending connected và active cùng trỏ một API, dùng stop memoized để không dừng hai lần.
+          if (pending?.api === active) await stopPendingApi(pending, active);
+          else await active.stopListener();
+        } else if (pending) {
+          await stopPendingForShutdown(pending);
+        }
+        pendingSessionsByOwner.delete(ownerId);
+        activeClientsByOwner.delete(ownerId);
+        runtimeErrorsByOwner.delete(ownerId);
+      });
+    } catch {
+      // Giữ map và lease khi connector chưa dừng được để không mở listener cạnh tranh.
+    }
+  }));
 }
 
 // Theo dõi native login ngoài queue nhưng đưa completion vào queue sau khi đã kiểm tra cancellation.
@@ -368,14 +386,30 @@ function runOwnerLifecycle<T>(userId: string, operation: () => Promise<T>): Prom
   const previous = ownerLifecycleTails.get(userId) ?? Promise.resolve();
   const running = (async () => {
     await previous.catch(() => undefined);
-    const lease = redisLock && await redisLock.acquire(`zalo-personal:${userId}`, LIFECYCLE_LOCK_TTL_MS);
+    const heldLease = heldLeasesByOwner.get(userId);
+    const lease = heldLease ?? (redisLock && await redisLock.acquire(`zalo-personal:${userId}`, LIFECYCLE_LOCK_TTL_MS));
     if (redisLock && !lease) {
       throw new AppError(503, "ZALO_PERSONAL_LOCK_UNAVAILABLE", "Zalo personal session is temporarily unavailable");
     }
+    let operationSucceeded = false;
     try {
-      return await operation();
+      const result = await operation();
+      operationSucceeded = true;
+      return result;
     } finally {
-      await lease?.release().catch(() => undefined);
+      const pending = pendingSessionsByOwner.get(userId);
+      const retainsOwnership = activeClientsByOwner.has(userId)
+        || runtimeErrorsByOwner.has(userId)
+        || (pending?.status === "waiting_qr")
+        || (!operationSucceeded && Boolean(pending));
+      if (heldLease) {
+        if (!retainsOwnership) await releaseHeldLease(userId, heldLease);
+      } else if (operationSucceeded && retainsOwnership && lease) {
+        // Chuyển lease sang map held sau khi operation đã publish connector ownership thành công.
+        heldLeasesByOwner.set(userId, lease);
+      } else {
+        await lease?.release().catch(() => undefined);
+      }
     }
   })();
   const tail = running.then(() => undefined, () => undefined);
@@ -384,6 +418,13 @@ function runOwnerLifecycle<T>(userId: string, operation: () => Promise<T>): Prom
     if (ownerLifecycleTails.get(userId) === tail) ownerLifecycleTails.delete(userId);
   });
   return running;
+}
+
+// Xóa map trước khi await release để mọi đường dọn dẹp khác đều không release cùng token lần nữa.
+async function releaseHeldLease(userId: string, lease: ZaloPersonalRedisLease): Promise<void> {
+  if (heldLeasesByOwner.get(userId) !== lease) return;
+  heldLeasesByOwner.delete(userId);
+  await lease.release().catch(() => undefined);
 }
 
 // Chỉ ghi mã lỗi ổn định, không lưu nguyên nhân có thể chứa dữ liệu từ thư viện bên ngoài.
@@ -409,6 +450,16 @@ async function recordQrLoginFailure(pending: PendingZaloPersonalSession): Promis
   await pending.client.disconnect().catch(() => undefined);
 }
 
+// Shutdown đã hủy connector nên không giữ lease vô hạn chỉ vì native login không chịu settle.
+async function stopPendingForShutdown(pending: PendingZaloPersonalSession): Promise<void> {
+  pending.cancelled = true;
+  pending.status = "error";
+  pending.qrData = undefined;
+  pending.errorCode = "ZALO_PERSONAL_SHUTDOWN";
+  if (pending.api) await stopPendingApi(pending, pending.api);
+  else await pending.client.disconnect();
+}
+
 // Hủy QR cũ rồi chờ task native dừng hẳn để không có hai login cùng owner chạy song song.
 async function disposePendingQr(pending: PendingZaloPersonalSession, status: PublicStatus, errorCode: string): Promise<void> {
   pending.cancelled = true;
@@ -422,7 +473,14 @@ async function disposePendingQr(pending: PendingZaloPersonalSession, status: Pub
 
 // Dùng một stop promise để completion, logout và thay QR không stop cùng API hai lần.
 function stopPendingApi(pending: PendingZaloPersonalSession, api: ZaloPersonalApi): Promise<void> {
-  pending.apiStopTask ??= api.stopListener();
+  if (!pending.apiStopTask) {
+    const stopTask = api.stopListener().catch((error: unknown) => {
+      // Cho phép lần cleanup sau thử lại khi stop thất bại, nhưng các caller đồng thời vẫn dùng cùng promise.
+      if (pending.apiStopTask === stopTask) pending.apiStopTask = undefined;
+      throw error;
+    });
+    pending.apiStopTask = stopTask;
+  }
   return pending.apiStopTask;
 }
 
