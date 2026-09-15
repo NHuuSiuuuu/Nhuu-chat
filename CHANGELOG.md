@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+Các ghi chú trong mục này được sắp xếp theo thứ tự mới nhất trước, cũ hơn sau. Khi phát hành phiên bản, toàn bộ mục sẽ được chuyển thành một tiêu đề ngày/phiên bản riêng.
+
 - Thêm nút xuất bản/gỡ xuất bản chatbot để bật hoặc tắt trả lời tự động theo từng trợ lý.
 - Đổi nút `Chat mới` cạnh `Xuất bản` thành thao tác xóa lịch sử tin nhắn trong khung preview; tạo chatbot mới chỉ thực hiện từ dropdown trợ lý.
 - Thêm dropdown chọn chatbot tại khu vực trợ lý mặc định; hỗ trợ chọn bot theo chủ đề, xóa bot khi hover/focus và tạo chatbot mới ở cuối danh sách.
@@ -80,7 +82,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Bổ sung kiểm thử không cần Mongo cho chuẩn hóa/loại trùng tag khách hàng, phản hồi và chuyển tiếp lỗi customer/knowledge, cùng vòng đời lưu/xóa knowledge.
 - Chuyển toàn bộ xử lý gửi tin outbound vào message service; bổ sung kiểm thử hành vi gửi Telegram bot/cá nhân, lưu tin, phân quyền, lỗi và event controller.
 
-## [Chưa phát hành] - 2026-09-09
+## 2026-09-09
 
 Các ghi chú nâng cấp được viết rõ ràng để cả team dễ theo dõi và thực hiện.
 
