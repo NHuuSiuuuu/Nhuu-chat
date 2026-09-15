@@ -86,6 +86,7 @@ These instructions apply to the entire `Nhuu-chat` project.
 
 ## Code Comments
 
+- Write all code comments in Vietnamese
 - Add a concise comment above functions that contain meaningful business logic or non-obvious behavior.
 - The comment should explain the purpose and responsibility of the function, not repeat the function name.
 - Prefer comments that answer "Why/What does this function do?" rather than describing obvious implementation details.
@@ -101,6 +102,15 @@ These instructions apply to the entire `Nhuu-chat` project.
 - APIs must provide appropriate authentication, authorization, validation, and rate limiting.
 - RAG must not invent information when the knowledge base lacks supporting data.
 - Outbound messages must have bounded retries and traceable failure states.
+
+## Bug Fix Reporting
+
+- When fixing a bug, state the root cause clearly — where it lives and why it happened — not just the symptom.
+- Explain how the fix addresses that root cause, not just how it suppresses the symptom.
+- If the root cause is not certain, say so explicitly instead of asserting confidence you don't have.
+- State how the fix was verified — which test, or which reproduction step no longer triggers the bug.
+- For bugs with meaningful impact, summarize the root cause in `CHANGELOG.md` for future reference.
+
 
 ## Verification
 

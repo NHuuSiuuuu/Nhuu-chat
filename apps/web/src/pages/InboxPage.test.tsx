@@ -1,9 +1,25 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { createAiSuggestionsRequestGuard, shouldAutoRefreshAiSuggestions } from "./InboxPage.js";
+import { createAiSuggestionsRequestGuard, getConversationDraft, setConversationDraft, shouldAutoRefreshAiSuggestions } from "./InboxPage.js";
 import * as inboxModule from "./InboxPage.js";
+import { getVisibleConversationTagCount } from "../components/conversations/ConversationList.js";
 
 describe("Inbox Tailwind migration", () => {
+  it("keeps message drafts isolated by conversation", () => {
+    const drafts = setConversationDraft({}, "conversation-a", "helo");
+
+    expect(getConversationDraft(drafts, "conversation-a")).toBe("helo");
+    expect(getConversationDraft(drafts, "conversation-b")).toBe("");
+    expect(getConversationDraft(setConversationDraft(drafts, "conversation-a", ""), "conversation-a")).toBe("");
+  });
+
+  it("shows more conversation tags as the sidebar gets wider", () => {
+    expect(getVisibleConversationTagCount(230, 6)).toBe(1);
+    expect(getVisibleConversationTagCount(320, 6)).toBe(2);
+    expect(getVisibleConversationTagCount(530, 6)).toBe(4);
+    expect(getVisibleConversationTagCount(530, 2)).toBe(2);
+  });
+
   it("uses the shared shell without handwritten Inbox CSS", () => {
     const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
     const list = readFileSync(new URL("../components/conversations/ConversationList.tsx", import.meta.url), "utf8");
@@ -31,11 +47,14 @@ describe("Inbox Tailwind migration", () => {
     expect(source).toContain("message.conversationId === activeId");
     expect(source).toContain("max-[899px]:hidden");
     expect(source).toContain("isConversationListOpen");
+    expect(source).toContain("w-[calc(100vw-44px)]");
+    expect(source).not.toContain("w-[min(395px,calc(100vw-44px))]");
     expect(source).toContain("/api/v1/conversation-tags");
     expect(source).toContain("/tags");
     expect(source).toContain("tagIds");
     expect(source).toContain("/tags`, token, { method: \"PUT\"");
-    expect(chat).toContain('aria-label="Danh sách hội thoại"');
+    expect(chat).toContain('aria-label="Quay lại danh sách hội thoại"');
+    expect(chat).toContain('<InboxIcon name="chevron-left"');
     expect(chat).toContain("message.senderName");
     expect(chat).toContain("rounded-2xl");
     expect(chat).toContain("group-hover:opacity-100");
@@ -51,6 +70,11 @@ describe("Inbox Tailwind migration", () => {
     expect(source).toContain("{ ...item, unreadCount: 0 }");
     expect(source).toContain("conversationRevisionRef");
     expect(source).toContain("readState.revision");
+    expect(source).not.toContain("setActiveId((current) => current ?? result.conversations[0]?.id ?? null)");
+    expect(source).not.toContain("setActiveId((current) => current ?? conversation.id)");
+    expect(chat).toContain("Xin chọn 1 hội thoại từ danh sách bên trái");
+    expect(chat).toContain("Mở danh sách hội thoại");
+    expect(chat).toContain("hasConversation={Boolean(conversation)}");
     const avatar = readFileSync(new URL("../components/conversations/ConversationAvatar.tsx", import.meta.url), "utf8");
     expect(avatar).toContain("onError");
   });
@@ -82,16 +106,52 @@ describe("Inbox Tailwind migration", () => {
     expect(list).toContain("PlatformIcon");
     expect(list).toContain("item.tags");
     expect(list).toContain("conversation-tag");
+    expect(list).toContain("visibleTags");
+    expect(list).toContain("hiddenCount");
+    expect(list).toContain("Xem");
+    expect(list).toContain("whitespace-nowrap");
+    expect(list).toContain("overflow-hidden");
+    expect(list).toContain("ResizeObserver");
+    expect(list).toContain("getVisibleConversationTagCount");
+    expect(list).toContain("getVisibleConversationTagCount(sidebarWidth, tags)");
+    expect(list).not.toContain("conversation-tag max-w-[88px] truncate");
+    expect(list).toContain("flex min-w-0 flex-1 items-center gap-1.5");
+    expect(list).toContain("flex-1 items-center gap-1.5 overflow-hidden");
     expect(list).toContain("item.accountName");
     expect(list).toContain("item.accountAvatarUrl");
     expect(list).toContain("conversationAccountName");
     expect(list).toContain('PlatformIcon provider={platform} size={15} plain');
     expect(list).toContain("conversation-account flex min-w-0 items-center gap-1.5 leading-4");
-    expect(list).toContain('className="min-w-0 truncate leading-4"');
+    expect(list).toContain('className="min-w-0 max-w-[120px] truncate leading-4"');
     expect(list).toContain("truncate");
     expect(list).toContain("min-h-[88px]");
-    expect(list).toContain("availableTags");
-    expect(list).toContain("onTagsChange");
+    expect(list).not.toContain('name="send"');
+    expect(list).not.toContain('name="tag"');
+    expect(list).not.toContain("availableTags");
+    expect(list).not.toContain("onTagsChange");
+    expect(list).not.toContain("openTagId");
+    expect(list).not.toContain("Gắn thẻ cho ${name}");
+  });
+
+  it("shows conversation skeletons while the initial list is loading", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+    const list = readFileSync(new URL("../components/conversations/ConversationList.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("isConversationListLoading");
+    expect(source).toContain("isLoading={isConversationListLoading}");
+    expect(list).toContain("isLoading?: boolean");
+    expect(list).toContain("aria-label=\"Đang tải danh sách hội thoại\"");
+    expect(list).toContain("animate-pulse");
+    expect(list).toContain("Chưa có hội thoại");
+  });
+
+  it("overlays the unread badge on the avatar corner", () => {
+    const list = readFileSync(new URL("../components/conversations/ConversationList.tsx", import.meta.url), "utf8");
+
+    expect(list).toContain('className="relative shrink-0"');
+    expect(list).toContain('conversation-unread absolute -bottom-1 -right-1 grid size-5 place-items-center rounded-full border-2 border-white bg-red-500');
+    expect(list).toContain('aria-label={`${item.unreadCount > 99 ? "99+" : item.unreadCount} thông báo chưa đọc`}');
+    expect(list).not.toContain('flex shrink-0 flex-col items-center gap-1');
   });
 
   it("hides scrollbars while preserving scrollable conversation surfaces", () => {
@@ -99,7 +159,8 @@ describe("Inbox Tailwind migration", () => {
     const chat = readFileSync(new URL("../components/conversations/ChatWindow.tsx", import.meta.url), "utf8");
     const composer = readFileSync(new URL("../components/conversations/MessageComposer.tsx", import.meta.url), "utf8");
 
-    expect(list).toContain("conversation-items min-h-0 overflow-y-auto scrollbar-none");
+    expect(list).toContain("conversation-items min-h-0 flex-1 overflow-y-auto scrollbar-none");
+    expect(list).toContain("conversation-sidebar flex h-full");
     expect(chat).toContain("chat-messages relative min-h-0 flex-1 overflow-y-auto");
     expect(composer).toContain("flex gap-2 overflow-x-auto scrollbar-none");
   });
@@ -133,35 +194,66 @@ describe("Inbox Tailwind migration", () => {
   it("passes backend quick replies through ChatWindow to MessageComposer", () => {
     const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
     const chat = readFileSync(new URL("../components/conversations/ChatWindow.tsx", import.meta.url), "utf8");
+
     expect(source).toContain("quickReplies={quickReplies}");
     expect(chat).toContain("quickReplies: QuickReplyContract[]");
     expect(chat).toContain("<MessageComposer");
     expect(chat).toContain("quickReplies={quickReplies}");
   });
 
+  it("creates incoming-message toasts without notifying for agent messages", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("messageToasts");
+    expect(source).toContain("<MessageToast");
+    expect(source).toContain('message.senderType === "customer"');
+    expect(source).toContain("appendMessageToast");
+  });
+
+  it("defines the socket room join handler before registering it", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("const joinActiveRoom = () =>");
+    expect(source).toContain("socket.on(\"connect\", joinActiveRoom)");
+  });
+
   it("loads quick replies exactly once and applies the current result", async () => {
-    const request = vi.fn().mockResolvedValue({ quickReplies: [{ id: "reply-1", shortcut: "chao", message: "Xin chào" }] });
-    const apply = vi.fn();
-    const guard = inboxModule.createQuickRepliesRequestGuard();
-    await inboxModule.loadInboxQuickReplies(request, apply, guard.start());
-    expect(request).toHaveBeenCalledTimes(1);
-    expect(apply).toHaveBeenCalledOnce();
-    expect(apply).toHaveBeenCalledWith([{ id: "reply-1", shortcut: "chao", message: "Xin chào" }]);
+    expect(typeof inboxModule.createQuickRepliesRequestGuard).toBe("function");
+    expect(typeof inboxModule.loadInboxQuickReplies).toBe("function");
+
+    if (typeof inboxModule.createQuickRepliesRequestGuard === "function" && typeof inboxModule.loadInboxQuickReplies === "function") {
+      const request = vi.fn().mockResolvedValue({ quickReplies: [{ id: "reply-1", shortcut: "chao", message: "Xin chào" }] });
+      const apply = vi.fn();
+      const guard = inboxModule.createQuickRepliesRequestGuard();
+
+      await inboxModule.loadInboxQuickReplies(request, apply, guard.start());
+
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(apply).toHaveBeenCalledOnce();
+      expect(apply).toHaveBeenCalledWith([{ id: "reply-1", shortcut: "chao", message: "Xin chào" }]);
+    }
   });
 
   it("ignores a stale quick-reply response after a newer load starts", async () => {
-    const first = deferred<{ quickReplies: Array<{ id: string; shortcut: string; message: string }> }>();
-    const second = deferred<{ quickReplies: Array<{ id: string; shortcut: string; message: string }> }>();
-    const apply = vi.fn();
-    const guard = inboxModule.createQuickRepliesRequestGuard();
-    const firstLoad = inboxModule.loadInboxQuickReplies(() => first.promise, apply, guard.start());
-    const secondLoad = inboxModule.loadInboxQuickReplies(() => second.promise, apply, guard.start());
-    second.resolve({ quickReplies: [{ id: "reply-2", shortcut: "moi", message: "Mẫu mới" }] });
-    await secondLoad;
-    first.resolve({ quickReplies: [{ id: "reply-1", shortcut: "cu", message: "Mẫu cũ" }] });
-    await firstLoad;
-    expect(apply).toHaveBeenCalledTimes(1);
-    expect(apply).toHaveBeenCalledWith([{ id: "reply-2", shortcut: "moi", message: "Mẫu mới" }]);
+    expect(typeof inboxModule.createQuickRepliesRequestGuard).toBe("function");
+    expect(typeof inboxModule.loadInboxQuickReplies).toBe("function");
+
+    if (typeof inboxModule.createQuickRepliesRequestGuard === "function" && typeof inboxModule.loadInboxQuickReplies === "function") {
+      const first = deferred<{ quickReplies: Array<{ id: string; shortcut: string; message: string }> }>();
+      const second = deferred<{ quickReplies: Array<{ id: string; shortcut: string; message: string }> }>();
+      const apply = vi.fn();
+      const guard = inboxModule.createQuickRepliesRequestGuard();
+      const firstLoad = inboxModule.loadInboxQuickReplies(() => first.promise, apply, guard.start());
+      const secondLoad = inboxModule.loadInboxQuickReplies(() => second.promise, apply, guard.start());
+
+      second.resolve({ quickReplies: [{ id: "reply-2", shortcut: "moi", message: "Mẫu mới" }] });
+      await secondLoad;
+      first.resolve({ quickReplies: [{ id: "reply-1", shortcut: "cu", message: "Mẫu cũ" }] });
+      await firstLoad;
+
+      expect(apply).toHaveBeenCalledTimes(1);
+      expect(apply).toHaveBeenCalledWith([{ id: "reply-2", shortcut: "moi", message: "Mẫu mới" }]);
+    }
   });
 
   it("loads AI settings and sends the configured suggestion trigger", () => {

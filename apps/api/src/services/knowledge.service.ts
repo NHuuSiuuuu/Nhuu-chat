@@ -15,6 +15,14 @@ export async function ingestKnowledge(ownerId: string, input: { title: string; c
   return document.toObject();
 }
 
+export async function listKnowledge(ownerId: string) {
+  const documents = await KnowledgeDocumentModel.find({ ownerId })
+    .select("_id title sourceType status createdAt updatedAt")
+    .sort({ createdAt: -1, _id: -1 })
+    .lean();
+  return { documents };
+}
+
 export async function deleteKnowledge(ownerId: string, documentId: string, store: VectorStore): Promise<void> {
   await KnowledgeChunkModel.deleteMany({ ownerId, documentId });
   const document = await KnowledgeDocumentModel.findOneAndDelete({ _id: documentId, ownerId });

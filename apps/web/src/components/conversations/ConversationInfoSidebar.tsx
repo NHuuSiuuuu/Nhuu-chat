@@ -34,7 +34,8 @@ function CreateOrderPanel() {
   </section>;
 }
 
-function SidebarContent({ activeTab, setActiveTab }: { activeTab: SidebarTab; setActiveTab: (tab: SidebarTab) => void }) {
+function SidebarContent({ activeTab, setActiveTab, hasConversation }: { activeTab: SidebarTab; setActiveTab: (tab: SidebarTab) => void; hasConversation: boolean }) {
+  if (!hasConversation) return <div className="grid min-h-0 flex-1 place-items-center p-6 text-center text-sm text-gray-400">Chưa có thông tin khách hàng</div>;
   return <>
     <nav className="flex shrink-0 border-b border-gray-200 px-4" aria-label="Khu vực thông tin bổ trợ">
       <button className={`border-b-2 px-3 py-3 text-xs font-semibold transition ${activeTab === "info" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`} type="button" onClick={() => setActiveTab("info")} aria-selected={activeTab === "info"}>Thông tin</button>
@@ -44,14 +45,14 @@ function SidebarContent({ activeTab, setActiveTab }: { activeTab: SidebarTab; se
   </>;
 }
 
-function SidebarPanel({ mobile = false, onClose }: { mobile?: boolean; onClose?: () => void }) {
+function SidebarPanel({ mobile = false, onClose, hasConversation }: { mobile?: boolean; onClose?: () => void; hasConversation: boolean }) {
   const [activeTab, setActiveTab] = useState<SidebarTab>("info");
-  return <aside className={mobile ? "fixed inset-y-0 right-0 z-50 flex w-[min(340px,calc(100vw-44px))] flex-col border-l border-gray-200 bg-white shadow-2xl" : "hidden min-h-0 w-[300px] shrink-0 flex-col border-l border-gray-200 bg-white min-[1180px]:flex"} aria-label="Thông tin bổ trợ cuộc hội thoại">
+  return <aside className={mobile ? "fixed inset-y-0 right-0 z-50 flex w-[min(340px,calc(100vw-44px))] flex-col border-l border-gray-200 bg-white shadow-2xl" : "hidden min-h-0 w-[300px] shrink-0 flex-col border-l border-gray-200 bg-white min-[1000px]:flex"} aria-label="Thông tin bổ trợ cuộc hội thoại">
     {mobile && <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3"><span className="text-sm font-bold text-gray-800">Thông tin hội thoại</span><button className="grid size-8 place-items-center rounded-md text-gray-500 hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" onClick={onClose} aria-label="Đóng thông tin hội thoại"><InboxIcon name="close" size={17} /></button></div>}
-    <SidebarContent activeTab={activeTab} setActiveTab={setActiveTab} />
+    <SidebarContent activeTab={activeTab} setActiveTab={setActiveTab} hasConversation={hasConversation} />
   </aside>;
 }
 
-export function ConversationInfoSidebar({ mobileOpen = false, onClose }: { mobileOpen?: boolean; onClose?: () => void }) {
-  return <>{<SidebarPanel />}{mobileOpen && <><button className="fixed inset-0 z-40 bg-slate-900/30 min-[1180px]:hidden" type="button" onClick={onClose} aria-label="Đóng bảng thông tin" /><SidebarPanel mobile onClose={onClose} /></>}</>;
+export function ConversationInfoSidebar({ mobileOpen = false, onClose, hasConversation = true }: { mobileOpen?: boolean; onClose?: () => void; hasConversation?: boolean }) {
+  return <>{<SidebarPanel hasConversation={hasConversation} />}{mobileOpen && <><button className="fixed inset-0 z-40 bg-slate-900/30 min-[1000px]:hidden" type="button" onClick={onClose} aria-label="Đóng bảng thông tin" /><SidebarPanel mobile onClose={onClose} hasConversation={hasConversation} /></>}</>;
 }

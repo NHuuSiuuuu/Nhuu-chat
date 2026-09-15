@@ -1,6 +1,6 @@
 import * as React from "react";
 
-type IconName = "inbox" | "chat" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "chevron-left" | "tag" | "edit" | "trash" | "monitor" | "phone" | "cloud" | "wrench" | "clock" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more";
+type IconName = "inbox" | "chat" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "chevron-left" | "chevron-down" | "tag" | "edit" | "trash" | "monitor" | "phone" | "cloud" | "wrench" | "clock" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more" | "check" | "download" | "upload" | "file" | "camera" | "robot";
 
 export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -14,6 +14,7 @@ export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }
     plus: <path d="M12 5v14M5 12h14" />,
     list: <><path d="M8 6h12M8 12h12M8 18h12" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></>,
     "chevron-left": <path d="m15 18-6-6 6-6" />,
+    "chevron-down": <path d="m6 9 6 6 6-6" />,
     tag: <path d="m20.6 13.4-7.2 7.2a2 2 0 0 1-2.8 0L3.4 13.4a2 2 0 0 1 0-2.8l7.2-7.2A2 2 0 0 1 12 2.8h5.8a2 2 0 0 1 2 2V10a2 2 0 0 1-.6 1.4ZM16 7h.01" />,
     edit: <><path d="m4 16.5-.8 4.3 4.3-.8L19 8.5 15.5 5 4 16.5Z" /><path d="m13.5 7 3.5 3.5" /></>,
     trash: <><path d="M5 7h14M10 11v6M14 11v6" /><path d="M9 7V4h6v3m-9 0 1 13h10l1-13" /></>,
@@ -32,7 +33,13 @@ export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }
     close: <><path d="m7 7 10 10M17 7 7 17" /></>,
     smile: <><circle cx="12" cy="12" r="9" /><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0M9 9h.01M15 9h.01" /></>,
     reply: <path d="m9 17-5-5 5-5M4 12h10a6 6 0 0 1 6 6" />,
-    more: <><circle cx="5" cy="12" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /><circle cx="19" cy="12" r="1" fill="currentColor" /></>
+    more: <><circle cx="5" cy="12" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /><circle cx="19" cy="12" r="1" fill="currentColor" /></>,
+    check: <path d="m5 12 4 4L19 6" />,
+    download: <><path d="M12 3v12M7 10l5 5 5-5" /><path d="M5 21h14" /></>,
+    upload: <><path d="M12 21V9M7 14l5-5 5 5" /><path d="M5 3h14" /></>,
+    file: <><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v5h4M9 13h6M9 17h6" /></>,
+    camera: <><path d="M4 8h3l1.5-2h7L17 8h3v11H4z" /><circle cx="12" cy="13" r="3" /></>,
+    robot: <><rect x="5" y="8" width="14" height="11" rx="3" /><path d="M12 4v4M9 13h.01M15 13h.01M9 16h6" /><path d="M3 12v3M21 12v3" /></>
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }

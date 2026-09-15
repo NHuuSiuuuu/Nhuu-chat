@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const dependencies = vi.hoisted(() => ({
   verifyAccessToken: vi.fn(),
   assistantFindOne: vi.fn(),
+  templateFindOne: vi.fn(),
+  templateFindOneAndUpdate: vi.fn(),
   templateFind: vi.fn(),
   knowledgeFind: vi.fn(),
   embed: vi.fn(),
@@ -22,7 +24,11 @@ vi.mock("../models/assistant.model.js", () => ({
   AssistantModel: { findOne: dependencies.assistantFindOne }
 }));
 vi.mock("../models/automation-template.model.js", () => ({
-  AutomationTemplateModel: { find: dependencies.templateFind }
+  AutomationTemplateModel: {
+    findOne: dependencies.templateFindOne,
+    findOneAndUpdate: dependencies.templateFindOneAndUpdate,
+    find: dependencies.templateFind
+  }
 }));
 vi.mock("../models/knowledge.model.js", () => ({
   KnowledgeChunkModel: { find: dependencies.knowledgeFind }
@@ -95,6 +101,7 @@ describe("assistant preview controller and service", () => {
       role: "agent"
     });
     dependencies.assistantFindOne.mockReturnValue(queryResult(assistant));
+    dependencies.templateFindOne.mockReturnValue(queryResult({ name: "Chào khách hàng" }));
     dependencies.templateFind.mockReturnValue(sortedQueryResult([]));
     dependencies.knowledgeFind.mockReturnValue(limitedQueryResult([]));
     dependencies.embed.mockResolvedValue([1, 0]);
@@ -189,6 +196,38 @@ describe("assistant preview controller and service", () => {
         score: 1
       })]
     }));
+  });
+
+  it("uses an existing greeting template without provisioning during preview", async () => {
+    dependencies.templateFindOne.mockReturnValue(queryResult(null));
+    dependencies.templateFindOneAndUpdate.mockReturnValue(queryResult({ name: "Chào khách hàng" }));
+    dependencies.templateFind.mockReturnValue(sortedQueryResult([{
+      id: "greeting-1",
+      ownerId,
+      assistantId,
+      name: "Chào khách hàng",
+      keywords: ["hi", "hello", "alo", "xin chao", "chao"],
+      responseTemplate: "Xin chào anh/chị! Em là trợ lý AI của shop.",
+      allowAiRewrite: false,
+      priority: 100,
+      enabled: true,
+      channelScope: { mode: "all", identifiers: [] },
+      createdAt: "2026-09-14T00:00:00.000Z",
+      updatedAt: "2026-09-14T00:00:00.000Z"
+    }]));
+
+    const response = await request(createTestApp())
+      .post(`/api/v1/assistants/${assistantId}/preview`)
+      .set("Authorization", "Bearer agent-token")
+      .send({ message: "hi" });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      answer: "Có căn cứ",
+      source: "template",
+      handoff: false
+    });
+    expect(dependencies.templateFindOneAndUpdate).not.toHaveBeenCalled();
   });
 
   it("finds a matching indexed chunk after the first fifty persisted chunks", async () => {

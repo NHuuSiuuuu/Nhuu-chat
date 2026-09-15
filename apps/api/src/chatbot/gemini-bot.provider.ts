@@ -52,7 +52,7 @@ function strongContext(context: BotReplyContext[] | undefined): BotReplyContext[
     .slice(0, MAX_CONTEXT_CHUNKS);
 }
 
-// Tạo prompt hữu hạn và buộc Gemini chỉ dùng dữ liệu cửa hàng đã cung cấp.
+// Tạo prompt hữu hạn, ưu tiên dữ liệu cửa hàng và cho phép kiến thức chung theo instructions.
 function buildPrompt(input: BotReplyInput, context: BotReplyContext[]): string {
   const history = boundedHistory(input.history) || "(không có)";
   const knowledge = context.length === 0
@@ -62,7 +62,9 @@ function buildPrompt(input: BotReplyInput, context: BotReplyContext[]): string {
     ).join("\n");
   const task = input.template
     ? `Viết lại mẫu sau bằng tiếng Việt tự nhiên nhưng không thay đổi ý nghĩa, số liệu, chính sách hoặc cam kết. Nếu không thể giữ nguyên ý nghĩa, đặt grounded=false.\n\nMẫu bắt buộc giữ nghĩa:\n${clipped(input.template.responseTemplate, MAX_ANSWER_LENGTH)}`
-    : "Trả lời câu hỏi bằng tiếng Việt. Chỉ sử dụng ngữ cảnh kiến thức được cung cấp. Nếu ngữ cảnh không đủ để trả lời chắc chắn, đặt grounded=false và handoff=true.";
+    : context.length > 0
+      ? "Trả lời câu hỏi bằng tiếng Việt. Chỉ sử dụng ngữ cảnh kiến thức được cung cấp cho thông tin cửa hàng. Nếu ngữ cảnh không đủ để trả lời chắc chắn, đặt grounded=false và handoff=true."
+      : "Trả lời câu hỏi bằng tiếng Việt dựa trên Hướng dẫn trợ lý và kiến thức chung phù hợp. Không tự bịa thông tin riêng của cửa hàng; nếu câu hỏi cần dữ liệu cửa hàng mà không có ngữ cảnh, đặt grounded=false và handoff=true.";
 
   return [
     task,
@@ -98,7 +100,8 @@ export class GeminiBotProvider implements BotReplyProvider {
     if (input.template && !input.template.allowAiRewrite) return exactTemplate(input);
 
     const context = strongContext(input.context);
-    if (!input.template && context.length === 0) return fallback(input);
+    // Context yếu vẫn phải fallback để không đoán dữ liệu cửa hàng; context rỗng được dùng kiến thức chung.
+    if (!input.template && (input.context?.length ?? 0) > 0 && context.length === 0) return fallback(input);
     if (!this.client) return input.template ? exactTemplate(input) : fallback(input);
 
     const abortController = new AbortController();
@@ -111,8 +114,8 @@ export class GeminiBotProvider implements BotReplyProvider {
           reject(new Error("Gemini request timed out"));
         }, REQUEST_TIMEOUT_MS);
       });
-      const request = this.client.models.generateContent({
-        model: modelTierToGeminiModel(input.assistant.modelTier),
+      const request = (model: string) => this.client!.models.generateContent({
+        model,
         contents: buildPrompt(input, context),
         config: {
           responseMimeType: "application/json",
@@ -129,7 +132,16 @@ export class GeminiBotProvider implements BotReplyProvider {
           httpOptions: { timeout: REQUEST_TIMEOUT_MS }
         }
       });
-      const response = await Promise.race([request, timeout]);
+      const primaryModel = modelTierToGeminiModel(input.assistant.modelTier);
+      const fallbackModel = env.GEMINI_CHAT_MODEL;
+      // Nếu model theo tier hết quota, thử model chat đã cấu hình trong cùng thời hạn.
+      let response;
+      try {
+        response = await Promise.race([request(primaryModel), timeout]);
+      } catch (error) {
+        if (primaryModel === fallbackModel || abortController.signal.aborted) throw error;
+        response = await Promise.race([request(fallbackModel), timeout]);
+      }
       const payload = parsePayload(response.text);
       const answer = typeof payload?.answer === "string"
         ? clipped(payload.answer, MAX_ANSWER_LENGTH)

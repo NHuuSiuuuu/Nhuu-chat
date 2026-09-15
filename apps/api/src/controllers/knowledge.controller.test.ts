@@ -2,13 +2,13 @@ import express, { type ErrorRequestHandler } from "express";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const services = vi.hoisted(() => ({ ingestKnowledge: vi.fn(), deleteKnowledge: vi.fn() }));
+const services = vi.hoisted(() => ({ ingestKnowledge: vi.fn(), listKnowledge: vi.fn(), deleteKnowledge: vi.fn() }));
 vi.mock("../services/knowledge.service.js", () => services);
 
 import { knowledgeEmbedding, knowledgeVectorStore } from "../ai/knowledge-runtime.js";
 import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
 import { AppError, errorHandler } from "../common/errors.js";
-import { createKnowledge, removeKnowledge } from "./knowledge.controller.js";
+import { createKnowledge, listKnowledge, removeKnowledge } from "./knowledge.controller.js";
 
 function createTestApp(onError = (_error: unknown) => {}) {
   const app = express();
@@ -20,6 +20,7 @@ function createTestApp(onError = (_error: unknown) => {}) {
     next();
   });
   app.post("/knowledge", createKnowledge);
+  app.get("/knowledge", listKnowledge);
   app.delete("/knowledge/:id", removeKnowledge);
   const captureError: ErrorRequestHandler = (error, req, res, next) => {
     onError(error);
@@ -62,6 +63,16 @@ describe("knowledge controller without Mongo", () => {
     expect(services.deleteKnowledge.mock.calls[0][2]).toBe(knowledgeVectorStore);
     expect(response.status).toBe(204);
     expect(response.text).toBe("");
+  });
+
+  it("lists only the authenticated owner's knowledge documents", async () => {
+    services.listKnowledge.mockResolvedValue({ documents: [{ _id: "knowledge-1", title: "Menu" }] });
+
+    const response = await request(createTestApp()).get("/knowledge");
+
+    expect(services.listKnowledge).toHaveBeenCalledWith("owner-1");
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ documents: [{ _id: "knowledge-1", title: "Menu" }] });
   });
 
   it.each(["create", "delete"] as const)("forwards %s service errors unchanged", async (operation) => {

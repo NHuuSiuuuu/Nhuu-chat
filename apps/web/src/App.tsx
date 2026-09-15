@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { InboxPage } from "./pages/InboxPage.js";
 import { DashboardPage } from "./pages/DashboardPage.js";
 import { TelegramPersonalPage } from "./pages/TelegramPersonalPage.js";
@@ -8,6 +8,8 @@ import { ProtectedRoute } from "./components/common/ProtectedRoute.js";
 import { resolveApiBaseUrl } from "./lib/api-url.js";
 import { canAccessInbox } from "./state/inbox-access.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
+import { ProfilePage } from "./pages/ProfilePage.js";
+import { NetflixIntro } from "./components/NetflixIntro.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 
@@ -17,12 +19,13 @@ interface AuthResponse {
   user: { id: string; email: string; role: AuthRole };
 }
 
-type AppPage = "dashboard" | "telegram" | "inbox" | "settings";
+type AppPage = "dashboard" | "telegram" | "inbox" | "settings" | "profile";
 
 function pageFromPath(pathname: string): AppPage {
   if (pathname === "/inbox") return "inbox";
   if (pathname === "/telegram") return "telegram";
-  if (pathname === "/settings") return "settings";
+  if (pathname === "/settings" || pathname.startsWith("/settings/")) return "settings";
+  if (pathname === "/profile") return "profile";
   return "dashboard";
 }
 
@@ -30,12 +33,24 @@ function pathForPage(page: AppPage): string {
   if (page === "inbox") return "/inbox";
   if (page === "telegram") return "/telegram";
   if (page === "settings") return "/settings";
+  if (page === "profile") return "/profile";
   return "/dashboard";
+}
+
+export function preloadIntroDependencies(): Promise<void> {
+  const fontsReady = typeof document !== "undefined" && document.fonts ? document.fonts.ready : Promise.resolve();
+  return Promise.all([fontsReady]).then(() => undefined).catch(() => undefined);
+}
+
+function PageSkeleton() {
+  return <main className="grid min-h-screen place-items-center bg-slate-100 p-6" role="status" aria-label="Đang tải giao diện"><div className="grid w-full max-w-3xl gap-4"><div className="h-12 w-48 animate-pulse rounded-lg bg-slate-200" /><div className="h-32 animate-pulse rounded-xl bg-white shadow-sm" /><div className="grid grid-cols-3 gap-4"><div className="h-24 animate-pulse rounded-xl bg-white" /><div className="h-24 animate-pulse rounded-xl bg-white" /><div className="h-24 animate-pulse rounded-xl bg-white" /></div></div></main>;
 }
 
 export function App() {
   const [auth, setAuth] = useState(loadAuth());
   const [page, setPage] = useState<AppPage>(() => pageFromPath(window.location.pathname));
+  const [showIntro, setShowIntro] = useState(true);
+  const [introReady, setIntroReady] = useState(false);
   const navigate = useCallback((nextPage: AppPage) => {
     setPage(nextPage);
     if (window.location.pathname !== pathForPage(nextPage)) window.history.pushState({}, "", pathForPage(nextPage));
@@ -44,6 +59,13 @@ export function App() {
     const handlePopState = () => setPage(pageFromPath(window.location.pathname));
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    void preloadIntroDependencies().finally(() => {
+      if (!cancelled) setIntroReady(true);
+    });
+    return () => { cancelled = true; };
   }, []);
   const refresh = useCallback(async () => {
     if (!auth) return null;
@@ -55,11 +77,18 @@ export function App() {
     setAuth(next);
     return next.accessToken;
   }, [auth]);
-  if (!auth) return <AuthPage onAuthenticated={(next) => { saveAuth(next); setAuth(next); }} />;
-  if (!canAccessInbox(auth.user.role)) {
-    return <main><h1>Nhuu Chat</h1><p>Tài khoản của anh đã đăng nhập nhưng chưa có quyền mở inbox. Hãy nhờ admin cấp role agent.</p><button onClick={() => { clearAuth(); setAuth(null); }}>Đăng xuất</button></main>;
+  let appContent: React.ReactNode;
+  if (!auth) {
+    appContent = <AuthPage onAuthenticated={(next) => { saveAuth(next); setAuth(next); }} />;
+  } else if (!canAccessInbox(auth.user.role)) {
+    appContent = <main><h1>Nhuu Chat</h1><p>Tài khoản của anh đã đăng nhập nhưng chưa có quyền mở inbox. Hãy nhờ admin cấp role agent.</p><button onClick={() => { clearAuth(); setAuth(null); }}>Đăng xuất</button></main>;
+  } else {
+    const logout = () => { clearAuth(); setAuth(null); };
+    const openProfile = () => navigate("profile");
+    const topbarProps = { user: auth.user, onLogout: logout, onProfile: openProfile };
+    appContent = <ProtectedRoute token={auth.accessToken}>{page === "dashboard" ? <DashboardPage {...topbarProps} token={auth.accessToken} refresh={refresh} onOpenInbox={() => navigate("inbox")} onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : item === "Cài đặt" ? "settings" : "dashboard")} /> : page === "telegram" ? <TelegramPersonalPage token={auth.accessToken} refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage {...topbarProps} token={auth.accessToken} refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : item === "Cài đặt" ? "settings" : "dashboard")} /> : page === "profile" ? <ProfilePage {...topbarProps} token={auth.accessToken} refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : item === "Cài đặt" ? "settings" : "dashboard")} /> : <InboxPage {...topbarProps} token={auth.accessToken} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : item === "Cài đặt" ? "settings" : "dashboard")} />}</ProtectedRoute>;
   }
-  return <ProtectedRoute token={auth.accessToken}>{page === "dashboard" ? <DashboardPage token={auth.accessToken} refresh={refresh} onOpenInbox={() => navigate("inbox")} onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : item === "Cài đặt" ? "settings" : "dashboard")} /> : page === "telegram" ? <TelegramPersonalPage token={auth.accessToken} refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage token={auth.accessToken} refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : item === "Cài đặt" ? "settings" : "dashboard")} /> : <InboxPage token={auth.accessToken} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : item === "Cài đặt" ? "settings" : "dashboard")} />}</ProtectedRoute>;
+  return <><Suspense fallback={<PageSkeleton />}>{appContent}</Suspense>{showIntro && <NetflixIntro ready={introReady} onComplete={() => setShowIntro(false)} />}</>;
 }
 
 function AuthPage({ onAuthenticated }: { onAuthenticated: (auth: AuthResponse) => void }) {

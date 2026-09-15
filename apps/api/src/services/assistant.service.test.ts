@@ -13,6 +13,7 @@ const database = vi.hoisted(() => ({
 const templateDatabase = vi.hoisted(() => ({
   create: vi.fn(),
   find: vi.fn(),
+  findOne: vi.fn(),
   findOneAndDelete: vi.fn(),
   findOneAndUpdate: vi.fn()
 }));
@@ -224,7 +225,11 @@ describe("assistant service", () => {
 });
 
 describe("automation template service", () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => {
+    vi.resetAllMocks();
+    templateDatabase.findOne.mockReturnValue(leanQuery(templateRow({ name: "Chào khách hàng" })));
+    templateDatabase.findOneAndUpdate.mockReturnValue(leanQuery(templateRow({ name: "Chào khách hàng" })));
+  });
 
   it("lists templates only after confirming the parent belongs to the owner", async () => {
     database.findOne.mockReturnValue(leanQuery(assistantRow()));
@@ -251,6 +256,15 @@ describe("automation template service", () => {
       channelScope: { mode: "all", identifiers: [] }
     })).rejects.toMatchObject({ statusCode: 404, code: "ASSISTANT_NOT_FOUND" });
     expect(templateDatabase.create).not.toHaveBeenCalled();
+  });
+
+  it("does not recreate a greeting template after it has been deleted", async () => {
+    database.findOne.mockReturnValue(leanQuery(assistantRow()));
+    templateDatabase.find.mockReturnValue(sortedQuery([]));
+
+    await expect(listAutomationTemplates(ownerId, assistantId)).resolves.toEqual({ templates: [] });
+
+    expect(templateDatabase.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
   it("updates and deletes only templates under the owner and route assistant", async () => {

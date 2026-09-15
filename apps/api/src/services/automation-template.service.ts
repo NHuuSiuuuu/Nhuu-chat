@@ -55,6 +55,31 @@ async function requireOwnedAssistant(ownerId: string, assistantId: string): Prom
   if (!assistant) throw assistantNotFound();
 }
 
+const defaultGreetingTemplate = {
+  name: "Chào khách hàng",
+  keywords: ["hi", "hello", "alo", "xin chao", "chao"],
+  responseTemplate: "Xin chào anh/chị! Em là trợ lý AI, em có thể hỗ trợ anh/chị theo hướng dẫn của mình ạ.",
+  allowAiRewrite: false,
+  priority: 100,
+  enabled: true,
+  channelScope: { mode: "all" as const, identifiers: [] }
+};
+
+export async function ensureDefaultGreetingTemplate(ownerId: string, assistantId: string): Promise<void> {
+  const existing = await AutomationTemplateModel.findOne({
+    ownerId,
+    assistantId,
+    keywords: { $in: [...defaultGreetingTemplate.keywords, "xin chào"] }
+  })
+    .lean();
+  if (existing) return;
+  await AutomationTemplateModel.findOneAndUpdate(
+    { ownerId, assistantId, name: defaultGreetingTemplate.name },
+    { $setOnInsert: { ownerId, assistantId, ...defaultGreetingTemplate } },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  ).lean();
+}
+
 export async function listAutomationTemplates(
   ownerId: string,
   assistantId: string

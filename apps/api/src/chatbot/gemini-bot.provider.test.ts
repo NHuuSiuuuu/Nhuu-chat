@@ -20,7 +20,8 @@ const validEnvironment = {
   ENCRYPTION_KEY: "an-encryption-key-that-is-32-characters",
   TELEGRAM_BOT_TOKEN: "123456789:test-token",
   TELEGRAM_WEBHOOK_SECRET: "a-telegram-webhook-secret",
-  GEMINI_API_KEY: "gemini-test-key"
+  GEMINI_API_KEY: "gemini-test-key",
+  GEMINI_CHAT_MODEL: "gemini-3.5-flash-lite"
 };
 
 const assistant = {
@@ -169,6 +170,26 @@ describe("Gemini bot reply provider", () => {
     expect(generateContent).not.toHaveBeenCalled();
   });
 
+  it("uses assistant instructions for general questions when no RAG context exists", async () => {
+    const { GeminiBotProvider } = await importProvider();
+    const provider = new GeminiBotProvider();
+
+    await expect(provider.reply({
+      assistant: {
+        ...assistant,
+        instructions: "Bạn là trợ lý tư vấn tình cảm. Hãy trả lời bằng tiếng Việt, lịch sự và chính xác."
+      },
+      message: "Tư vấn tình cảm",
+      context: []
+    })).resolves.toEqual({
+      answer: "Câu trả lời có căn cứ.",
+      handoff: false,
+      sources: []
+    });
+    expect(generateContent).toHaveBeenCalledOnce();
+    expect(generateContent.mock.calls[0][0].contents).toContain("trợ lý tư vấn tình cảm");
+  });
+
   it("falls back when Gemini marks an answer as ungrounded", async () => {
     generateContent.mockResolvedValue({
       text: JSON.stringify({ answer: "Có thể đổi trong 90 ngày.", grounded: false, handoff: false })
@@ -225,5 +246,29 @@ describe("Gemini bot reply provider", () => {
       sources: []
     });
     expect(JSON.stringify(result)).not.toContain("provider-secret-detail");
+  });
+
+  it("uses the configured chat model when the selected model is unavailable", async () => {
+    generateContent
+      .mockRejectedValueOnce(new Error("RESOURCE_EXHAUSTED"))
+      .mockResolvedValueOnce({
+        text: JSON.stringify({ answer: "Bạn có thể thử trà sữa ô long ạ.", grounded: true, handoff: false })
+      });
+    const { GeminiBotProvider } = await importProvider();
+    const provider = new GeminiBotProvider();
+
+    await expect(provider.reply({
+      assistant: { ...assistant, modelTier: "smart" },
+      message: "Tư vấn cho tôi một món trà sữa",
+      context: [{ documentId: "menu", chunkIndex: 0, content: "Trà sữa ô long", score: 0.9 }]
+    })).resolves.toEqual({
+      answer: "Bạn có thể thử trà sữa ô long ạ.",
+      handoff: false,
+      sources: [{ documentId: "menu", chunkIndex: 0 }]
+    });
+    expect(generateContent.mock.calls.map(([request]) => request.model)).toEqual([
+      "gemini-3.5-flash",
+      "gemini-3.5-flash-lite"
+    ]);
   });
 });

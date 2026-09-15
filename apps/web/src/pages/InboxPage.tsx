@@ -9,7 +9,8 @@ import { ChatWindow } from "../components/conversations/ChatWindow.js";
 import { appendUniqueMessage, mergeMessages, upsertConversation } from "../state/inbox-realtime.js";
 import { clampConversationListWidth, CONVERSATION_LIST_MAX_WIDTH, CONVERSATION_LIST_MIN_WIDTH, markConversationRead } from "../state/inbox-ui.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
-import { DashboardTopbar } from "../components/dashboard/DashboardTopbar.js";
+import { DashboardTopbar, type DashboardAccount } from "../components/dashboard/DashboardTopbar.js";
+import { appendMessageToast, MessageToast, type MessageToastData } from "../components/conversations/MessageToast.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 const CONVERSATION_TAGS_API_URL = "/api/v1/conversation-tags";
@@ -55,6 +56,14 @@ export function createQuickRepliesRequestGuard() {
   };
 }
 
+export function getConversationDraft(drafts: Record<string, string>, conversationId: string | null): string {
+  return conversationId ? drafts[conversationId] ?? "" : "";
+}
+
+export function setConversationDraft(drafts: Record<string, string>, conversationId: string, content: string): Record<string, string> {
+  return { ...drafts, [conversationId]: content };
+}
+
 // Chỉ áp dụng kết quả của lần tải mẫu còn hiệu lực để auth context cũ không ghi đè state mới.
 export async function loadInboxQuickReplies(request: () => Promise<{ quickReplies: QuickReplyContract[] }>, apply: (quickReplies: QuickReplyContract[]) => void, isCurrent: () => boolean): Promise<void> {
   try {
@@ -65,10 +74,11 @@ export async function loadInboxQuickReplies(request: () => Promise<{ quickReplie
   }
 }
 
-export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: { token: string; refresh?: () => Promise<string | null>; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hội thoại" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void }) {
+export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate, user, onLogout, onProfile }: { token: string; refresh?: () => Promise<string | null>; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hội thoại" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void; user?: DashboardAccount | null; onLogout?: () => void; onProfile?: () => void }) {
   const [conversations, setConversations] = useState<ConversationContract[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageContract[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [aiSuggestions, setAiSuggestions] = useState<AiSuggestionsResponse["suggestions"] | null>(null);
   const [isAiSuggestionsLoading, setIsAiSuggestionsLoading] = useState(false);
   const [aiSuggestionsError, setAiSuggestionsError] = useState<string | null>(null);
@@ -77,7 +87,9 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
   const [isCustomerTyping, setIsCustomerTyping] = useState(false);
   const [availableTags, setAvailableTags] = useState<ConversationTagContract[]>([]);
   const [quickReplies, setQuickReplies] = useState<QuickReplyContract[]>([]);
+  const [isConversationListLoading, setIsConversationListLoading] = useState(true);
   const [isConversationListOpen, setIsConversationListOpen] = useState(false);
+  const [messageToasts, setMessageToasts] = useState<MessageToastData[]>([]);
   const [conversationListWidth, setConversationListWidth] = useState(CONVERSATION_LIST_MAX_WIDTH);
   const isConversationListCollapsed = conversationListWidth <= CONVERSATION_LIST_MIN_WIDTH;
   const nextReadGenerationRef = React.useRef(0);
@@ -154,6 +166,7 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
   }
   useEffect(() => {
     let cancelled = false;
+    setIsConversationListLoading(true);
     void apiRequest<{ conversations: ConversationContract[] }>(API_URL, "/api/v1/conversations", token, {}, refresh).then((result) => {
       if (cancelled) return;
       setConversations((current) => {
@@ -168,7 +181,10 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
         conversationsRef.current = next;
         return next;
       });
-      setActiveId((current) => current ?? result.conversations[0]?.id ?? null);
+    }).catch(() => {
+      // Giữ danh sách rỗng sau lỗi tải; trạng thái loading vẫn phải kết thúc để hiển thị empty state.
+    }).finally(() => {
+      if (!cancelled) setIsConversationListLoading(false);
     });
     return () => { cancelled = true; };
   }, [token, refresh]);
@@ -215,8 +231,8 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
   useEffect(() => {
     const socket = createChatSocket(API_URL, token);
     const joinActiveRoom = () => { if (activeId) socket.emit(chatEvents.joinRoom, activeId); };
+    socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => { const revision = (conversationRevisionRef.current.get(message.conversationId) ?? 0) + 1; conversationRevisionRef.current.set(message.conversationId, revision); if (message.senderType === "customer") { const conversation = conversationsRef.current.find((item) => item.id === message.conversationId); setMessageToasts((current) => appendMessageToast(current, { id: message.id, conversationId: message.conversationId, senderName: message.senderName?.trim() || conversation?.customerName?.trim() || "Khách hàng", content: message.content, platform: message.platform, ...(conversation?.customerAvatarUrl ? { avatarUrl: conversation.customerAvatarUrl } : {}) })); } if (message.conversationId === activeId) { setIsCustomerTyping(false); setMessages((current) => appendUniqueMessage(current, message)); void markActiveRead(activeId); if (message.senderType === "customer" && aiSettingsLoaded && shouldAutoRefreshAiSuggestions(aiSettings.suggestionMode, "customer_message")) void refreshAiSuggestions(activeId, "customer_message"); } });
     socket.on("connect", joinActiveRoom);
-    socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => { const revision = (conversationRevisionRef.current.get(message.conversationId) ?? 0) + 1; conversationRevisionRef.current.set(message.conversationId, revision); if (message.conversationId === activeId) { setIsCustomerTyping(false); setMessages((current) => appendUniqueMessage(current, message)); void markActiveRead(activeId); if (message.senderType === "customer" && aiSettingsLoaded && shouldAutoRefreshAiSuggestions(aiSettings.suggestionMode, "customer_message")) void refreshAiSuggestions(activeId, "customer_message"); } });
     socket.on(chatEvents.agentTyping, (payload: { conversationId?: unknown; isTyping?: unknown }) => {
       if (payload.conversationId !== activeId) return;
       setIsCustomerTyping(payload.isTyping === true);
@@ -231,7 +247,6 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
         conversationsRef.current = next;
         return next;
       });
-      setActiveId((current) => current ?? conversation.id);
       if (conversation.id === activeId && conversation.unreadCount > 0) void markActiveRead(conversation.id);
     });
     joinActiveRoom();
@@ -261,7 +276,11 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
       throw error;
     }
   }
-  async function sendText(content: string) { if (!activeId) return; const message = await apiRequest<ChatMessageContract>(API_URL, "/api/v1/messages/send", token, { method: "POST", body: JSON.stringify({ conversationId: activeId, type: "text", content }) }, refresh); setMessages((current) => appendUniqueMessage(current, message)); }
+  async function updateActiveConversationTags(tags: ConversationTagContract[]) {
+    if (activeId) await updateConversationTags(activeId, tags);
+  }
+  async function sendText(content: string) { if (!activeId) return; const conversationId = activeId; const message = await apiRequest<ChatMessageContract>(API_URL, "/api/v1/messages/send", token, { method: "POST", body: JSON.stringify({ conversationId, type: "text", content }) }, refresh); setMessages((current) => appendUniqueMessage(current, message)); setDrafts((current) => setConversationDraft(current, conversationId, "")); }
+  function updateActiveDraft(content: string) { if (activeId) setDrafts((current) => setConversationDraft(current, activeId, content)); }
   function handleConversationListResizeStart(event: React.PointerEvent<HTMLDivElement>) {
     event.preventDefault();
     const startX = event.clientX;
@@ -274,5 +293,5 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate }: {
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp, { once: true });
   }
-  return <main className="inbox-shell"><div className="flex h-screen min-h-0 flex-col overflow-hidden bg-slate-100"><DashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} /><div className="inbox-page grid min-h-0 flex-1 grid-cols-[44px_var(--conversation-list-width)_minmax(0,1fr)] overflow-hidden bg-slate-100 text-gray-800 transition-[grid-template-columns] duration-200 max-[900px]:grid-cols-[44px_minmax(0,1fr)]" style={{ "--conversation-list-width": `${conversationListWidth}px` } as React.CSSProperties}><aside className="inbox-nav flex flex-col items-center gap-3 bg-blue-600 px-1 py-3" aria-label="Thanh điều hướng"><div className="inbox-nav-logo mb-2 grid size-[30px] place-items-center rounded-lg border border-white/70 text-[17px] font-bold text-white">H</div><button className="inbox-nav-item grid size-9 place-items-center rounded-lg bg-black/15 text-white transition-colors hover:bg-black/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hội thoại"><InboxIcon name="chat" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hộp thư"><InboxIcon name="inbox" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Khách hàng"><InboxIcon name="users" /></button><div className="inbox-nav-spacer flex-1" /><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Trợ giúp"><InboxIcon name="help" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Cài đặt"><InboxIcon name="settings" /></button>{onBack && <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Về Dashboard" onClick={onBack}>←</button>}</aside><div className="min-h-0 max-[899px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} availableTags={availableTags} onTagsChange={updateConversationTags} collapsed={isConversationListCollapsed} onResizeStart={handleConversationListResizeStart} /></div><ChatWindow conversation={active} messages={messages} onSend={sendText} quickReplies={quickReplies} onOpenConversationList={() => setIsConversationListOpen(true)} isCustomerTyping={isCustomerTyping} aiSuggestions={aiSuggestions} isAiSuggestionsLoading={isAiSuggestionsLoading} aiSuggestionsError={aiSuggestionsError} onRefreshAiSuggestions={refreshAiSuggestions} aiSuggestionsEnabled={aiSuggestionsEnabled} />{isConversationListOpen && <><button className="fixed inset-0 z-40 bg-slate-900/30 min-[900px]:hidden" type="button" onClick={() => setIsConversationListOpen(false)} aria-label="Đóng danh sách hội thoại" /><div className="fixed inset-y-0 left-[44px] z-50 flex w-[min(395px,calc(100vw-44px))] min-[900px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} availableTags={availableTags} onTagsChange={updateConversationTags} /></div></>}</div></div></main>;
+  return <main className="inbox-shell"><div className="pointer-events-none fixed right-4 top-4 z-[70] grid gap-3" aria-live="polite">{messageToasts.map((toast) => <div className="pointer-events-auto" key={toast.id}><MessageToast toast={toast} onOpen={(conversationId) => { selectConversation(conversationId); setMessageToasts([]); }} onClose={(id) => setMessageToasts((current) => current.filter((item) => item.id !== id))} /></div>)}</div><div className="flex h-screen min-h-0 flex-col overflow-hidden bg-slate-100"><DashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} /><div className="inbox-page grid min-h-0 flex-1 grid-cols-[44px_var(--conversation-list-width)_minmax(0,1fr)] overflow-hidden bg-slate-100 text-gray-800 transition-[grid-template-columns] duration-200 max-[900px]:grid-cols-[44px_minmax(0,1fr)]" style={{ "--conversation-list-width": `${conversationListWidth}px` } as React.CSSProperties}><aside className="inbox-nav flex flex-col items-center gap-3 bg-blue-600 px-1 py-3" aria-label="Thanh điều hướng"><div className="inbox-nav-logo mb-2 grid size-[30px] place-items-center rounded-lg border border-white/70 text-[17px] font-bold text-white">H</div><button className="inbox-nav-item grid size-9 place-items-center rounded-lg bg-black/15 text-white transition-colors hover:bg-black/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hội thoại"><InboxIcon name="chat" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hộp thư"><InboxIcon name="inbox" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Khách hàng"><InboxIcon name="users" /></button><div className="inbox-nav-spacer flex-1" /><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Trợ giúp"><InboxIcon name="help" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Cài đặt"><InboxIcon name="settings" /></button>{onBack && <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-gray-100 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Về Dashboard" onClick={onBack}>←</button>}</aside><div className="min-h-0 max-[899px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} collapsed={isConversationListCollapsed} onResizeStart={handleConversationListResizeStart} /></div><ChatWindow conversation={active} messages={messages} onSend={sendText} quickReplies={quickReplies} draft={getConversationDraft(drafts, activeId)} onDraftChange={updateActiveDraft} onOpenConversationList={() => setIsConversationListOpen(true)} isCustomerTyping={isCustomerTyping} aiSuggestions={aiSuggestions} isAiSuggestionsLoading={isAiSuggestionsLoading} aiSuggestionsError={aiSuggestionsError} onRefreshAiSuggestions={refreshAiSuggestions} aiSuggestionsEnabled={aiSuggestionsEnabled} availableTags={availableTags} onTagsChange={updateActiveConversationTags} />{isConversationListOpen && <><button className="fixed inset-0 z-40 bg-slate-900/30 min-[900px]:hidden" type="button" onClick={() => setIsConversationListOpen(false)} aria-label="Đóng danh sách hội thoại" /><div className="fixed inset-y-0 left-[44px] z-50 flex w-[calc(100vw-44px)] min-[900px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} /></div></>}</div></div></main>;
 }

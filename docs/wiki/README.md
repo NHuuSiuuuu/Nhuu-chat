@@ -14,6 +14,7 @@ Nhuu-chat hiện là MVP tập trung vào:
 - Nhận và gửi tin nhắn Telegram trong Inbox realtime.
 - Quản lý hội thoại, unread count, avatar, tên khách hàng, nhóm và nền tảng gửi.
 - Trợ lý RAG với dữ liệu knowledge dạng tài liệu/chính sách.
+- Trợ lý AI có cấu hình model Gemini, gợi ý trả lời và phát hiện cảm xúc.
 - Bot Pause và retry outbound có thời gian chờ cố định.
 
 MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để phục vụ realtime adapter và các thành phần liên quan.
@@ -39,7 +40,14 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
 - API CRUD mẫu trả lời nhanh dùng chung cho admin/agent tại `/api/v1/quick-replies`, hỗ trợ một ảnh đính kèm lưu trên Cloudinary.
 - Chunking và parser cho TXT, Markdown, PDF, DOCX; RAG adapter độc lập với provider.
 - Bot Pause 30 phút; queue hỗ trợ retry `0s`, `1s`, `4s`, nhưng chatbot tự động chỉ gửi một lần do connector chưa hỗ trợ khóa idempotency.
+- Bot Pause 30 phút và retry outbound theo các mốc `0s`, `1s`, `4s`.
+- Cấu hình Trợ lý AI được lưu theo tài khoản qua `GET/PATCH /api/v1/ai-settings`.
+- Mô hình Gemini có ba tier: `smart`, `balanced` và `economy`, tương ứng với model thông minh nhất, cân bằng và tiết kiệm.
+- Gợi ý trả lời hỗ trợ các chế độ thủ công, khi mở hội thoại và khi khách nhắn tin; chế độ thủ công không tự gọi API khi mở hội thoại.
+- Gợi ý dùng 6 tin nhắn cuối của cả khách hàng và nhân viên theo thứ tự thời gian, trả tối đa 3 câu và có fallback khi Gemini không khả dụng.
+- Phát hiện cảm xúc hỗ trợ cửa sổ 3, 6 hoặc 10 tin nhắn gần nhất.
 - Frontend đã chuyển sang Tailwind CSS v4; entry CSS duy nhất là `apps/web/src/styles/tailwind.css`.
+- Các vùng cuộn chính của Inbox, gợi ý AI, sidebar và modal đã ẩn thanh scrollbar nhưng vẫn giữ thao tác cuộn.
 
 ### Inbox và giao diện chat
 
@@ -137,12 +145,12 @@ cp .env.example apps/api/.env
 - `TELEGRAM_BOT_TOKEN`/webhook secret nếu dùng Telegram Bot.
 - `MONGODB_TEST_URI` nếu muốn chạy integration test Mongo ổn định.
 - `GEMINI_API_KEY` nếu muốn bật gợi ý trả lời Gemini.
-- `GEMINI_CHAT_MODEL` tùy chọn; mặc định là `gemini-2.5-flash-lite`.
+- `GEMINI_CHAT_MODEL` tùy chọn; mặc định là `gemini-3.5-flash-lite`.
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` và `CLOUDINARY_API_SECRET` nếu muốn lưu ảnh đính kèm mẫu trả lời nhanh.
 
 Không commit `.env`, token, secret hoặc encryption key.
 
-`GEMINI_API_KEY` chỉ được lưu ở backend trong `apps/api/.env`; không đưa key vào frontend, request của trình duyệt hoặc repository. Endpoint `POST /api/v1/conversations/:id/ai-suggestions` chỉ cho `admin` và `agent`, đọc 6 tin nhắn cuối của cả khách hàng và nhân viên theo thứ tự thời gian, rồi trả tối đa 3 gợi ý kèm `source` là `gemini` hoặc `fallback`. Khi thiếu key, không có tin nhắn phù hợp, Gemini timeout/lỗi quota hoặc trả dữ liệu không hợp lệ, backend trả gợi ý cục bộ để không chặn composer. Prompt và response của request Gemini không được lưu vào database.
+`GEMINI_API_KEY` chỉ được lưu ở backend trong `apps/api/.env`; không đưa key vào frontend, request của trình duyệt hoặc repository. Endpoint `GET/PATCH /api/v1/ai-settings` dùng để đọc/cập nhật cấu hình Trợ lý AI cho tài khoản. Endpoint `POST /api/v1/conversations/:id/ai-suggestions` chỉ cho `admin` và `agent`, nhận trigger `manual`, `conversation_open` hoặc `customer_message`, đọc 6 tin nhắn cuối của cả khách hàng và nhân viên theo thứ tự thời gian, rồi trả tối đa 3 gợi ý kèm `source` là `gemini` hoặc `fallback`. Khi tính năng/model bị tắt, chế độ không khớp trigger, thiếu key, Gemini timeout/lỗi quota hoặc trả dữ liệu không hợp lệ, backend không tự tạo gợi ý hoặc dùng fallback phù hợp để không chặn composer. Prompt và response của request Gemini không được lưu vào database.
 
 ### Trả lời nhanh và ảnh Cloudinary
 
@@ -243,6 +251,7 @@ Các test quan trọng của Inbox kiểm tra tự cuộn, unread state, metadat
 - Chưa chạy Playwright E2E trên môi trường deploy thật.
 - Vector store hiện vẫn là adapter in-memory cho MVP; MongoDB Atlas Vector Search chưa được bật cho production.
 - Redis adapter và Mongo integration cần xác minh lại trong CI/Atlas sạch.
+- Thanh toán trong phần Trợ lý AI hiện mới là UI cố định; tích hợp ví và tính phí thực tế chưa triển khai.
 - Nút `+ Tạo đơn`, ghi chú và một số toolbar hiện mới là UI placeholder; chưa có luồng persistence/order backend hoàn chỉnh.
 - Ảnh Cloudinary hiện chỉ dùng cho mẫu trả lời nhanh; gửi media trong message và upload video chưa được triển khai.
 - Meta/Instagram OAuth, Zalo connector, WebRTC và load test thực tế chưa thuộc MVP hiện tại.
@@ -254,6 +263,7 @@ Các test quan trọng của Inbox kiểm tra tự cuộn, unread state, metadat
 - Chạy E2E trên môi trường deploy thật với Telegram QR và realtime inbound/outbound.
 - Chuẩn hóa Mongo integration trong CI bằng Mongo replica set test.
 - Đánh giá MongoDB Atlas Vector Search cho RAG production.
+- Hoàn thiện tích hợp thanh toán và ví cho các tính năng AI.
 - Tích hợp thêm Zalo, Facebook và Instagram sau khi có spec và connector được phê duyệt.
 
 ## 9. Tài liệu liên quan

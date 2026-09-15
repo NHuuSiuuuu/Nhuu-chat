@@ -5,7 +5,10 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
-Chưa có thay đổi chưa phát hành.
+- Sửa lỗi ô nhập tin nhắn bị xóa liên tục khi gõ sau khi thêm cơ chế draft theo từng conversation.
+- Thêm skeleton loading cho danh sách hội thoại khi tải lại Inbox, tránh nháy trạng thái empty state.
+- Sửa hiện tượng màn hình trắng nháy một nhịp trước khi CSS và ứng dụng web được nạp.
+- Thêm intro NHuuChat ngắn khi khởi động, chờ font sẵn sàng và dùng Suspense skeleton để tránh flash trắng.
 
 ## 2026-09-15
 

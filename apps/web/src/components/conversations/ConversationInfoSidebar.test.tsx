@@ -12,12 +12,16 @@ describe("ConversationInfoSidebar", () => {
     expect(source).toContain("Nhập ghi chú (Enter để gửi)");
     expect(source).toContain("Chưa có lịch sử đơn hàng");
     expect(source).toContain("+ Tạo đơn");
+    expect(source).toContain("Chưa có thông tin khách hàng");
+    expect(source).toContain("hasConversation");
   });
 
   it("keeps the desktop panel and mobile drawer responsive", () => {
     const source = readFileSync(new URL("./ConversationInfoSidebar.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain("min-[1180px]:flex");
+    expect(source).toContain("min-[1000px]:flex");
+    expect(source).toContain("min-[1000px]:hidden");
+    expect(source).not.toContain("1180px");
     expect(source).toContain("fixed inset-y-0 right-0");
     expect(source).toContain("overflow-y-auto");
     expect(source).toContain('aria-label="Đóng thông tin hội thoại"');

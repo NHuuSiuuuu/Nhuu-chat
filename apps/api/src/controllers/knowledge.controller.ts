@@ -4,7 +4,7 @@ import { knowledgeEmbedding, knowledgeVectorStore } from "../ai/knowledge-runtim
 import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
 import { AppError } from "../common/errors.js";
 import { knowledgeIdSchema, knowledgeInputSchema } from "../schemas/knowledge.schemas.js";
-import { deleteKnowledge, ingestKnowledge } from "../services/knowledge.service.js";
+import { deleteKnowledge, ingestKnowledge, listKnowledge as listKnowledgeDocuments } from "../services/knowledge.service.js";
 
 function authenticatedOwnerId(request: Parameters<RequestHandler>[0]): string {
   const id = (request as AuthenticatedRequest).auth?.id;
@@ -22,6 +22,14 @@ export const createKnowledge: RequestHandler = async (request, response, next) =
     response.status(201).json(await ingestKnowledge(
       authenticatedOwnerId(request), result.data, knowledgeEmbedding, knowledgeVectorStore
     ));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listKnowledge: RequestHandler = async (request, response, next) => {
+  try {
+    response.status(200).json(await listKnowledgeDocuments(authenticatedOwnerId(request)));
   } catch (error) {
     next(error);
   }

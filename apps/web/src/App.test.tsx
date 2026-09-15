@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { preloadIntroDependencies } from "./App.js";
 
 describe("App navigation", () => {
   it("routes the shared logo to Dashboard and the header conversation link to Inbox", () => {
@@ -18,9 +19,33 @@ describe("App navigation", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
     expect(source).toContain('type AppPage = "dashboard" | "telegram" | "inbox" | "settings"');
-    expect(source).toContain('if (pathname === "/settings") return "settings"');
+    expect(source).toContain('if (pathname === "/settings" || pathname.startsWith("/settings/")) return "settings"');
     expect(source).toContain('if (page === "settings") return "/settings"');
     expect(source).toContain('item === "Cài đặt" ? "settings"');
     expect(source).toContain("<SettingsPage");
+    expect(source).toContain('pathname.startsWith("/settings/")');
+  });
+
+  it("keeps the initial document background aligned before JavaScript loads", () => {
+    const source = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+
+    expect(source).toContain('<body style="margin:0;background:#f0f2f7;color:#273348">');
+    expect(source).toContain('<div id="root" style="min-height:100vh;background:#f0f2f7">');
+  });
+
+  it("coordinates the intro with preload readiness and a Suspense fallback", async () => {
+    const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("showIntro");
+    expect(source).toContain("useState(true)");
+    expect(source).toContain("introReady");
+    expect(source).toContain("<NetflixIntro");
+    expect(source).toContain("ready={introReady}");
+    expect(source).toContain("Promise.all");
+    expect(source).toContain("<Suspense");
+    expect(source).toContain("PageSkeleton");
+    expect(source).not.toContain("sessionStorage");
+    expect(source).not.toContain("/api/config");
+    await expect(preloadIntroDependencies()).resolves.toBeUndefined();
   });
 });
