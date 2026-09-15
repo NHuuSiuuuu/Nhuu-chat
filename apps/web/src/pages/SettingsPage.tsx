@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useEffect, useState } from "react";
-import type { AiModelTier, AiSentimentWindow, AiSettingsContract, AiSuggestionMode, ConversationTagContract, QuickReplyContract } from "@nhuu-chat/contracts";
+import type { AiModelTier, AiSentimentWindow, AiSettingsContract, AiSuggestionMode, AssistantContract, AutomationTemplateContract, BotPreviewResponse, ConversationTagContract, QuickReplyContract } from "@nhuu-chat/contracts";
 import { DashboardTopbar } from "../components/dashboard/DashboardTopbar.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
 import { apiRequest } from "../lib/api.js";
@@ -10,9 +10,11 @@ const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 const TAGS_API_PATH = "/api/v1/conversation-tags";
 const AI_SETTINGS_API_PATH = "/api/v1/ai-settings";
 const QUICK_REPLIES_API_PATH = "/api/v1/quick-replies";
+const ASSISTANTS_API_PATH = "/api/v1/assistants";
 const DEFAULT_AI_SETTINGS: AiSettingsContract = { modelTier: "smart", enabled: true, suggestionsEnabled: true, sentimentEnabled: true, suggestionMode: "on_open", sentimentWindow: 3 };
 const modelTierByLabel: Record<string, AiModelTier> = { "Thông minh nhất": "smart", "Cân bằng": "balanced", "Tiết kiệm": "economy" };
 const modelLabelByTier: Record<AiModelTier, string> = { smart: "Thông minh nhất", balanced: "Cân bằng", economy: "Tiết kiệm" };
+const modelNameByTier: Record<AiModelTier, string> = { smart: "gemini-3.5-flash", balanced: "gemini-3.6-flash", economy: "gemini-3.5-flash-lite" };
 const suggestionModeByLabel: Record<string, AiSuggestionMode> = { "Thủ công": "manual", "Khi mở hội thoại": "on_open", "Khi khách nhắn tin": "on_customer_message", "Luôn gợi ý": "on_customer_message" };
 const suggestionLabelByMode: Record<AiSuggestionMode, string> = { off: "Thủ công", manual: "Thủ công", on_open: "Khi mở hội thoại", on_customer_message: "Khi khách nhắn tin" };
 const sentimentWindowByLabel: Record<string, AiSentimentWindow> = { "3 tin gần nhất": 3, "6 tin gần nhất": 6, "10 tin gần nhất": 10 };
@@ -32,8 +34,42 @@ const settingsIconByItem = {
   "Phân quyền": "users",
   "Lịch sử": "clock"
 } as const;
+type SettingsItem = typeof settingsItems[number];
+const settingsSlugByItem: Record<SettingsItem, string> = {
+  "Cài đặt chung": "general",
+  "Thẻ hội thoại": "conversation-tags",
+  "Trợ lý AI": "ai-assistant",
+  "Hỗ trợ trả lời": "quick-replies",
+  "Giao diện": "appearance",
+  "Cuộc gọi": "calls",
+  "Chế độ xoay vòng": "rotation",
+  "Đồng bộ": "sync",
+  "Công cụ": "tools",
+  "Phân quyền": "permissions",
+  "Lịch sử": "history"
+};
+const settingsItemBySlug = Object.fromEntries(Object.entries(settingsSlugByItem).map(([item, slug]) => [slug, item])) as Record<string, SettingsItem>;
+
+export function settingsPathForItem(item: SettingsItem): string {
+  return `/settings/${settingsSlugByItem[item]}`;
+}
+
+export function settingsItemFromPath(pathname: string): SettingsItem {
+  return settingsItemBySlug[pathname.replace(/^\/settings\/?/, "")] ?? settingsItems[0];
+}
+
+export function publicationButtonLabel(enabled: boolean): { button: string; status: string } {
+  return enabled
+    ? { button: "Gỡ xuất bản", status: "Đang hoạt động" }
+    : { button: "Xuất bản", status: "Chưa hoạt động" };
+}
 
 type AiAssistantTab = "Gợi ý trả lời" | "Chatbot tự động";
+
+type ChatbotAssistant = Pick<AssistantContract, "id" | "name" | "instructions" | "modelTier" | "enabled" | "fallbackMessage" | "channelScope" | "isDefault">;
+type GreetingTemplateDraft = Pick<AutomationTemplateContract, "name" | "keywords" | "responseTemplate" | "allowAiRewrite" | "priority" | "enabled" | "channelScope">;
+type KnowledgeDocument = { id: string; title: string; sourceType: "text" | "file" | "url"; status: "pending" | "processing" | "ready" | "failed"; createdAt?: string };
+type KnowledgeListResponse = { documents: Array<{ _id: string; title: string; sourceType: KnowledgeDocument["sourceType"]; status: KnowledgeDocument["status"]; createdAt?: string }> };
 
 type SettingsDashboardAccount = {
   email: string;
@@ -65,6 +101,408 @@ function AiSelect({ value, options, label, onChange }: { value: string; options:
 
 function AiSettingItem({ icon, iconClassName, title, description, children, footer }: { icon: "sparkles" | "cloud" | "chat" | "smile"; iconClassName: string; title: string; description: React.ReactNode; children: React.ReactNode; footer?: React.ReactNode }) {
   return <article className="flex flex-wrap items-start gap-4 border-b border-gray-100 py-5 last:border-b-0"><span className={`grid size-11 shrink-0 place-items-center rounded-full ${iconClassName}`}><InboxIcon name={icon} size={20} /></span><div className="min-w-[220px] flex-1"><h3 className="font-semibold text-gray-900">{title}</h3><div className="mt-1 max-w-2xl text-sm leading-6 text-gray-500">{description}</div>{footer && <div className="mt-2">{footer}</div>}</div><div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-3 max-[640px]:w-full">{children}</div></article>;
+}
+
+function KnowledgeDocumentModal({ token, refresh, onClose }: { token: string; refresh?: () => Promise<string | null>; onClose: () => void }) {
+  const [query, setQuery] = useState("");
+  const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const filteredDocuments = documents.filter((document) => document.title.toLowerCase().includes(query.toLowerCase()));
+
+  async function loadKnowledgeDocuments() {
+    setIsLoading(true);
+    try {
+      const result = await apiRequest<KnowledgeListResponse>(API_URL, "/api/v1/knowledge", token, {}, refresh);
+      setDocuments(result.documents.map((document) => ({ id: document._id, title: document.title, sourceType: document.sourceType, status: document.status, createdAt: document.createdAt })));
+      setError(null);
+    } catch {
+      setError("Không thể tải danh sách tài liệu kiến thức");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadKnowledgeDocuments();
+  }, [refresh, token]);
+
+  async function addKnowledgeFile(file: File) {
+    if (!/\.(txt|md)$/i.test(file.name)) {
+      setError("Chỉ hỗ trợ file .txt hoặc .md");
+      return;
+    }
+    setIsSaving(true);
+    setError(null);
+    try {
+      const content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+        reader.onerror = () => reject(new Error("FILE_READ_FAILED"));
+        reader.readAsText(file);
+      });
+      if (!content.trim()) throw new Error("EMPTY_FILE");
+      await apiRequest(API_URL, "/api/v1/knowledge", token, { method: "POST", body: JSON.stringify({ title: file.name, content, sourceType: "file" }) }, refresh);
+      await loadKnowledgeDocuments();
+    } catch {
+      setError("Không thể thêm tài liệu kiến thức");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function deleteKnowledgeDocument(document: KnowledgeDocument) {
+    if (!window.confirm(`Xóa tài liệu "${document.title}"?`)) return;
+    try {
+      await apiRequest<void>(API_URL, `/api/v1/knowledge/${document.id}`, token, { method: "DELETE" }, refresh);
+      setDocuments((current) => current.filter((item) => item.id !== document.id));
+    } catch {
+      setError("Không thể xóa tài liệu kiến thức");
+    }
+  }
+
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4 backdrop-blur-sm" role="presentation" onMouseDown={onClose}>
+    <section className="w-full max-w-lg animate-[composer-dialog-in_180ms_ease-out] rounded-xl bg-white p-5 shadow-xl sm:p-6" role="dialog" aria-modal="true" aria-labelledby="knowledge-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+      <header className="flex items-start justify-between gap-4"><div><h3 className="text-lg font-bold text-gray-900" id="knowledge-modal-title">Tài liệu kiến thức</h3><p className="mt-1 text-xs text-gray-500">Chỉ hỗ trợ .txt và .md</p></div><div className="flex items-center gap-3"><label className="cursor-pointer text-sm font-semibold text-sky-600 hover:underline">Thêm tài liệu<input className="sr-only" type="file" accept=".txt,.md,text/plain,text/markdown" disabled={isSaving} onChange={(event) => { const file = event.target.files?.[0]; if (file) void addKnowledgeFile(file); event.target.value = ""; }} /></label><button className="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-100" type="button" aria-label="Đóng" onClick={onClose}><InboxIcon name="close" size={17} /></button></div></header>
+      <label className="mt-5 flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-400"><InboxIcon name="search" size={16} /><input className="min-w-0 flex-1 text-gray-700 outline-none placeholder:text-gray-400" placeholder="Tìm kiếm" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+      {error && <p className="mt-3 text-sm text-rose-600" role="alert">{error}</p>}
+      <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">{isLoading ? <p className="py-8 text-center text-sm text-gray-500">Đang tải tài liệu...</p> : filteredDocuments.map((document) => <div className="flex items-center gap-3 rounded-lg p-2 hover:bg-gray-50" key={document.id}><span className="grid size-10 shrink-0 place-items-center rounded-lg bg-gray-100 text-gray-500"><InboxIcon name="file" size={18} /></span><span className="min-w-0 flex-1"><strong className="block truncate text-sm text-gray-900">{document.title}</strong><small className="text-xs text-gray-500">{document.status === "ready" ? "Đã sẵn sàng" : "Đang xử lý"}</small></span><button className="grid size-8 shrink-0 place-items-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600" type="button" aria-label={`Xóa tài liệu ${document.title}`} onClick={() => void deleteKnowledgeDocument(document)}><InboxIcon name="trash" size={15} /></button></div>)}{!isLoading && filteredDocuments.length === 0 && <p className="py-8 text-center text-sm text-gray-500">Chưa có tài liệu kiến thức</p>}</div>
+    </section>
+  </div>;
+}
+
+function AssistantNameModal({ name, onNameChange, onClose, onSubmit }: { name: string; onNameChange: (name: string) => void; onClose: () => void; onSubmit: () => void }) {
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4 backdrop-blur-sm" role="presentation" onMouseDown={onClose}>
+    <section className="w-full max-w-md animate-[composer-dialog-in_180ms_ease-out] rounded-xl bg-white p-5 shadow-xl sm:p-6" role="dialog" aria-modal="true" aria-labelledby="assistant-name-title" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="flex items-center justify-between gap-4"><h3 className="text-lg font-bold text-gray-900" id="assistant-name-title">Tạo chatbot mới</h3><button className="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-100" type="button" aria-label="Đóng" onClick={onClose}><InboxIcon name="close" size={17} /></button></div>
+      <label className="mt-5 grid gap-1.5 text-sm font-semibold text-gray-700">Tên trợ lý<input autoFocus className="rounded-lg border border-gray-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" placeholder="Nhập tên trợ lý" value={name} onChange={(event) => onNameChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); onSubmit(); } }} /></label>
+      <div className="mt-5 flex justify-end gap-2"><button className="rounded-lg px-4 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-50" type="button" onClick={onClose}>Hủy</button><button className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled={!name.trim()} onClick={onSubmit}>Tạo chatbot</button></div>
+    </section>
+  </div>;
+}
+
+function GreetingTemplateModal({ template, isSaving, onClose, onSave }: { template: AutomationTemplateContract | null; isSaving: boolean; onClose: () => void; onSave: (draft: GreetingTemplateDraft) => Promise<void> }) {
+  const [name, setName] = useState(template?.name ?? "");
+  const [keywords, setKeywords] = useState(template?.keywords.join(", ") ?? "");
+  const [responseTemplate, setResponseTemplate] = useState(template?.responseTemplate ?? "");
+  const [enabled, setEnabled] = useState(template?.enabled ?? true);
+  const [allowAiRewrite, setAllowAiRewrite] = useState(template?.allowAiRewrite ?? false);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsedKeywords = keywords.split(",").map((keyword) => keyword.trim()).filter(Boolean);
+    if (!name.trim() || parsedKeywords.length === 0 || !responseTemplate.trim()) return;
+    await onSave({
+      name: name.trim(),
+      keywords: parsedKeywords,
+      responseTemplate: responseTemplate.trim(),
+      allowAiRewrite,
+      priority: template?.priority ?? 100,
+      enabled,
+      channelScope: template?.channelScope ?? { mode: "all", identifiers: [] }
+    });
+  }
+
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4" role="presentation" onMouseDown={onClose}><section className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="greeting-template-title" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-center justify-between gap-4"><h3 className="text-lg font-bold text-gray-900" id="greeting-template-title">{template ? "Sửa mẫu chào" : "Thêm mẫu chào"}</h3><button type="button" aria-label="Đóng" onClick={onClose}><InboxIcon name="close" /></button></div><form className="mt-5 grid gap-4" onSubmit={(event) => void submit(event)}><label className="grid gap-1.5 text-sm font-semibold text-gray-700">Tên mẫu<input className="rounded-lg border border-gray-200 px-3 py-2.5 font-normal" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ví dụ: Chào khách hàng" /></label><label className="grid gap-1.5 text-sm font-semibold text-gray-700">Từ khóa<input className="rounded-lg border border-gray-200 px-3 py-2.5 font-normal" value={keywords} onChange={(event) => setKeywords(event.target.value)} placeholder="hi, hello, xin chào" /><small className="font-normal text-gray-400">Ngăn cách các từ khóa bằng dấu phẩy</small></label><label className="grid gap-1.5 text-sm font-semibold text-gray-700">Nội dung trả lời<textarea className="min-h-28 rounded-lg border border-gray-200 px-3 py-2.5 font-normal" value={responseTemplate} onChange={(event) => setResponseTemplate(event.target.value)} /></label><label className="flex items-center gap-2 text-sm font-semibold text-gray-700"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Đang bật</label><label className="flex items-center gap-2 text-sm font-semibold text-gray-700"><input type="checkbox" checked={allowAiRewrite} onChange={(event) => setAllowAiRewrite(event.target.checked)} /> Cho phép Gemini viết lại <small className="font-normal text-gray-400">(tắt để trả lời ngay)</small></label><div className="flex justify-end gap-2"><button className="rounded-lg px-4 py-2 text-sm font-semibold text-gray-500" type="button" onClick={onClose}>Hủy</button><button className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" type="submit" disabled={isSaving}>{isSaving ? "Đang lưu..." : "Lưu mẫu"}</button></div></form></section></div>;
+}
+
+function ChatbotAutomationSettingsLegacy({ token, refresh }: { token: string; refresh?: () => Promise<string | null> }) {
+  const [assistants, setAssistants] = useState<Array<{ id: number; name: string }>>([{ id: 1, name: "Trợ lý mặc định" }, { id: 2, name: "bán hàng 1" }]);
+  const [selectedAssistant, setSelectedAssistant] = useState("Trợ lý mặc định");
+  const [isCreateAssistantModalOpen, setIsCreateAssistantModalOpen] = useState(false);
+  const [newAssistantName, setNewAssistantName] = useState("");
+  const [isKnowledgeModalOpen, setIsKnowledgeModalOpen] = useState(false);
+  const [isModelOpen, setIsModelOpen] = useState(true);
+  const [isKnowledgeOpen, setIsKnowledgeOpen] = useState(true);
+  const [draft, setDraft] = useState("");
+  const [isAssistantMenuOpen, setIsAssistantMenuOpen] = useState(false);
+  const selected = assistants.find((assistant) => assistant.name === selectedAssistant) ?? assistants[0];
+
+  function deleteAssistant(id: number) {
+    const deleted = assistants.find((assistant) => assistant.id === id);
+    const next = assistants.filter((assistant) => assistant.id !== id);
+    setAssistants(next);
+    if (deleted?.name === selectedAssistant) setSelectedAssistant(next[0]?.name ?? "");
+  }
+
+  function createAssistant() {
+    const name = newAssistantName.trim();
+    if (!name) return;
+    const id = Math.max(0, ...assistants.map((assistant) => assistant.id)) + 1;
+    const assistant = { id, name };
+    setAssistants((current) => [...current, assistant]);
+    setSelectedAssistant(assistant.name);
+    setNewAssistantName("");
+    setIsCreateAssistantModalOpen(false);
+  }
+
+  function openCreateAssistantModal() {
+    setNewAssistantName("");
+    setIsAssistantMenuOpen(false);
+    setIsCreateAssistantModalOpen(true);
+  }
+
+  function closeCreateAssistantModal() {
+    setNewAssistantName("");
+    setIsCreateAssistantModalOpen(false);
+  }
+
+  return <div className="mt-5">
+    <header className="flex items-center justify-between gap-4 px-1 pb-3"><div className="relative"><button className="flex items-center gap-1.5 text-left" type="button" aria-label="Mở danh sách trợ lý" aria-expanded={isAssistantMenuOpen} onClick={() => setIsAssistantMenuOpen((current) => !current)}><span><strong className="block text-sm font-bold text-gray-900">{selected?.name ?? "Trợ lý mặc định"}</strong><small className="mt-1 block text-xs text-gray-400">Áp dụng cho Page: <strong className="font-semibold text-sky-600">Nguyễn Ngọc Hữu</strong></small></span><InboxIcon name="chevron-down" size={15} /></button>{isAssistantMenuOpen && <div className="absolute left-0 top-full z-20 mt-2 w-64 rounded-xl border border-gray-200 bg-white p-2 shadow-lg" aria-label="Danh sách trợ lý"><div className="mb-1 flex items-center justify-between px-2 py-1"><span className="text-xs font-bold text-gray-500">Trợ lý</span><button className="grid size-7 place-items-center rounded-md text-sky-600 hover:bg-sky-50" type="button" aria-label="Tạo chatbot mới" onClick={openCreateAssistantModal}><InboxIcon name="plus" size={16} /></button></div><div className="grid gap-1">{assistants.map((assistant) => <div className={`group flex items-center gap-2 rounded-lg px-2 py-2 ${selectedAssistant === assistant.name ? "bg-sky-50 font-semibold text-sky-700" : "text-gray-600 hover:bg-gray-50"}`} key={assistant.id}><button className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm" type="button" onClick={() => { setSelectedAssistant(assistant.name); setIsAssistantMenuOpen(false); }}><InboxIcon name="robot" size={15} /><span className="min-w-0 flex-1 truncate">{assistant.name}</span></button><button className="invisible grid size-7 shrink-0 place-items-center rounded text-rose-500 hover:bg-rose-50 group-hover:visible focus:visible" type="button" aria-label={`Xóa ${assistant.name}`} onClick={() => deleteAssistant(assistant.id)}><InboxIcon name="trash" size={14} /></button></div>)}</div></div>}</div><div className="flex items-center gap-2"><button className="rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50" type="button" onClick={openCreateAssistantModal}>Chat mới</button><button className="rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700" type="button">Xuất bản</button></div></header>
+    <div className="grid min-h-[520px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm lg:grid-cols-[minmax(300px,1fr)_minmax(250px,0.9fr)_minmax(300px,1fr)] max-[1024px]:grid-cols-1">
+      <section className="flex min-h-[420px] flex-col border-r border-gray-200 max-[1024px]:border-r-0 max-[1024px]:border-b" aria-label="Hướng dẫn"><div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3"><h3 className="text-sm font-bold text-gray-900">Hướng dẫn</h3><div className="flex items-center gap-3 text-xs font-semibold"><button className="text-gray-400 hover:text-gray-700" type="button">Xem mẫu</button><button className="text-gray-400 hover:text-gray-700" type="button">AI rules</button><button className="inline-flex items-center gap-1 text-sky-600 hover:text-sky-700" type="button"><InboxIcon name="sparkles" size={14} /> Viết lại</button></div></div><textarea className="min-h-56 flex-1 resize-y border-0 px-4 py-3 text-sm leading-6 text-gray-700 outline-none focus:ring-2 focus:ring-inset focus:ring-sky-100" aria-label="Nội dung hướng dẫn" defaultValue={"## Nhân vật\nBạn là 1 chuyên gia bán hàng quần áo\n\n### Kỹ năng\n- Bạn có kỹ năng tư vấn sản phẩm nữ\n- Bạn có kỹ năng tư vấn tình cảm\n\n### Giới hạn\n- Giữ kết luận trong khoảng 100 từ\n- Cung cấp thông tin chính xác và tin cậy"} /></section>
+      <section className="min-h-[420px] border-r border-gray-200 p-4 max-[1024px]:border-r-0 max-[1024px]:border-b" aria-label="Cấu hình chatbot"><div className="border-b border-gray-100 pb-4"><button className="flex w-full items-center justify-between text-sm font-bold text-gray-800" type="button" onClick={() => setIsModelOpen((current) => !current)}><span className="flex items-center gap-2"><InboxIcon name="chevron-down" size={16} /> Model</span></button>{isModelOpen && <select className="mt-3 w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" aria-label="Model chatbot" defaultValue="Gemini 2.5 Flash"><option>Gemini 2.5 Flash</option></select>}</div><div className="pt-4"><div className="flex items-center justify-between"><button className="flex items-center gap-2 text-sm font-bold text-gray-800" type="button" onClick={() => setIsKnowledgeOpen((current) => !current)}><InboxIcon name="chevron-down" size={16} /> Kiến thức</button><button className="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-100" type="button" aria-label="Chọn tài liệu kiến thức" onClick={() => setIsKnowledgeModalOpen(true)}><InboxIcon name="file" size={17} /></button></div>{isKnowledgeOpen && <div className="mt-3 grid gap-2"><button className="flex items-center gap-2 rounded-lg bg-gray-50 px-2.5 py-2 text-left text-xs text-gray-600 hover:bg-sky-50 hover:text-sky-700" type="button" onClick={() => setIsKnowledgeModalOpen(true)}><InboxIcon name="file" size={15} /> impl.txt</button><p className="text-xs text-gray-400">Tài liệu giúp chatbot trả lời đúng ngữ cảnh.</p></div>}</div></section>
+      <section className="flex min-h-[420px] flex-col overflow-hidden bg-gray-50/40" aria-label="Khung Chat"><header className="border-b border-gray-100 px-4 py-3 text-center"><span className="text-sm font-bold text-gray-900" aria-label="Tên trợ lý hiện tại">{selected?.name ?? "Trợ lý mặc định"}</span></header><div className="grid flex-1 place-items-center p-6 text-center"><div><span className="mx-auto grid size-16 place-items-center rounded-full bg-sky-500 text-white shadow-sm"><InboxIcon name="robot" size={30} /></span><h3 className="mt-4 font-bold text-gray-900">{selected?.name ?? "Trợ lý mặc định"}</h3><p className="mt-1 text-sm text-gray-500">Tư vấn khách hàng</p></div></div><form className="flex items-center gap-2 border-t border-gray-100 bg-white p-3" onSubmit={(event) => { event.preventDefault(); setDraft(""); }}><input className="min-w-0 flex-1 rounded-full border border-gray-200 px-4 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" placeholder="Gửi tin nhắn" value={draft} onChange={(event) => setDraft(event.target.value)} /><button className="grid size-9 shrink-0 place-items-center rounded-lg text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50" type="submit" aria-label="Gửi tin nhắn" disabled={!draft.trim()}><InboxIcon name="send" size={19} /></button></form></section>
+    </div>
+    {isKnowledgeModalOpen && <KnowledgeDocumentModal token={token} refresh={refresh} onClose={() => setIsKnowledgeModalOpen(false)} />}
+    {isCreateAssistantModalOpen && <AssistantNameModal name={newAssistantName} onNameChange={setNewAssistantName} onClose={closeCreateAssistantModal} onSubmit={createAssistant} />}
+  </div>;
+}
+
+function ChatbotAutomationSettings({ token, refresh }: { token: string; refresh?: () => Promise<string | null> }) {
+  const [assistants, setAssistants] = useState<ChatbotAssistant[]>([]);
+  const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [messages, setMessages] = useState<Array<{ role: "customer" | "bot"; content: string }>>([]);
+  const [instructions, setInstructions] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const [isSavingAssistant, setIsSavingAssistant] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [modelTier, setModelTier] = useState<AiModelTier>("smart");
+  const [isSavingModel, setIsSavingModel] = useState(false);
+  const [isKnowledgeModalOpen, setIsKnowledgeModalOpen] = useState(false);
+  const [templates, setTemplates] = useState<AutomationTemplateContract[]>([]);
+  const [isTemplatesLoading, setIsTemplatesLoading] = useState(false);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<AutomationTemplateContract | null>(null);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [isAssistantMenuOpen, setIsAssistantMenuOpen] = useState(false);
+  const [deletingAssistantId, setDeletingAssistantId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [newAssistantName, setNewAssistantName] = useState("");
+  const selected = assistants.find((assistant) => assistant.id === selectedAssistantId) ?? assistants[0];
+
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    void apiRequest<{ assistants: ChatbotAssistant[] }>(API_URL, ASSISTANTS_API_PATH, token, {}, refresh)
+      .then(async (result) => {
+        if (!active) return;
+        let nextAssistants = result.assistants;
+        if (nextAssistants.length === 0) {
+          const created = await apiRequest<ChatbotAssistant>(API_URL, ASSISTANTS_API_PATH, token, {
+            method: "POST",
+            body: JSON.stringify({
+              name: "Trợ lý mặc định",
+              instructions: "Bạn là trợ lý tư vấn khách hàng. Hãy trả lời bằng tiếng Việt, lịch sự và chính xác.",
+              isDefault: true
+            })
+          }, refresh);
+          nextAssistants = [created];
+        }
+        if (!active) return;
+        setAssistants(nextAssistants);
+        setSelectedAssistantId(nextAssistants.find((assistant) => assistant.isDefault)?.id ?? nextAssistants[0]?.id ?? null);
+        const defaultAssistant = nextAssistants.find((assistant) => assistant.isDefault) ?? nextAssistants[0];
+        setInstructions(defaultAssistant?.instructions ?? "");
+        setModelTier(defaultAssistant?.modelTier ?? "smart");
+      })
+      .catch(() => { if (active) setError("Không thể tải danh sách trợ lý"); })
+      .finally(() => { if (active) setIsLoading(false); });
+    return () => { active = false; };
+  }, [refresh, token]);
+
+  async function loadTemplates(assistantId: string) {
+    setIsTemplatesLoading(true);
+    try {
+      const result = await apiRequest<{ templates: AutomationTemplateContract[] }>(API_URL, `${ASSISTANTS_API_PATH}/${assistantId}/templates`, token, {}, refresh);
+      setTemplates(result.templates);
+    } catch {
+      setError("Không thể tải danh sách mẫu chào");
+    } finally {
+      setIsTemplatesLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (selected?.id) {
+      setModelTier(selected.modelTier);
+      void loadTemplates(selected.id);
+    }
+    else setTemplates([]);
+  }, [selected?.id, refresh, token]);
+
+  function openCreateTemplate() { setEditingTemplate(null); setIsTemplateModalOpen(true); }
+  function openEditTemplate(template: AutomationTemplateContract) { setEditingTemplate(template); setIsTemplateModalOpen(true); }
+
+  async function saveTemplate(draft: GreetingTemplateDraft) {
+    if (!selected) return;
+    setIsSavingTemplate(true);
+    try {
+      const result = await apiRequest<AutomationTemplateContract>(API_URL, `${ASSISTANTS_API_PATH}/${selected.id}/templates${editingTemplate ? `/${editingTemplate.id}` : ""}`, token, {
+        method: editingTemplate ? "PATCH" : "POST",
+        body: JSON.stringify({ ...draft, assistantId: selected.id })
+      }, refresh);
+      setTemplates((current) => editingTemplate ? current.map((template) => template.id === result.id ? result : template) : [...current, result]);
+      setIsTemplateModalOpen(false);
+      setEditingTemplate(null);
+    } catch {
+      setError(editingTemplate ? "Không thể sửa mẫu chào" : "Không thể thêm mẫu chào");
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  }
+
+  async function deleteTemplate(template: AutomationTemplateContract) {
+    if (!window.confirm(`Xóa mẫu chào "${template.name}"?`)) return;
+    try {
+      await apiRequest<void>(API_URL, `${ASSISTANTS_API_PATH}/${selected?.id}/templates/${template.id}`, token, { method: "DELETE" }, refresh);
+      setTemplates((current) => current.filter((item) => item.id !== template.id));
+    } catch {
+      setError("Không thể xóa mẫu chào");
+    }
+  }
+
+  async function sendPreview(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const content = draft.trim();
+    if (!content || !selected || isSending) return;
+    const history = messages.slice(-20);
+    setMessages((current) => [...current, { role: "customer", content }]);
+    setDraft("");
+    setIsSending(true);
+    setError(null);
+    try {
+      const result = await apiRequest<BotPreviewResponse>(API_URL, `${ASSISTANTS_API_PATH}/${selected.id}/preview`, token, {
+        method: "POST",
+        body: JSON.stringify({ message: content, history })
+      }, refresh);
+      setMessages((current) => [...current, { role: "bot", content: result.answer }]);
+    } catch {
+      setError("Không thể gửi tin nhắn thử nghiệm");
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  async function createAssistant() {
+    const name = newAssistantName.trim();
+    if (!name) return;
+    setError(null);
+    try {
+      const assistant = await apiRequest<ChatbotAssistant>(API_URL, ASSISTANTS_API_PATH, token, {
+        method: "POST",
+        body: JSON.stringify({ name, instructions: "Bạn là trợ lý tư vấn khách hàng. Hãy trả lời bằng tiếng Việt, lịch sự và chính xác." })
+      }, refresh);
+      setAssistants((current) => [...current, assistant]);
+      setSelectedAssistantId(assistant.id);
+      setNewAssistantName("");
+      setIsCreateOpen(false);
+    } catch {
+      setError("Không thể tạo trợ lý");
+    }
+  }
+
+  // Xóa chatbot qua API rồi chuyển giao diện sang trợ lý mặc định hoặc bot còn lại.
+  async function deleteAssistant(assistant: ChatbotAssistant) {
+    if (!window.confirm(`Xóa chatbot "${assistant.name}"?`)) return;
+    setDeletingAssistantId(assistant.id);
+    setError(null);
+    try {
+      await apiRequest<void>(API_URL, `${ASSISTANTS_API_PATH}/${assistant.id}`, token, { method: "DELETE" }, refresh);
+      const nextAssistants = assistants.filter((item) => item.id !== assistant.id);
+      const nextSelected = nextAssistants.find((item) => item.isDefault) ?? nextAssistants[0];
+      setAssistants(nextAssistants);
+      setSelectedAssistantId(nextSelected?.id ?? null);
+      setInstructions(nextSelected?.instructions ?? "");
+      setModelTier(nextSelected?.modelTier ?? "smart");
+      setMessages([]);
+      setIsAssistantMenuOpen(false);
+    } catch {
+      setError("Không thể xóa chatbot");
+    } finally {
+      setDeletingAssistantId(null);
+    }
+  }
+
+  function selectAssistant(assistant: ChatbotAssistant) {
+    setSelectedAssistantId(assistant.id);
+    setInstructions(assistant.instructions);
+    setModelTier(assistant.modelTier);
+    setMessages([]);
+    setIsAssistantMenuOpen(false);
+  }
+
+  async function saveAssistant() {
+    if (!selected || isSavingAssistant) return;
+    setIsSavingAssistant(true);
+    setError(null);
+    try {
+      const saved = await apiRequest<ChatbotAssistant>(API_URL, `${ASSISTANTS_API_PATH}/${selected.id}`, token, {
+        method: "PATCH",
+        body: JSON.stringify({ instructions })
+      }, refresh);
+      setAssistants((current) => current.map((assistant) => assistant.id === saved.id ? saved : assistant));
+      setInstructions(saved.instructions);
+    } catch {
+      setError("Không thể lưu hướng dẫn trợ lý");
+    } finally {
+      setIsSavingAssistant(false);
+    }
+  }
+
+  async function togglePublication() {
+    if (!selected || isPublishing) return;
+    setIsPublishing(true);
+    setError(null);
+    try {
+      const updated = await apiRequest<ChatbotAssistant>(API_URL, `${ASSISTANTS_API_PATH}/${selected.id}`, token, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled: !selected.enabled })
+      }, refresh);
+      setAssistants((current) => current.map((assistant) => assistant.id === updated.id ? updated : assistant));
+    } catch {
+      setError("Không thể thay đổi trạng thái trả lời tự động");
+    } finally {
+      setIsPublishing(false);
+    }
+  }
+
+  async function saveModelTier(modelTier: AiModelTier) {
+    if (!selected || isSavingModel) return;
+    setModelTier(modelTier);
+    setIsSavingModel(true);
+    setError(null);
+    try {
+      const saved = await apiRequest<ChatbotAssistant>(API_URL, `${ASSISTANTS_API_PATH}/${selected.id}`, token, {
+        method: "PATCH",
+        body: JSON.stringify({ modelTier })
+      }, refresh);
+      setAssistants((current) => current.map((assistant) => assistant.id === saved.id ? saved : assistant));
+      setModelTier(saved.modelTier);
+    } catch {
+      setModelTier(selected.modelTier);
+      setError("Không thể lưu model chatbot");
+    } finally {
+      setIsSavingModel(false);
+    }
+  }
+
+  return <div className="mt-5">
+    {error && <p className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">{error}</p>}
+    <header className="flex items-center justify-between gap-4 px-1 pb-3"><div className="relative"><button className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left transition hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500" type="button" aria-label="Mở danh sách chatbot" aria-expanded={isAssistantMenuOpen} onClick={() => setIsAssistantMenuOpen((current) => !current)}><span className="min-w-0"><strong className="block truncate text-sm font-bold text-gray-900">{selected?.name ?? "Trợ lý mặc định"}</strong><small className="mt-1 block truncate text-xs text-gray-400">{selected?.isDefault ? "Trợ lý mặc định" : "Chatbot theo chủ đề"} · Tư vấn khách hàng</small></span><InboxIcon name="chevron-down" size={15} /></button>{isAssistantMenuOpen && <div className="absolute left-0 top-full z-30 mt-2 w-72 rounded-xl border border-gray-200 bg-white p-2 shadow-lg" role="menu" aria-label="Danh sách chatbot"><div className="px-2 py-1.5 text-xs font-bold text-gray-500">Chọn chatbot</div>{isLoading ? <p className="px-2 py-3 text-xs text-gray-400">Đang tải chatbot...</p> : assistants.length === 0 ? <p className="px-2 py-3 text-xs text-gray-400">Chưa có chatbot</p> : <div className="grid gap-1">{assistants.map((assistant) => <div className={`group flex items-center gap-2 rounded-lg px-2 py-2 ${selected?.id === assistant.id ? "bg-sky-50 text-sky-700" : "text-gray-600 hover:bg-gray-50"}`} key={assistant.id} role="none"><button className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm" type="button" role="menuitem" onClick={() => selectAssistant(assistant)}><InboxIcon name="robot" size={15} /><span className="min-w-0 flex-1 truncate">{assistant.name}</span></button><button className="grid size-7 shrink-0 place-items-center rounded text-rose-500 opacity-0 transition hover:bg-rose-50 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-rose-500 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40" type="button" role="menuitem" aria-label={`Xóa chatbot ${assistant.name}`} disabled={deletingAssistantId === assistant.id} onClick={(event) => { event.stopPropagation(); void deleteAssistant(assistant); }}><InboxIcon name="trash" size={14} /></button></div>)}</div>}<button className="mt-2 flex w-full items-center gap-2 border-t border-gray-100 px-2 py-2.5 text-left text-sm font-semibold text-sky-600 hover:bg-sky-50" type="button" role="menuitem" onClick={() => { setIsAssistantMenuOpen(false); setNewAssistantName(""); setIsCreateOpen(true); }}><InboxIcon name="plus" size={15} /> Tạo chatbot mới</button></div>}</div><div className="flex items-center gap-2"> <button className="rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50" type="button" aria-label="Xóa nội dung chat thử nghiệm" onClick={() => { setMessages([]); setError(null); }}>Chat mới</button>{selected && <span className={selected.enabled ? "rounded-full bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700" : "rounded-full bg-gray-100 px-3 py-2 text-xs font-bold text-gray-500"} role="status">{publicationButtonLabel(selected.enabled).status}</span>}<button className={selected?.enabled ? "rounded-full border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 shadow-sm hover:bg-rose-50 disabled:opacity-60" : "rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-60"} type="button" aria-label={selected?.enabled ? "Gỡ xuất bản chatbot" : "Xuất bản chatbot"} disabled={!selected || isPublishing} onClick={() => void togglePublication()}>{isPublishing ? "Đang lưu..." : publicationButtonLabel(selected?.enabled ?? false).button}</button></div></header>
+    <div className="grid min-h-[520px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm lg:grid-cols-[minmax(300px,1fr)_minmax(250px,0.9fr)_minmax(300px,1fr)] max-[1024px]:grid-cols-1">
+      <section className="flex min-h-[420px] flex-col border-r border-gray-200 p-4 max-[1024px]:border-r-0 max-[1024px]:border-b" aria-label="Hướng dẫn"><h3 className="border-b border-gray-100 pb-3 text-sm font-bold text-gray-900">Hướng dẫn</h3><textarea className="min-h-56 flex-1 resize-y border-0 px-1 py-3 text-sm leading-6 text-gray-700 outline-none" aria-label="Nội dung hướng dẫn" value={instructions} onChange={(event) => setInstructions(event.target.value)} /></section>
+      <section className="min-h-[420px] border-r border-gray-200 p-4 max-[1024px]:border-r-0 max-[1024px]:border-b" aria-label="Cấu hình chatbot"><div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3"><h3 className="pt-2 text-sm font-bold text-gray-800">Model</h3><div className="flex min-w-0 flex-col items-end gap-1"><select className="max-w-full rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-sm font-semibold text-gray-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:opacity-60" aria-label="Model chatbot" value={modelTier} onChange={(event) => void saveModelTier(event.target.value as AiModelTier)} disabled={!selected || isSavingModel}><option value="smart">Thông minh nhất</option><option value="balanced">Cân bằng</option><option value="economy">Tiết kiệm</option></select><small className="max-w-full truncate text-[11px] text-gray-400" title={modelNameByTier[modelTier]}>Model đang sử dụng: {modelNameByTier[modelTier]}</small></div></div><div className="mt-5 flex items-center justify-between border-b border-gray-100 pb-3"><h3 className="text-sm font-bold text-gray-800">Kiến thức</h3><button className="rounded-md px-2 py-1 text-xs font-semibold text-sky-600 hover:bg-sky-50" type="button" onClick={() => setIsKnowledgeModalOpen(true)}>Quản lý tài liệu</button></div><p className="mt-3 text-xs text-gray-400">Thêm menu, giá, topping và chính sách để AI tư vấn chính xác.</p><div className="mt-5 flex items-center justify-between border-b border-gray-100 pb-3"><h3 className="text-sm font-bold text-gray-800">Mẫu chào</h3><button className="rounded-md px-2 py-1 text-xs font-semibold text-sky-600 hover:bg-sky-50" type="button" onClick={openCreateTemplate} disabled={!selected}>+ Thêm mẫu chào</button></div>{isTemplatesLoading ? <p className="mt-3 text-xs text-gray-400">Đang tải mẫu chào...</p> : <div className="mt-3 grid gap-2">{templates.map((template) => <div className="rounded-lg bg-gray-50 px-2.5 py-2" key={template.id}><div className="flex items-start justify-between gap-2"><div className="min-w-0"><strong className="block truncate text-xs text-gray-700">{template.name}</strong><small className="block truncate text-[11px] text-gray-400">{template.keywords.join(", ")}</small></div><div className="flex shrink-0 gap-1"><button type="button" aria-label={`Sửa mẫu chào ${template.name}`} onClick={() => openEditTemplate(template)}><InboxIcon name="edit" size={13} /></button><button type="button" aria-label={`Xóa mẫu chào ${template.name}`} onClick={() => void deleteTemplate(template)}><InboxIcon name="trash" size={13} /></button></div></div></div>)}{templates.length === 0 && <p className="text-xs text-gray-400">Chưa có mẫu chào</p>}</div>}<p className="mt-5 text-xs text-gray-400">Kiến thức được quản lý trong mục Kiến thức.</p></section>
+      <section className="flex min-h-[420px] flex-col overflow-hidden bg-gray-50/40" aria-label="Khung Chat"><header className="border-b border-gray-100 px-4 py-3 text-center"><span className="text-sm font-bold text-gray-900" aria-label="Tên trợ lý hiện tại">{selected?.name ?? "Chưa có trợ lý"}</span></header><div className="flex-1 overflow-y-auto p-6">{isLoading ? <p className="text-center text-sm text-gray-500">Đang tải trợ lý...</p> : !selected ? <div className="grid h-full place-items-center text-center"><p className="text-sm text-gray-500">Chưa có trợ lý. Hãy bấm “Chat mới” để tạo.</p></div> : messages.length === 0 ? <div className="grid h-full place-items-center text-center"><div><span className="mx-auto grid size-16 place-items-center rounded-full bg-sky-500 text-white shadow-sm"><InboxIcon name="robot" size={30} /></span><h3 className="mt-4 font-bold text-gray-900">{selected.name}</h3><p className="mt-1 text-sm text-gray-500">Tư vấn khách hàng</p></div></div> : <div className="grid gap-3">{messages.map((message, index) => <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-6 ${message.role === "customer" ? "ml-auto bg-blue-600 text-white" : "bg-white text-gray-700 shadow-sm"}`} key={`${message.role}-${index}`}>{message.content}</div>)}{isSending && <p className="text-xs text-gray-400">Đang trả lời...</p>}</div>}</div><form className="flex items-center gap-2 border-t border-gray-100 bg-white p-3" onSubmit={(event) => void sendPreview(event)}><input className="min-w-0 flex-1 rounded-full border border-gray-200 px-4 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" placeholder="Gửi tin nhắn" value={draft} onChange={(event) => setDraft(event.target.value)} disabled={!selected || isSending} /><button className="grid size-9 shrink-0 place-items-center rounded-lg text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50" type="submit" aria-label="Gửi tin nhắn" disabled={!draft.trim() || !selected || isSending}><InboxIcon name="send" size={19} /></button></form></section>
+    </div>
+    {isCreateOpen && <AssistantNameModal name={newAssistantName} onNameChange={setNewAssistantName} onClose={() => setIsCreateOpen(false)} onSubmit={() => void createAssistant()} />}
+    {isTemplateModalOpen && <GreetingTemplateModal template={editingTemplate} isSaving={isSavingTemplate} onClose={() => { setIsTemplateModalOpen(false); setEditingTemplate(null); }} onSave={saveTemplate} />}
+    {isKnowledgeModalOpen && <KnowledgeDocumentModal token={token} refresh={refresh} onClose={() => setIsKnowledgeModalOpen(false)} />}
+  </div>;
 }
 
 function AiAssistantSettings({ token, refresh }: { token: string; refresh?: () => Promise<string | null> }) {
@@ -104,7 +542,7 @@ function AiAssistantSettings({ token, refresh }: { token: string; refresh?: () =
     }
   }
 
-  return <div className="rounded-2xl bg-white p-5 shadow-sm sm:p-7"><div className="flex flex-wrap items-center justify-between gap-4"><h2 className="text-2xl font-bold text-gray-900">Trợ lý AI</h2><span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700">Beta</span></div><div className="mt-6 flex gap-2 border-b border-gray-100 pb-3"><button className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${activeAiTab === "Gợi ý trả lời" ? "bg-sky-500 text-white" : "text-gray-500 hover:bg-gray-50"}`} type="button" onClick={() => setActiveAiTab("Gợi ý trả lời")}>Gợi ý trả lời</button><button className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${activeAiTab === "Chatbot tự động" ? "bg-sky-500 text-white" : "text-gray-500 hover:bg-gray-50"}`} type="button" onClick={() => setActiveAiTab("Chatbot tự động")}>Chatbot tự động</button></div>{activeAiTab === "Gợi ý trả lời" ? <div><AiSettingItem icon="sparkles" iconClassName="bg-purple-50 text-purple-600" title="Mô hình AI" description="NHuuChat cung cấp 3 tuỳ chọn AI khác nhau. Model thông minh nhất, chi phí sẽ cao hơn nhưng chất lượng sẽ tốt nhất."><AiSelect label="Mô hình AI" value={model} options={["Thông minh nhất", "Cân bằng", "Tiết kiệm"]} onChange={(value) => { setModel(value); void onSettingsChange({ modelTier: modelTierByLabel[value] }); }} /><AiToggle checked={modelEnabled} label="Bật mô hình AI" onChange={(value) => { setModelEnabled(value); void onSettingsChange({ enabled: value }); }} /></AiSettingItem><AiSettingItem icon="cloud" iconClassName="bg-sky-50 text-sky-500" title="Thanh toán" description={<>Phí sử dụng tính năng AI sẽ được trừ trực tiếp từ ví Pancake bạn chọn. Hãy nạp tiền vào ví để đảm bảo dịch vụ không bị gián đoạn. <button className="ml-1 font-semibold text-sky-600 hover:underline" type="button">Nạp tiền</button></>}><AiSelect label="Ví thanh toán" value={wallet} options={["Test WA $62.18"]} onChange={setWallet} /></AiSettingItem><AiSettingItem icon="chat" iconClassName="bg-amber-50 text-amber-500" title="Gợi ý trả lời tin nhắn từ AI" description={<>Tự động hiển thị <strong>3 câu gợi ý</strong> trả lời tin nhắn dựa trên nội dung cuộc trò chuyện gần nhất giúp bạn phản hồi nhanh hơn.</>} footer={<button className="text-sm font-semibold text-sky-600 hover:underline" type="button">Tuỳ chỉnh</button>}><AiSelect label="Thời điểm gợi ý" value={suggestionTiming} options={["Khi mở hội thoại", "Khi khách nhắn tin", "Luôn gợi ý", "Thủ công"]} onChange={(value) => { setSuggestionTiming(value); void onSettingsChange({ suggestionMode: suggestionModeByLabel[value] }); }} /><AiToggle checked={suggestionsEnabled} label="Bật gợi ý trả lời" onChange={(value) => { setSuggestionsEnabled(value); void onSettingsChange({ suggestionsEnabled: value }); }} /></AiSettingItem><AiSettingItem icon="smile" iconClassName="bg-emerald-50 text-emerald-600" title="Phát hiện cảm xúc của khách hàng" description="Tự động phân tích và hiển thị sắc thái cảm xúc khách hàng trong cuộc trò chuyện. Tăng độ chính xác bằng cách cho AI truy cập nhiều tin nhắn cũ hơn." footer={<div className="grid gap-1 text-sm text-gray-500"><span>Khi khách hàng <strong>Không hài lòng</strong> hoặc <strong>giận dữ</strong>, <strong>tiêu cực</strong>:</span><span>Khi phát hiện, tự động</span><span className="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700">AI Sentiment <button type="button" aria-label="Xóa AI Sentiment"><InboxIcon name="close" size={13} /></button></span></div>}><AiSelect label="Số tin nhắn cảm xúc" value={sentimentMessages} options={["3 tin gần nhất", "6 tin gần nhất", "10 tin gần nhất"]} onChange={(value) => { setSentimentMessages(value); void onSettingsChange({ sentimentWindow: sentimentWindowByLabel[value] }); }} /><AiToggle checked={sentimentEnabled} label="Bật phát hiện cảm xúc" onChange={(value) => { setSentimentEnabled(value); void onSettingsChange({ sentimentEnabled: value }); }} /></AiSettingItem></div> : <div className="grid min-h-56 place-items-center py-12 text-center text-sm text-gray-500">Chatbot tự động đang được phát triển.</div>}</div>;
+  return <div className="rounded-2xl bg-white p-5 shadow-sm sm:p-7"><div className="flex flex-wrap items-center justify-between gap-4"><h2 className="text-2xl font-bold text-gray-900">Trợ lý AI</h2><span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700">Beta</span></div><div className="mt-6 flex gap-2 overflow-x-auto border-b border-gray-100 pb-3"><button className={`shrink-0 rounded-lg px-4 py-2 text-sm font-semibold transition ${activeAiTab === "Gợi ý trả lời" ? "bg-sky-500 text-white" : "text-gray-500 hover:bg-gray-50"}`} type="button" onClick={() => setActiveAiTab("Gợi ý trả lời")}>Gợi ý trả lời</button><button className={`shrink-0 rounded-lg px-4 py-2 text-sm font-semibold transition ${activeAiTab === "Chatbot tự động" ? "bg-sky-500 text-white" : "text-gray-500 hover:bg-gray-50"}`} type="button" onClick={() => setActiveAiTab("Chatbot tự động")}>Chatbot tự động</button></div>{activeAiTab === "Gợi ý trả lời" ? <div><AiSettingItem icon="sparkles" iconClassName="bg-purple-50 text-purple-600" title="Mô hình AI" description="NHuuChat cung cấp 3 tuỳ chọn AI khác nhau. Model thông minh nhất, chi phí sẽ cao hơn nhưng chất lượng sẽ tốt nhất."><AiSelect label="Mô hình AI" value={model} options={["Thông minh nhất", "Cân bằng", "Tiết kiệm"]} onChange={(value) => { setModel(value); void onSettingsChange({ modelTier: modelTierByLabel[value] }); }} /><AiToggle checked={modelEnabled} label="Bật mô hình AI" onChange={(value) => { setModelEnabled(value); void onSettingsChange({ enabled: value }); }} /></AiSettingItem><AiSettingItem icon="cloud" iconClassName="bg-sky-50 text-sky-500" title="Thanh toán" description={<>Phí sử dụng tính năng AI sẽ được trừ trực tiếp từ ví Pancake bạn chọn. Hãy nạp tiền vào ví để đảm bảo dịch vụ không bị gián đoạn. <button className="ml-1 font-semibold text-sky-600 hover:underline" type="button">Nạp tiền</button></>}><AiSelect label="Ví thanh toán" value={wallet} options={["Test WA $62.18"]} onChange={setWallet} /></AiSettingItem><AiSettingItem icon="chat" iconClassName="bg-amber-50 text-amber-500" title="Gợi ý trả lời tin nhắn từ AI" description={<>Tự động hiển thị <strong>3 câu gợi ý</strong> trả lời tin nhắn dựa trên nội dung cuộc trò chuyện gần nhất giúp bạn phản hồi nhanh hơn.</>} footer={<button className="text-sm font-semibold text-sky-600 hover:underline" type="button">Tuỳ chỉnh</button>}><AiSelect label="Thời điểm gợi ý" value={suggestionTiming} options={["Khi mở hội thoại", "Khi khách nhắn tin", "Luôn gợi ý", "Thủ công"]} onChange={(value) => { setSuggestionTiming(value); void onSettingsChange({ suggestionMode: suggestionModeByLabel[value] }); }} /><AiToggle checked={suggestionsEnabled} label="Bật gợi ý trả lời" onChange={(value) => { setSuggestionsEnabled(value); void onSettingsChange({ suggestionsEnabled: value }); }} /></AiSettingItem><AiSettingItem icon="smile" iconClassName="bg-emerald-50 text-emerald-600" title="Phát hiện cảm xúc của khách hàng" description="Tự động phân tích và hiển thị sắc thái cảm xúc khách hàng trong cuộc trò chuyện. Tăng độ chính xác bằng cách cho AI truy cập nhiều tin nhắn cũ hơn." footer={<div className="grid gap-1 text-sm text-gray-500"><span>Khi khách hàng <strong>Không hài lòng</strong> hoặc <strong>giận dữ</strong>, <strong>tiêu cực</strong>:</span><span>Khi phát hiện, tự động</span><span className="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700">AI Sentiment <button type="button" aria-label="Xóa AI Sentiment"><InboxIcon name="close" size={13} /></button></span></div>}><AiSelect label="Số tin nhắn cảm xúc" value={sentimentMessages} options={["3 tin gần nhất", "6 tin gần nhất", "10 tin gần nhất"]} onChange={(value) => { setSentimentMessages(value); void onSettingsChange({ sentimentWindow: sentimentWindowByLabel[value] }); }} /><AiToggle checked={sentimentEnabled} label="Bật phát hiện cảm xúc" onChange={(value) => { setSentimentEnabled(value); void onSettingsChange({ sentimentEnabled: value }); }} /></AiSettingItem></div> : <ChatbotAutomationSettings token={token} refresh={refresh} />}</div>;
 }
 
 type QuickReplyDraft = Pick<QuickReplyContract, "shortcut" | "message"> & { attachment?: File };
@@ -285,8 +723,12 @@ interface SettingsPageProps {
   onProfile?: () => void;
 }
 
+function SettingsLayout({ activeTab, onTabChange, children, onLogoClick, onNavigate, user, onLogout, onProfile }: SettingsPageProps & { activeTab: SettingsItem; onTabChange: (item: SettingsItem) => void; children: React.ReactNode }) {
+  return <main className="min-h-screen bg-gray-50 text-gray-800"><SettingsDashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} /><div className="mx-6 flex w-auto gap-6 pt-6 pb-8 max-[1024px]:mx-4 max-[1024px]:flex-col max-[1024px]:pt-4"><aside className="h-fit w-[300px] shrink-0 rounded-xl bg-white p-3 shadow-sm max-[1024px]:w-full"><h1 className="px-3 pb-3 text-lg font-bold">Cài đặt</h1><nav className="grid gap-1" aria-label="Menu cài đặt">{settingsItems.map((item) => <button className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${activeTab === item ? "bg-sky-50 font-semibold text-sky-700" : "text-gray-600 hover:bg-gray-50"}`} key={item} type="button" onClick={() => onTabChange(item)}><InboxIcon name={settingsIconByItem[item]} size={17} /> <span>{item}</span>{item === "Trợ lý AI" && <small className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Beta</small>}</button>)}</nav></aside><section className="min-w-0 flex-1 rounded-xl bg-white shadow-sm">{children}</section></div></main>;
+}
+
 export function SettingsPage({ token, refresh, onLogoClick, onNavigate, user, onLogout, onProfile }: SettingsPageProps) {
-  const [activeTab, setActiveTab] = useState("Cài đặt chung");
+  const [activeTab, setActiveTabState] = useState<SettingsItem>(() => settingsItemFromPath(window.location.pathname));
   const [isAddTagModalOpen, setIsAddTagModalOpen] = useState(false);
   const [editingTag, setEditingTag] = useState<ConversationTagContract | null>(null);
   const [tagName, setTagName] = useState("");
@@ -296,6 +738,21 @@ export function SettingsPage({ token, refresh, onLogoClick, onNavigate, user, on
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  function setActiveTab(item: SettingsItem) {
+    setActiveTabState(item);
+    const nextPath = settingsPathForItem(item);
+    if (window.location.pathname !== nextPath) window.history.pushState({}, "", nextPath);
+  }
+
+  useEffect(() => {
+    const initialItem = settingsItemFromPath(window.location.pathname);
+    const initialPath = settingsPathForItem(initialItem);
+    if (window.location.pathname !== initialPath) window.history.replaceState({}, "", initialPath);
+    const handlePopState = () => setActiveTabState(settingsItemFromPath(window.location.pathname));
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -362,7 +819,7 @@ export function SettingsPage({ token, refresh, onLogoClick, onNavigate, user, on
     }
   }
 
-  if (activeTab === "Trợ lý AI") return <main className="min-h-screen bg-gray-50 text-gray-800"><SettingsDashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} /><div className="mx-auto flex w-full max-w-6xl gap-6 px-6 py-8 max-[800px]:flex-col max-[800px]:px-4"><aside className="h-fit w-64 shrink-0 rounded-2xl bg-white p-3 shadow-sm max-[800px]:w-full"><h1 className="px-3 pb-3 text-lg font-bold">Cài đặt</h1><nav className="grid gap-1" aria-label="Menu cài đặt">{settingsItems.map((item) => <button className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${activeTab === item ? "bg-sky-50 font-semibold text-sky-700" : "text-gray-600 hover:bg-gray-50"}`} key={item} type="button" onClick={() => setActiveTab(item)}><InboxIcon name={settingsIconByItem[item]} size={17} /> <span>{item}</span>{item === "Trợ lý AI" && <small className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Beta</small>}</button>)}</nav></aside><section className="min-w-0 flex-1"><AiAssistantSettings token={token} refresh={refresh} /></section></div></main>;
-  if (activeTab === "Hỗ trợ trả lời") return <main className="min-h-screen bg-gray-50 text-gray-800"><SettingsDashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} /><div className="mx-auto flex w-full max-w-6xl gap-6 px-6 py-8 max-[800px]:flex-col max-[800px]:px-4"><aside className="h-fit w-64 shrink-0 rounded-2xl bg-white p-3 shadow-sm max-[800px]:w-full"><h1 className="px-3 pb-3 text-lg font-bold">Cài đặt</h1><nav className="grid gap-1" aria-label="Menu cài đặt">{settingsItems.map((item) => <button className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${activeTab === item ? "bg-sky-50 font-semibold text-sky-700" : "text-gray-600 hover:bg-gray-50"}`} key={item} type="button" onClick={() => setActiveTab(item)}><InboxIcon name={settingsIconByItem[item]} size={17} /> <span>{item}</span>{item === "Trợ lý AI" && <small className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Beta</small>}</button>)}</nav></aside><section className="min-w-0 flex-1"><h2 className="mb-5 text-2xl font-bold text-gray-900">Hỗ trợ trả lời</h2><QuickReplySettings token={token} refresh={refresh} /></section></div></main>;
-  return <main className="min-h-screen bg-gray-50 text-gray-800"><SettingsDashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} /><div className="mx-auto flex w-full max-w-6xl gap-6 px-6 py-8 max-[800px]:flex-col max-[800px]:px-4"><aside className="h-fit w-64 shrink-0 rounded-2xl bg-white p-3 shadow-sm max-[800px]:w-full"><h1 className="px-3 pb-3 text-lg font-bold">Cài đặt</h1><nav className="grid gap-1" aria-label="Menu cài đặt">{settingsItems.map((item) => <button className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${activeTab === item ? "bg-sky-50 font-semibold text-sky-700" : "text-gray-600 hover:bg-gray-50"}`} key={item} type="button" onClick={() => setActiveTab(item)}><InboxIcon name={settingsIconByItem[item]} size={17} /> <span>{item}</span>{item === "Trợ lý AI" && <small className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Beta</small>}</button>)}</nav></aside><section className="min-w-0 flex-1"><h2 className="mb-5 text-2xl font-bold text-gray-900">{activeTab}</h2><div className="rounded-2xl bg-white p-6 shadow-sm"><div className="flex items-start justify-between gap-4"><p className="max-w-2xl text-sm leading-6 text-gray-500">Thẻ dùng để đánh dấu trạng thái hội thoại trong Livechat (vd "Mua hàng", "Đã gửi") — 1 hội thoại có thể gắn nhiều thẻ cùng lúc.</p><button className="shrink-0 rounded-lg bg-sky-600 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500" type="button" onClick={openAddTagModal}><span className="mr-1">+</span> Thêm thẻ</button></div>{error && <p className="mt-4 text-sm text-rose-600" role="alert">{error}</p>}{isLoading ? <p className="mt-7 text-sm text-gray-500">Đang tải thẻ...</p> : <div className="mt-7 flex flex-wrap gap-3">{tags.map((tag) => <span className="group inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:scale-[1.02]" style={{ backgroundColor: tag.color }} key={tag.id}>{tag.name}<span className="flex gap-1 opacity-60 transition group-hover:opacity-100"><button type="button" aria-label={`Sửa ${tag.name}`} onClick={() => openEditTagModal(tag)}><InboxIcon name="edit" size={14} /></button><button type="button" aria-label={`Xóa ${tag.name}`} disabled={deletingId === tag.id} onClick={() => void removeTag(tag)}><InboxIcon name="trash" size={14} /></button></span></span>)}</div>}</div></section></div>{isAddTagModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4" role="presentation" onMouseDown={closeTagModal}><section className="w-full max-w-md animate-[composer-dialog-in_180ms_ease-out] rounded-2xl bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="add-tag-title" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-center justify-between"><h3 className="text-lg font-bold" id="add-tag-title">{editingTag ? "Sửa thẻ hội thoại" : "Thêm thẻ hội thoại"}</h3><button className="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-100" type="button" onClick={closeTagModal} aria-label="Đóng"><InboxIcon name="close" /></button></div><form className="mt-5 grid gap-4" onSubmit={saveTag}><label className="grid gap-1.5 text-sm font-semibold">Tên thẻ<input className="rounded-lg border border-gray-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" placeholder="Vd: Mua hàng" value={tagName} onChange={(event) => setTagName(event.target.value)} /></label><fieldset><legend className="mb-2 text-sm font-semibold">Màu thẻ</legend><div className="flex flex-wrap gap-2">{pickerColors.map((color) => <button className={`size-7 rounded-full ${selectedColor === color ? "ring-2 ring-black ring-offset-2" : ""}`} style={{ backgroundColor: color }} type="button" aria-label={`Chọn màu ${color}`} key={color} onClick={() => setSelectedColor(color)} />)}</div><label className="flex w-fit cursor-pointer items-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm font-semibold text-gray-600 hover:border-sky-400 hover:text-sky-700"><input className="size-7 cursor-pointer rounded border-0 p-0" type="color" value={selectedColor} onChange={(event) => setSelectedColor(event.target.value)} aria-label="Tùy chỉnh màu" /><span>Tùy chỉnh màu</span></label></fieldset><button className="w-fit rounded-lg bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700" type="button">Xem trước</button><div className="mt-2 flex justify-end gap-2"><button className="rounded-lg px-4 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-50" type="button" onClick={closeTagModal}>Huỷ</button><button className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60" type="submit" disabled={isSaving}>{isSaving ? "Đang lưu..." : "Lưu"}</button></div></form></section></div>}</main>;
+  if (activeTab === "Trợ lý AI") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><AiAssistantSettings token={token} refresh={refresh} /></SettingsLayout>;
+  if (activeTab === "Hỗ trợ trả lời") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><div className="p-6"><h2 className="mb-5 text-2xl font-bold text-gray-900">Hỗ trợ trả lời</h2><QuickReplySettings token={token} refresh={refresh} /></div></SettingsLayout>;
+  return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><div className="p-6"><h2 className="mb-5 text-2xl font-bold text-gray-900">{activeTab}</h2><div className="rounded-2xl bg-white p-6 shadow-sm"><div className="flex items-start justify-between gap-4"><p className="max-w-2xl text-sm leading-6 text-gray-500">Thẻ dùng để đánh dấu trạng thái hội thoại trong Livechat (vd "Mua hàng", "Đã gửi") — 1 hội thoại có thể gắn nhiều thẻ cùng lúc.</p><button className="shrink-0 rounded-lg bg-sky-600 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500" type="button" onClick={openAddTagModal}><span className="mr-1">+</span> Thêm thẻ</button></div>{error && <p className="mt-4 text-sm text-rose-600" role="alert">{error}</p>}{isLoading ? <p className="mt-7 text-sm text-gray-500">Đang tải thẻ...</p> : <div className="mt-7 flex flex-wrap gap-3">{tags.map((tag) => <span className="group inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:scale-[1.02]" style={{ backgroundColor: tag.color }} key={tag.id}>{tag.name}<span className="flex gap-1 opacity-60 transition group-hover:opacity-100"><button type="button" aria-label={`Sửa ${tag.name}`} onClick={() => openEditTagModal(tag)}><InboxIcon name="edit" size={14} /></button><button type="button" aria-label={`Xóa ${tag.name}`} disabled={deletingId === tag.id} onClick={() => void removeTag(tag)}><InboxIcon name="trash" size={14} /></button></span></span>)}</div>}</div>{isAddTagModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4" role="presentation" onMouseDown={closeTagModal}><section className="w-full max-w-md animate-[composer-dialog-in_180ms_ease-out] rounded-2xl bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="add-tag-title" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-center justify-between"><h3 className="text-lg font-bold" id="add-tag-title">{editingTag ? "Sửa thẻ hội thoại" : "Thêm thẻ hội thoại"}</h3><button className="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-100" type="button" onClick={closeTagModal} aria-label="Đóng"><InboxIcon name="close" /></button></div><form className="mt-5 grid gap-4" onSubmit={saveTag}><label className="grid gap-1.5 text-sm font-semibold">Tên thẻ<input className="rounded-lg border border-gray-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" placeholder="Vd: Mua hàng" value={tagName} onChange={(event) => setTagName(event.target.value)} /></label><fieldset><legend className="mb-2 text-sm font-semibold">Màu thẻ</legend><div className="flex flex-wrap gap-2">{pickerColors.map((color) => <button className={`size-7 rounded-full ${selectedColor === color ? "ring-2 ring-black ring-offset-2" : ""}`} style={{ backgroundColor: color }} type="button" aria-label={`Chọn màu ${color}`} key={color} onClick={() => setSelectedColor(color)} />)}</div><label className="flex w-fit cursor-pointer items-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm font-semibold text-gray-600 hover:border-sky-400 hover:text-sky-700"><input className="size-7 cursor-pointer rounded border-0 p-0" type="color" value={selectedColor} onChange={(event) => setSelectedColor(event.target.value)} aria-label="Tùy chỉnh màu" /><span>Tùy chỉnh màu</span></label></fieldset><button className="w-fit rounded-lg bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700" type="button">Xem trước</button><div className="mt-2 flex justify-end gap-2"><button className="rounded-lg px-4 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-50" type="button" onClick={closeTagModal}>Huỷ</button><button className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60" type="submit" disabled={isSaving}>{isSaving ? "Đang lưu..." : "Lưu"}</button></div></form></section></div>}</div></SettingsLayout>;
 }

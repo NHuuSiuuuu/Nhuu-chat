@@ -1,7 +1,18 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import * as settingsModule from "./SettingsPage";
 
 describe("Settings page", () => {
+  it("exposes publish and unpublish states for automatic chatbot replies", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("publicationButtonLabel");
+    expect(source).toContain("Đang hoạt động");
+    expect(source).toContain("Chưa hoạt động");
+    expect(source).toContain("Gỡ xuất bản");
+    expect(source).toContain('body: JSON.stringify({ enabled: !selected.enabled })');
+  });
+
   it("follows the Vietnamese conversation-tags design", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
@@ -30,7 +41,21 @@ describe("Settings page", () => {
   it("opens on the first settings item by default", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain('useState("Cài đặt chung")');
+    expect(source).toContain('settingsItemFromPath(window.location.pathname)');
+    expect(source).toContain('settingsItems[0]');
+  });
+
+  it("maps settings tabs to stable URL paths and restores the tab from the path", () => {
+    expect(typeof settingsModule.settingsPathForItem).toBe("function");
+    expect(typeof settingsModule.settingsItemFromPath).toBe("function");
+
+    if (typeof settingsModule.settingsPathForItem === "function" && typeof settingsModule.settingsItemFromPath === "function") {
+      expect(settingsModule.settingsPathForItem("Cài đặt chung")).toBe("/settings/general");
+      expect(settingsModule.settingsPathForItem("Thẻ hội thoại")).toBe("/settings/conversation-tags");
+      expect(settingsModule.settingsPathForItem("Hỗ trợ trả lời")).toBe("/settings/quick-replies");
+      expect(settingsModule.settingsItemFromPath("/settings/ai-assistant")).toBe("Trợ lý AI");
+      expect(settingsModule.settingsItemFromPath("/settings/unknown")).toBe("Cài đặt chung");
+    }
   });
 
   it("maps each settings option to its corresponding icon", () => {
@@ -76,6 +101,164 @@ describe("Settings page", () => {
     expect(source).toContain("Khi mở hội thoại");
     expect(source).toContain("AI Sentiment");
     expect(source).toContain("setSuggestionsEnabled");
+  });
+
+  it("renders the chatbot automation workspace instead of a placeholder", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("selectedAssistant");
+    expect(source).toContain("isKnowledgeModalOpen");
+    expect(source).toContain("Chọn tài liệu kiến thức");
+    expect(source).toContain("Tạo chatbot mới");
+    expect(source).toContain("Gemini 2.5 Flash");
+    expect(source).toContain("Gửi tin nhắn");
+    expect(source).not.toContain("Chatbot tự động đang được phát triển.");
+  });
+
+  it("connects the knowledge modal to real text and markdown document ingestion", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('"/api/v1/knowledge"');
+    expect(source).toContain('accept=".txt,.md,text/plain,text/markdown"');
+    expect(source).toContain("FileReader");
+    expect(source).toContain("loadKnowledgeDocuments");
+    expect(source).toContain("deleteKnowledgeDocument");
+    expect(source).toContain("Thêm tài liệu");
+  });
+
+  it("connects the chatbot preview to the assistant API instead of clearing the draft only", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('"/api/v1/assistants"');
+    expect(source).toContain("BotPreviewResponse");
+    expect(source).toContain("/preview");
+    expect(source).toContain('method: "POST"');
+    expect(source).toContain('method: "PATCH"');
+    expect(source).toContain("saveAssistant");
+    expect(source).toContain("Không thể lưu hướng dẫn trợ lý");
+    expect(source).toContain("Tư vấn khách hàng");
+    expect(source).toContain("Không thể gửi tin nhắn thử nghiệm");
+    expect(source).toContain('isDefault: true');
+    expect(source).toContain("sendPreview");
+  });
+
+  it("allows selecting and persisting the chatbot model tier", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("modelTierByLabel");
+    expect(source).toContain("modelLabelByTier");
+    expect(source).toContain("setModelTier");
+    expect(source).toContain('aria-label="Model chatbot"');
+    expect(source).toContain("Thông minh nhất");
+    expect(source).toContain("Cân bằng");
+    expect(source).toContain("Tiết kiệm");
+    expect(source).toContain('body: JSON.stringify({ modelTier })');
+    expect(source).toContain("gemini-3.5-flash");
+    expect(source).toContain("gemini-3.6-flash");
+    expect(source).toContain("gemini-3.5-flash-lite");
+    expect(source).toContain("Model đang sử dụng");
+  });
+
+  it("provides CRUD controls for assistant greeting templates", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("/templates");
+    expect(source).toContain("loadTemplates");
+    expect(source).toContain("saveTemplate");
+    expect(source).toContain("deleteTemplate");
+    expect(source).toContain("Mẫu chào");
+    expect(source).toContain("Thêm mẫu chào");
+    expect(source).toContain("Sửa mẫu chào");
+    expect(source).toContain("Xóa mẫu chào");
+    expect(source).toContain("Cho phép Gemini viết lại");
+    expect(source).toContain("allowAiRewrite");
+  });
+
+  it("uses the wide AI assistant content layout from the UI prompt", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const layout = source.split("function SettingsLayout")[1]?.split("export function SettingsPage")[0] ?? "";
+
+    expect(layout).toContain("mx-6");
+    expect(layout).toContain("pt-6");
+    expect(layout).toContain("w-[300px]");
+    expect(layout).toContain("max-[1024px]:flex-col");
+    expect(layout).toContain("rounded-xl bg-white shadow-sm");
+    expect(layout).not.toContain("max-w-6xl gap-6 px-6 py-8 max-[800px]:flex-col");
+  });
+
+  it("uses one shared responsive layout for every settings tab", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("function SettingsLayout");
+    expect(source.match(/<SettingsLayout/g)?.length).toBe(3);
+    expect(source).not.toContain('if (activeTab === "Trợ lý AI") return <main');
+    expect(source).not.toContain('if (activeTab === "Hỗ trợ trả lời") return <main');
+  });
+
+  it("renders a delete action for assistants in the left list", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source.match(/aria-label=\{`Xóa \$\{assistant\.name\}`\}/g)?.length).toBe(1);
+    expect(source).toContain("group-hover:visible");
+  });
+
+  it("keeps the selected assistant name on the chat header as display-only text", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).not.toContain("isAssistantDropdownOpen");
+    expect(source).not.toContain("assistantMenuRef");
+    expect(source).toContain('aria-label="Tên trợ lý hiện tại"');
+  });
+
+  it("asks for an assistant name before creating a new assistant", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("isCreateAssistantModalOpen");
+    expect(source).toContain("newAssistantName");
+    expect(source).toContain("Tên trợ lý");
+    expect(source).toContain("Tạo chatbot");
+    expect(source).not.toContain("Chatbot mới ${id - 2}");
+  });
+
+  it("shows the selected assistant context and puts instructions before model settings", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("Áp dụng cho Page:");
+    expect(source).toContain("Nguyễn Ngọc Hữu");
+    expect(source).toContain('aria-label="Hướng dẫn"');
+    expect(source).toContain("Xem mẫu");
+    expect(source).toContain("AI rules");
+    expect(source).toContain("Viết lại");
+    expect(source.indexOf('aria-label="Hướng dẫn"')).toBeLessThan(source.indexOf('aria-label="Model chatbot"'));
+  });
+
+  it("arranges the chatbot workspace as instructions, configuration, and chat columns", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("Chat mới");
+    expect(source).toContain("Xuất bản");
+    expect(source).toContain("lg:grid-cols-[minmax(300px,1fr)_minmax(250px,0.9fr)_minmax(300px,1fr)]");
+    expect(source.indexOf('aria-label="Hướng dẫn"')).toBeLessThan(source.indexOf('aria-label="Cấu hình chatbot"'));
+    expect(source).toContain("isAssistantMenuOpen");
+  });
+
+  it("opens the assistant selector from the default assistant header and exposes delete actions", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('aria-label="Mở danh sách chatbot"');
+    expect(source).toContain('aria-label={`Xóa chatbot ${assistant.name}`}');
+    expect(source).toContain('method: "DELETE"');
+    expect(source).toContain("Tạo chatbot mới");
+    expect(source).toContain("group-hover:visible");
+  });
+
+  it("uses Chat mới to clear the preview conversation instead of creating an assistant", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const chatbot = source.split("function ChatbotAutomationSettings({")[1]?.split("function AiAssistantSettings")[0] ?? "";
+
+    expect(chatbot).toContain('aria-label="Xóa nội dung chat thử nghiệm"');
+    expect(chatbot).toContain("setMessages([])");
+    expect(chatbot).not.toContain('onClick={() => { setNewAssistantName(""); setIsCreateOpen(true); }}');
   });
 
   it("keeps AI switches and setting controls inside their layout", () => {
