@@ -11,6 +11,7 @@ Chưa có thay đổi chưa phát hành.
 
 - Hoàn thiện gán chatbot cho kênh đã kết nối, giữ lựa chọn chatbot sau khi tải lại và bảo vệ phạm vi owner/kênh.
 - Thêm nút `Xuất bản`/`Gỡ xuất bản` để bật/tắt AI tự động trả lời theo từng chatbot.
+- Cập nhật `lastMessageAt` và `lastMessageSnippet` của conversation sau khi nhân viên gửi tin, để sidebar sắp xếp đúng cả trước và sau khi reload.
 - Sửa sidebar hội thoại: khôi phục khả năng cuộn, sắp xếp hội thoại mới nhất lên trước và xử lý khóa gửi tin cũ.
 - Bổ sung kế hoạch và tài liệu cho tính năng gán chatbot vào kênh.
 

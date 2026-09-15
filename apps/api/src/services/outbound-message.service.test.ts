@@ -141,6 +141,9 @@ describe("sendOutboundMessage", () => {
       senderType: "agent",
       type: "text"
     });
+    expect(dependencyMocks.pauseConversation).toHaveBeenCalledWith("conversation-1", {
+      $set: { lastMessageAt: now, lastMessageSnippet: "Hello from support" }
+    });
     expect(result).toEqual({
       message: {
         id: "message-1",

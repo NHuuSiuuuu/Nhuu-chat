@@ -86,12 +86,16 @@ export async function sendOutboundMessage(
     externalMessageId,
     deliveryStatus
   });
+  const lastMessageAt = new Date();
+  await ConversationModel.findByIdAndUpdate(conversationId, {
+    $set: { lastMessageAt, lastMessageSnippet: content }
+  });
 
   return {
     message: toMessage(message.toObject()),
     conversation: toConversation({
       ...conversation,
-      lastMessageAt: new Date(),
+      lastMessageAt,
       lastMessageSnippet: content
     }),
     recipients: [
