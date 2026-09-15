@@ -532,7 +532,8 @@ describe("Zalo personal QR session lifecycle", () => {
 
   it("holds one Redis lease across QR login and releases it after logout", async () => {
     const release = vi.fn(async () => undefined);
-    const acquire = vi.fn(async () => ({ release }));
+    const renew = vi.fn(async () => true);
+    const acquire = vi.fn(async () => ({ release, renew }));
     const { logoutZaloPersonal, setZaloPersonalRedisLock, startZaloPersonalQr } = await import("./zalo-personal.service.js");
     setZaloPersonalRedisLock({ acquire });
 
@@ -540,6 +541,9 @@ describe("Zalo personal QR session lifecycle", () => {
     await flushLifecycleQueue();
     expect(acquire).toHaveBeenCalledOnce();
     expect(release).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(15_000);
+    await flushLifecycleQueue();
+    expect(renew).toHaveBeenCalledOnce();
 
     await startZaloPersonalQr("owner-held-login-lease");
     expect(acquire).toHaveBeenCalledOnce();
@@ -551,7 +555,8 @@ describe("Zalo personal QR session lifecycle", () => {
 
   it("holds a restored Redis lease and releases it once after shutdown", async () => {
     const release = vi.fn(async () => undefined);
-    const acquire = vi.fn(async () => ({ release }));
+    const renew = vi.fn(async () => true);
+    const acquire = vi.fn(async () => ({ release, renew }));
     const restoredClient = createQrClient();
     dependencies.createClient.mockReturnValue(restoredClient);
     dependencies.findOne.mockReturnValue({

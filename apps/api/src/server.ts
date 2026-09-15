@@ -66,6 +66,13 @@ function createZaloPersonalRedisLock(client: RedisClientType): ZaloPersonalRedis
               "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end",
               { keys: [key], arguments: [token] }
             ).catch(() => undefined);
+          },
+          async renew() {
+            const renewed = await client.eval(
+              "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('PEXPIRE', KEYS[1], ARGV[2]) else return 0 end",
+              { keys: [key], arguments: [token, String(ttlMs)] }
+            );
+            return Number(renewed) === 1;
           }
         };
       } catch {

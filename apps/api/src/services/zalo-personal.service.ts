@@ -8,6 +8,7 @@ import { AppError } from "../common/errors.js";
 
 const QR_TTL_MS = 100_000;
 const LIFECYCLE_LOCK_TTL_MS = 30_000;
+const LIFECYCLE_RENEW_INTERVAL_MS = LIFECYCLE_LOCK_TTL_MS / 2;
 const RESTORE_ATTEMPTS = 2;
 
 type PublicStatus = ZaloPersonalStatus["status"];
@@ -16,6 +17,7 @@ export type ZaloPersonalQrStatus = ZaloPersonalStatus;
 
 export interface ZaloPersonalRedisLease {
   release(): Promise<void>;
+  renew?(): Promise<boolean>;
 }
 
 // Tách lease Redis khỏi service để hạ tầng phân tán có thể thay thế mà không kéo adapter vào service.
@@ -43,6 +45,7 @@ type PendingZaloPersonalSession = {
 const pendingSessionsByOwner = new Map<string, PendingZaloPersonalSession>();
 const activeClientsByOwner = new Map<string, ZaloPersonalApi>();
 const heldLeasesByOwner = new Map<string, ZaloPersonalRedisLease>();
+const leaseRenewalsByOwner = new Map<string, ReturnType<typeof setInterval>>();
 const runtimeErrorsByOwner = new Map<string, string>();
 const ownerLifecycleTails = new Map<string, Promise<void>>();
 let redisLock: ZaloPersonalRedisLock | undefined;
@@ -407,6 +410,7 @@ function runOwnerLifecycle<T>(userId: string, operation: () => Promise<T>): Prom
       } else if (operationSucceeded && retainsOwnership && lease) {
         // Chuyển lease sang map held sau khi operation đã publish connector ownership thành công.
         heldLeasesByOwner.set(userId, lease);
+        startHeldLeaseRenewal(userId, lease);
       } else {
         await lease?.release().catch(() => undefined);
       }
@@ -423,8 +427,23 @@ function runOwnerLifecycle<T>(userId: string, operation: () => Promise<T>): Prom
 // Xóa map trước khi await release để mọi đường dọn dẹp khác đều không release cùng token lần nữa.
 async function releaseHeldLease(userId: string, lease: ZaloPersonalRedisLease): Promise<void> {
   if (heldLeasesByOwner.get(userId) !== lease) return;
+  const renewal = leaseRenewalsByOwner.get(userId);
+  if (renewal) clearInterval(renewal);
+  leaseRenewalsByOwner.delete(userId);
   heldLeasesByOwner.delete(userId);
   await lease.release().catch(() => undefined);
+}
+
+// Gia hạn định kỳ để listener dài hơn TTL vẫn giữ ownership phân tán của owner.
+function startHeldLeaseRenewal(userId: string, lease: ZaloPersonalRedisLease): void {
+  const renew = lease.renew;
+  if (!renew || leaseRenewalsByOwner.has(userId)) return;
+  const renewal = setInterval(() => {
+    if (heldLeasesByOwner.get(userId) !== lease) return;
+    void renew().catch(() => undefined);
+  }, LIFECYCLE_RENEW_INTERVAL_MS);
+  renewal.unref?.();
+  leaseRenewalsByOwner.set(userId, renewal);
 }
 
 // Chỉ ghi mã lỗi ổn định, không lưu nguyên nhân có thể chứa dữ liệu từ thư viện bên ngoài.
