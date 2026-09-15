@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa drawer danh sách hội thoại trên mobile bắt đầu dưới header cố định và chỉ chiếm phần chiều cao còn lại.
 - Sửa lỗi ô nhập tin nhắn bị xóa liên tục khi gõ sau khi thêm cơ chế draft theo từng conversation.
 - Thêm skeleton loading cho danh sách hội thoại khi tải lại Inbox, tránh nháy trạng thái empty state.
 - Sửa hiện tượng màn hình trắng nháy một nhịp trước khi CSS và ứng dụng web được nạp.

@@ -47,7 +47,8 @@ describe("Inbox Tailwind migration", () => {
     expect(source).toContain("message.conversationId === activeId");
     expect(source).toContain("max-[899px]:hidden");
     expect(source).toContain("isConversationListOpen");
-    expect(source).toContain("w-[calc(100vw-44px)]");
+    expect(source).toContain("fixed top-28 bottom-0 left-[44px] z-50 flex w-[calc(100vw-44px)]");
+    expect(source).not.toContain("fixed inset-y-0 left-[44px] z-50 flex w-[calc(100vw-44px)]");
     expect(source).not.toContain("w-[min(395px,calc(100vw-44px))]");
     expect(source).toContain("/api/v1/conversation-tags");
     expect(source).toContain("/tags");
