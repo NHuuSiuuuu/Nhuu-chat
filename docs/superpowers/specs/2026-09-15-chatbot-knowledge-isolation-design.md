@@ -2,7 +2,7 @@
 
 ## Mục tiêu
 
-Mỗi chatbot được tạo trong Nhuu-chat là một cấu hình độc lập theo chủ đề. Chatbot chỉ sử dụng hướng dẫn, mẫu chào và tài liệu Knowledge của chính nó; việc chọn chatbot trong trang Trợ lý AI được giữ lại sau khi tải lại trang. Người dùng có thể áp dụng một chatbot cho một hoặc nhiều kênh đã kết nối như Facebook Page, Zalo OA hoặc Telegram Bot.
+Mỗi chatbot được tạo trong Nhuu-chat là một cấu hình độc lập theo chủ đề. Chatbot chỉ sử dụng hướng dẫn, mẫu chào và tài liệu Knowledge của chính nó; việc chọn chatbot trong trang Trợ lý AI được giữ lại sau khi tải lại trang. Người dùng có thể áp dụng một chatbot cho một hoặc nhiều tài khoản/kênh đã kết nối như Facebook Page, Zalo OA hoặc tài khoản Telegram cá nhân.
 
 ## Phạm vi
 
@@ -21,7 +21,7 @@ Thêm trường `assistantId` vào `KnowledgeDocument` và `KnowledgeChunk`. Tr�
 - Tài liệu cũ chưa có `assistantId` được xem là tài liệu legacy của trợ lý mặc định. Chúng chỉ được truy xuất khi chatbot mặc định được chọn, không được trả về cho chatbot chủ đề khác.
 - Xóa tài liệu phải kiểm tra đồng thời `ownerId`, `assistantId` và document ID để không thể xóa tài liệu của chatbot khác.
 
-`Assistant.channelScope` là phạm vi áp dụng của chatbot và giữ nguyên dạng `{ mode, identifiers }`. Mỗi identifier có định dạng ổn định `<platform>:<externalId>`, ví dụ `facebook:page-123`, `zalo:oa-456` hoặc `telegram:bot-789`; không dùng tên hiển thị làm khóa. Một kênh chỉ có một assistant trực tiếp hiệu lực, trong khi một assistant có thể áp dụng cho nhiều kênh.
+`Assistant.channelScope` là phạm vi áp dụng của chatbot và giữ nguyên dạng `{ mode, identifiers }`. Mỗi identifier có định dạng ổn định `<platform>:<externalId>`, ví dụ `facebook:page-123`, `zalo:oa-456` hoặc `telegram_personal:user-789`; không dùng tên hiển thị làm khóa. Một tài khoản/kênh chỉ có một assistant trực tiếp hiệu lực, trong khi một assistant có thể áp dụng cho nhiều tài khoản/kênh.
 
 ## Luồng API và RAG
 
@@ -32,9 +32,9 @@ Thêm trường `assistantId` vào `KnowledgeDocument` và `KnowledgeChunk`. Tr�
 - Preview Assistant truyền `assistant.id` vào vector search.
 - Hydration vector store chỉ nạp chunk khi owner của chunk khớp owner của document và assistant của chunk khớp assistant của document; chunk legacy chỉ được giữ với quy tắc legacy đã nêu.
 
-Khi runtime nhận tin nhắn, `resolveAssistant` ưu tiên assistant đang khai báo identifier chính xác cho `platform:channelId`; nếu không có thì dùng assistant mặc định đang bật. Nếu nhiều assistant cùng khai báo một identifier do dữ liệu cũ hoặc request đồng thời, hệ thống không chọn ngẫu nhiên mà trả lỗi cấu hình và không tự động trả lời.
+Khi runtime nhận tin nhắn, connector phải cung cấp `accountIdentifier` của tài khoản/kênh kết nối cùng với `channelId` của cuộc trò chuyện. `resolveAssistant` ưu tiên assistant đang khai báo identifier chính xác cho tài khoản/kênh; nếu không có thì dùng assistant mặc định đang bật. Không dùng `channelId` của từng cuộc trò chuyện để gán toàn bộ tài khoản Telegram cá nhân. Nếu nhiều assistant cùng khai báo một identifier do dữ liệu cũ hoặc request đồng thời, hệ thống không chọn ngẫu nhiên mà trả lỗi cấu hình và không tự động trả lời.
 
-Danh sách kênh để giao diện áp dụng lấy từ một contract kênh chung của tài khoản hiện tại, gồm `platform`, `externalId`, `displayName` và `status`. Connector mới phải cung cấp contract này; modal áp dụng không cần biết chi tiết API riêng của Facebook, Zalo hay Telegram. Chỉ các kênh thuộc owner hiện tại và ở trạng thái có thể sử dụng mới được trả về.
+Danh sách kênh để giao diện áp dụng lấy từ một contract kênh chung của tài khoản hiện tại, gồm `platform`, `externalId`, `displayName` và `status`. Với Telegram cá nhân, contract được dựng từ `TelegramPersonalSession` đang active (`telegramUserId`, `displayName`, `username`); không tạo hoặc yêu cầu Telegram Bot token. Connector mới phải cung cấp contract này; modal áp dụng không cần biết chi tiết API riêng của Facebook, Zalo hay Telegram. Chỉ các tài khoản/kênh thuộc owner hiện tại và ở trạng thái có thể sử dụng mới được trả về.
 
 ## Trạng thái lựa chọn trên frontend
 
@@ -80,4 +80,4 @@ Frontend:
 
 Tài liệu legacy không có `assistantId` không thể tự động xác định chủ đề ban đầu; hệ thống quy ước chúng thuộc trợ lý mặc định. Người dùng có thể upload lại dưới chatbot chủ đề tương ứng nếu cần chuyển dữ liệu.
 
-Việc kết nối Facebook Page hoặc Zalo OA là phạm vi của connector tương ứng. Spec này chỉ quy định contract và cơ chế áp dụng chatbot; không giả lập OAuth, webhook hoặc API nhắn tin của các nền tảng chưa được kết nối.
+Việc kết nối Facebook Page hoặc Zalo OA là phạm vi của connector tương ứng. Spec này chỉ quy định contract và cơ chế áp dụng chatbot; không giả lập OAuth, webhook hoặc API nhắn tin của các nền tảng chưa được kết nối. Telegram trong phạm vi này là tài khoản cá nhân đã kết nối bằng QR, không phải Telegram Bot.
