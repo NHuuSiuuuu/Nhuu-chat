@@ -8,6 +8,21 @@ import type { AuthUser } from "./auth.service.js";
 import { toConversation } from "./conversation.service.js";
 import { readProviderSecretByName } from "./provider-secret.service.js";
 
+async function resolveTelegramPersonalRecipient(client: {
+  getEntity: (channelId: string) => Promise<unknown>;
+  getDialogs: (options: { limit: number }) => Promise<Array<{ id?: unknown; entity?: unknown }>>;
+}, channelId: string): Promise<unknown> {
+  try {
+    return await client.getEntity(channelId);
+  } catch (error) {
+    // Dialogs chứa access hash cần thiết khi Telegram không resolve được user id từ cache.
+    const dialogs = await client.getDialogs({ limit: 100 });
+    const matchingDialog = dialogs.find((dialog) => String(dialog.id ?? "") === channelId);
+    if (!matchingDialog?.entity) throw error;
+    return matchingDialog.entity;
+  }
+}
+
 export async function listMessages(conversationId: string, query: { page?: string; limit?: string }) {
   const page = parsePositiveInt(query.page, 1);
   const limit = Math.min(100, parsePositiveInt(query.limit, 50));
@@ -68,7 +83,8 @@ export async function sendOutboundMessage(
     if (!client) {
       throw new AppError(409, "TELEGRAM_PERSONAL_DISCONNECTED", "Telegram personal session is not active");
     }
-    const sent = await client.sendMessage(conversation.channelId, { message: content });
+    const recipient = await resolveTelegramPersonalRecipient(client, conversation.channelId);
+    const sent = await client.sendMessage(recipient, { message: content });
     externalMessageId = String(sent.id);
   } else if (conversation.platform === "telegram") {
     const botToken = await readProviderSecretByName("telegram", "bot-token");

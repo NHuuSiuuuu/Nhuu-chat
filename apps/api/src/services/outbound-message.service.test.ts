@@ -180,9 +180,11 @@ describe("sendOutboundMessage", () => {
       platform: "telegram_personal",
       assignedAgentId: null
     }));
-    dependencyMocks.getActivePersonalClient.mockResolvedValue({
+    const personalClient = {
+      getEntity: vi.fn().mockResolvedValue("peer-42"),
       sendMessage: dependencyMocks.personalSendMessage
-    });
+    };
+    dependencyMocks.getActivePersonalClient.mockResolvedValue(personalClient);
     dependencyMocks.personalSendMessage.mockResolvedValue({ id: 8123 });
     arrangeStoredMessage();
     const ownerAuth = { id: "customer-1", email: "owner@example.com", role: "customer" } as const;
@@ -193,7 +195,8 @@ describe("sendOutboundMessage", () => {
     );
 
     expect(dependencyMocks.getActivePersonalClient).toHaveBeenCalledWith("customer-1");
-    expect(dependencyMocks.personalSendMessage).toHaveBeenCalledWith("chat-42", {
+    expect(personalClient.getEntity).toHaveBeenCalledWith("chat-42");
+    expect(dependencyMocks.personalSendMessage).toHaveBeenCalledWith("peer-42", {
       message: "Hello from support"
     });
     expect(dependencyMocks.personalSendMessage).toHaveBeenCalledTimes(1);
@@ -244,6 +247,29 @@ describe("sendOutboundMessage", () => {
       deliveryStatus: "pending",
       senderType: "agent",
       type: "text"
+    });
+  });
+
+  it("falls back to a matching Telegram dialog when the personal user entity is not cached", async () => {
+    arrangeConversation(conversation({ platform: "telegram_personal", assignedAgentId: null }));
+    const entityError = new Error("entity is not cached");
+    const personalClient = {
+      getEntity: vi.fn().mockRejectedValue(entityError),
+      getDialogs: vi.fn().mockResolvedValue([{ id: "chat-42", entity: "peer-from-dialog" }]),
+      sendMessage: dependencyMocks.personalSendMessage
+    };
+    dependencyMocks.getActivePersonalClient.mockResolvedValue(personalClient);
+    dependencyMocks.personalSendMessage.mockResolvedValue({ id: 8124 });
+    arrangeStoredMessage();
+
+    await sendOutboundMessage(
+      { conversationId: "conversation-1", content: "Hello from support" },
+      { id: "customer-1", email: "owner@example.com", role: "customer" }
+    );
+
+    expect(personalClient.getDialogs).toHaveBeenCalledWith({ limit: 100 });
+    expect(dependencyMocks.personalSendMessage).toHaveBeenCalledWith("peer-from-dialog", {
+      message: "Hello from support"
     });
   });
 
@@ -300,6 +326,7 @@ describe("sendOutboundMessage", () => {
       const failure = new Error(`${stage} failed`);
       dependencyMocks.readProviderSecretByName.mockResolvedValue("test-token");
       dependencyMocks.getActivePersonalClient.mockResolvedValue({
+        getEntity: vi.fn().mockResolvedValue("chat-42"),
         sendMessage: dependencyMocks.personalSendMessage
       });
       const failingDependency = stage === "bot secret"

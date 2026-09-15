@@ -14,6 +14,7 @@ Chưa có thay đổi chưa phát hành.
 - Cập nhật `lastMessageAt` và `lastMessageSnippet` của conversation sau khi nhân viên gửi tin, để sidebar sắp xếp đúng cả trước và sau khi reload.
 - Sửa sidebar hội thoại: khôi phục khả năng cuộn, sắp xếp hội thoại mới nhất lên trước và xử lý khóa gửi tin cũ.
 - Bổ sung kế hoạch và tài liệu cho tính năng gán chatbot vào kênh.
+- Resolve entity Telegram cá nhân trước khi gửi tin để xử lý hội thoại không có user entity trong cache GramJS.
 
 ## 2026-09-14
 
