@@ -55,6 +55,8 @@ const api = {
   getContext: vi.fn(() => ({ credentials: { imei: "imei-1", cookie: { sid: "credential-secret" }, userAgent: "ua" } })),
   getAccountInfo: vi.fn(async () => ({ id: "zalo-1", displayName: "Nhuu", username: "nhuu" })),
   onMessage: vi.fn(),
+  onError: vi.fn(),
+  onClosed: vi.fn(),
   startListener: vi.fn(async () => undefined),
   stopListener: vi.fn(async () => undefined),
   sendMessage: vi.fn(async () => ({ id: "message-1" }))
@@ -90,7 +92,7 @@ describe("Zalo personal QR session lifecycle", () => {
     resetApi();
     const { setZaloPersonalRedisLock, shutdownActiveZaloPersonalClients } = await import("./zalo-personal.service.js");
     await shutdownActiveZaloPersonalClients();
-    setZaloPersonalRedisLock(undefined);
+    setZaloPersonalRedisLock({ acquire: async () => ({ release: async () => undefined, renew: async () => true }) });
     vi.clearAllMocks();
     resetApi();
     dependencies.createClient.mockImplementation(createQrClient);
@@ -143,6 +145,16 @@ describe("Zalo personal QR session lifecycle", () => {
       status: "error",
       errorCode: "ZALO_QR_CREATE_FAILED"
     });
+  });
+
+  it("fails closed when no distributed ownership provider is configured", async () => {
+    const { setZaloPersonalRedisLock, startZaloPersonalQr } = await import("./zalo-personal.service.js");
+    setZaloPersonalRedisLock(undefined);
+
+    await expect(startZaloPersonalQr("owner-without-lock")).rejects.toMatchObject({
+      code: "ZALO_PERSONAL_LOCK_UNAVAILABLE"
+    });
+    expect(dependencies.createClient).not.toHaveBeenCalled();
   });
 
   it("marks the QR session connected and persists only encrypted credentials after login", async () => {
@@ -208,7 +220,7 @@ describe("Zalo personal QR session lifecycle", () => {
 
     await expect(logoutZaloPersonal("owner-stop-failure")).rejects.toMatchObject({ code: "ZALO_PERSONAL_LOGOUT_FAILED" });
 
-    expect(await getActiveZaloPersonalClient("owner-stop-failure")).toBe(api);
+    expect(await getActiveZaloPersonalClient("owner-stop-failure")).toBeUndefined();
     expect(dependencies.deleteOne).not.toHaveBeenCalledWith({ ownerId: "owner-stop-failure" });
     expect(dependencies.updateOne).toHaveBeenCalledWith(
       { ownerId: "owner-stop-failure" },
@@ -666,7 +678,7 @@ describe("Zalo personal inbound message persistence", () => {
     resetApi();
     const { setZaloPersonalRedisLock, shutdownActiveZaloPersonalClients } = await import("./zalo-personal.service.js");
     await shutdownActiveZaloPersonalClients();
-    setZaloPersonalRedisLock(undefined);
+    setZaloPersonalRedisLock({ acquire: async () => ({ release: async () => undefined, renew: async () => true }) });
     vi.clearAllMocks();
     resetApi();
     dependencies.createClient.mockImplementation(createQrClient);
@@ -769,7 +781,7 @@ describe("Zalo personal inbound message persistence", () => {
       1,
       { platform: "zalo_personal", channelId: "thread-1", ownerId },
       expect.objectContaining({
-        $set: expect.objectContaining({ customerId: "customer-1", ownerId, conversationType: "private", conversationName: null, lastMessageSnippet: "Xin chào" })
+        $set: expect.objectContaining({ customerId: "customer-1", ownerId, conversationType: "private", conversationName: null })
       }),
       { upsert: true, new: true }
     );
@@ -789,7 +801,7 @@ describe("Zalo personal inbound message persistence", () => {
     expect(dependencies.conversationFindOneAndUpdate).toHaveBeenNthCalledWith(
       2,
       { _id: "conversation-1", ownerId },
-      { $inc: { unreadCount: 1 } },
+      { $set: { lastMessageAt: new Date("2026-09-18T14:59:59.000Z"), lastMessageSnippet: "Xin chào" }, $inc: { unreadCount: 1 } },
       { returnDocument: "after" }
     );
     expect(dependencies.emitChatEvent).toHaveBeenCalledWith("chat:message_received", "conversation-1", expect.objectContaining({

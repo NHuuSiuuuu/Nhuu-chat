@@ -12,6 +12,7 @@ type ZcaQrEvent = {
   actions?: { abort?: () => unknown } | null;
 };
 type ZcaThreadType = 0 | 1;
+export type ZaloConversationType = "private" | "group";
 type ZcaConstructor = new (options?: { selfListen?: boolean }) => { loginQR(options: Record<string, never>, callback: (event: ZcaQrEvent) => unknown): Promise<ZcaApi>; login(credentials: ZcaCredentials): Promise<ZcaApi> };
 const ZaloConstructor = (zca as unknown as { Zalo: ZcaConstructor }).Zalo;
 
@@ -19,9 +20,11 @@ export interface ZaloPersonalApi {
   getContext(): { credentials: unknown };
   getAccountInfo(): Promise<{ id?: unknown; displayName?: unknown; username?: unknown }>;
   onMessage(listener: (event: unknown) => Promise<void>): void;
+  onError(listener: (error: unknown) => void): void;
+  onClosed(listener: (code?: unknown, reason?: unknown) => void): void;
   startListener(): Promise<void>;
   stopListener(): Promise<void>;
-  sendMessage(threadId: string, content: string): Promise<{ id: string }>;
+  sendMessage(threadId: string, content: string, conversationType?: ZaloConversationType): Promise<{ id: string }>;
 }
 
 export interface ZaloPersonalClient {
@@ -35,7 +38,9 @@ interface ZcaApi {
   fetchAccountInfo(): Promise<{ profile?: Record<string, unknown> }>;
   listener: {
     on(event: "message", listener: (event: unknown) => unknown): void;
-    start(): void;
+    on(event: "error", listener: (error: unknown) => unknown): void;
+    on(event: "closed", listener: (code?: unknown, reason?: unknown) => unknown): void;
+    start(options?: { retryOnClose?: boolean }): void;
     stop(): void;
   };
   sendMessage(message: string, threadId: string, type: ZcaThreadType): Promise<{ message?: { msgId?: number } | null }>;
@@ -92,16 +97,23 @@ class ZaloPersonalClientAdapter implements ZaloPersonalClient {
         const profile = (await zcaApi.fetchAccountInfo()).profile ?? {};
         return { id: profile.uid, displayName: profile.dName, username: profile.userName };
       },
-      onMessage: (listener) => zcaApi.listener.on("message", (event) => listener(event)),
+      // Bắt rejection của callback async để lỗi một event không làm chết tiến trình API.
+      onMessage: (listener) => zcaApi.listener.on("message", (event) => {
+        void Promise.resolve(listener(event)).catch(() => undefined);
+      }),
+      onError: (listener) => zcaApi.listener.on("error", listener),
+      onClosed: (listener) => zcaApi.listener.on("closed", listener),
       // Bọc listener để session manager không phụ thuộc API EventEmitter của zca-js.
       startListener: async () => {
-        zcaApi.listener.start();
+        zcaApi.listener.start({ retryOnClose: true });
       },
       stopListener: async () => {
         zcaApi.listener.stop();
       },
-      sendMessage: async (threadId, content) => {
-        const result = await zcaApi.sendMessage(content, threadId, 0);
+      sendMessage: async (threadId, content, conversationType = "private") => {
+        // zca-js dùng type 1 cho group và type 0 cho direct; không được suy ra chỉ từ thread id.
+        const threadType: ZcaThreadType = conversationType === "group" ? 1 : 0;
+        const result = await zcaApi.sendMessage(content, threadId, threadType);
         const id = result.message?.msgId;
         if (typeof id !== "number") throw new Error("Zalo API returned an invalid message response");
         return { id: String(id) };

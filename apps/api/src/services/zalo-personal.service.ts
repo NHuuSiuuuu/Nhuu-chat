@@ -46,6 +46,7 @@ type PendingZaloPersonalSession = {
   errorCode?: string;
   cancelled: boolean;
   loginTask?: Promise<void>;
+  nativeLoginTask?: Promise<ZaloPersonalApi>;
   api?: ZaloPersonalApi;
   apiStopTask?: Promise<void>;
 };
@@ -110,6 +111,7 @@ export async function startZaloPersonalQr(userId: string): Promise<ZaloPersonalQ
       pending.qrData = payload.qrData;
       pending.expiresAt = payload.expiresAt;
     });
+    pending.nativeLoginTask = login;
     pending.loginTask = runQrLogin(pending, login);
     void pending.loginTask;
 
@@ -156,14 +158,24 @@ export async function logoutZaloPersonal(userId: string): Promise<void> {
     pendingSessionsByOwner.delete(userId);
     activeClientsByOwner.delete(userId);
     runtimeErrorsByOwner.delete(userId);
-    await ZaloPersonalSessionModel.deleteOne({ ownerId: userId });
+    try {
+      await ZaloPersonalSessionModel.deleteOne({ ownerId: userId });
+    } catch {
+      // Durable deletion chưa xong thì phải chặn restore/send dù runtime listener đã dừng.
+      runtimeErrorsByOwner.set(userId, "ZALO_PERSONAL_LOGOUT_DELETE_FAILED");
+      await ZaloPersonalSessionModel.updateOne(
+        { ownerId: userId },
+        { $set: { status: "error", lastErrorCode: "ZALO_PERSONAL_LOGOUT_DELETE_FAILED" } }
+      ).catch(() => undefined);
+      throw new AppError(503, "ZALO_PERSONAL_LOGOUT_FAILED", "Zalo personal logout is temporarily unavailable");
+    }
   });
 }
 
 export async function getActiveZaloPersonalClient(userId: string): Promise<ZaloPersonalApi | undefined> {
+  if (runtimeErrorsByOwner.has(userId)) return undefined;
   const active = activeClientsByOwner.get(userId);
   if (active) return active;
-  if (runtimeErrorsByOwner.has(userId)) return undefined;
 
   return runOwnerLifecycle(userId, async () => {
     const existing = activeClientsByOwner.get(userId);
@@ -195,7 +207,9 @@ export async function restoreActiveZaloPersonalClients(): Promise<void> {
         if (activeClientsByOwner.has(ownerId) || runtimeErrorsByOwner.has(ownerId)) return;
         await restoreZaloPersonalClient(ownerId, session.encryptedCredentials);
       });
-    } catch {
+    } catch (error) {
+      // Lock contention chỉ có nghĩa owner đang được process khác quản lý; không được sửa document chung.
+      if (error instanceof AppError && error.code === "ZALO_PERSONAL_LOCK_UNAVAILABLE") return;
       await ZaloPersonalSessionModel.updateOne(
         { ownerId },
         { $set: { status: "error", lastErrorCode: "ZALO_PERSONAL_RESTORE_FAILED" } }
@@ -388,7 +402,16 @@ async function restoreZaloPersonalClient(userId: string, encryptedCredentials: s
       return api;
     } catch (error) {
       lastFailure = error;
-      await client.disconnect().catch(() => undefined);
+      try {
+        await client.disconnect();
+      } catch {
+        runtimeErrorsByOwner.set(userId, "ZALO_PERSONAL_RESTORE_STOP_FAILED");
+        await ZaloPersonalSessionModel.updateOne(
+          { ownerId: userId },
+          { $set: { status: "error", lastErrorCode: "ZALO_PERSONAL_RESTORE_STOP_FAILED" } }
+        ).catch(() => undefined);
+        throw new AppError(503, "ZALO_PERSONAL_RESTORE_STOP_FAILED", "Zalo personal session cleanup is temporarily unavailable");
+      }
     }
   }
 
@@ -397,6 +420,13 @@ async function restoreZaloPersonalClient(userId: string, encryptedCredentials: s
 
 // Listener chỉ chuyển event đã chuẩn hóa vào cùng luồng lưu trữ, không để payload native rò sang service.
 function attachZaloPersonalMessageSync(userId: string, api: ZaloPersonalApi): void {
+  // Native socket errors phải được chuyển thành trạng thái an toàn, không được thoát process.
+  api.onError(() => {
+    void handleZaloPersonalListenerError(userId, api).catch(() => undefined);
+  });
+  api.onClosed(() => {
+    void handleZaloPersonalListenerError(userId, api).catch(() => undefined);
+  });
   api.onMessage(async (event) => {
     const session = await ZaloPersonalSessionModel.findOne({ ownerId: userId, status: "connected", lastErrorCode: null }).lean();
     if (!session || stringValue(session.ownerId) !== userId) return;
@@ -407,6 +437,25 @@ function attachZaloPersonalMessageSync(userId: string, api: ZaloPersonalApi): vo
     if (!message || message.isSelf) return;
     await ingestZaloPersonalMessage(userId, message);
   });
+}
+
+// Đánh dấu listener lỗi và dừng nó độc lập với callback native để tránh unhandled rejection.
+async function handleZaloPersonalListenerError(userId: string, api: ZaloPersonalApi): Promise<void> {
+  if (activeClientsByOwner.get(userId) !== api) return;
+  const errorCode = "ZALO_PERSONAL_LISTENER_ERROR";
+  runtimeErrorsByOwner.set(userId, errorCode);
+  await ZaloPersonalSessionModel.updateOne(
+    { ownerId: userId },
+    { $set: { status: "error", lastErrorCode: errorCode } }
+  ).catch(() => undefined);
+  try {
+    await api.stopListener();
+    if (activeClientsByOwner.get(userId) === api) activeClientsByOwner.delete(userId);
+    const lease = heldLeasesByOwner.get(userId);
+    if (lease) await releaseHeldLease(userId, lease);
+  } catch {
+    // Giữ error guard và client runtime khi native stop chưa được xác nhận.
+  }
 }
 
 // Lưu tin inbound trước realtime để replay không thể phát event hoặc gọi bot lần thứ hai.
@@ -436,9 +485,7 @@ async function ingestZaloPersonalMessage(userId: string, message: NormalizedZalo
         customerId: customer._id,
         ownerId: userId,
         conversationType: message.chatType,
-        conversationName: message.chatType === "group" ? message.channelId : null,
-        lastMessageAt: message.sentAt,
-        lastMessageSnippet: message.content
+        conversationName: message.chatType === "group" ? message.channelId : null
       }
     },
     { upsert: true, new: true }
@@ -464,7 +511,10 @@ async function ingestZaloPersonalMessage(userId: string, message: NormalizedZalo
 
   const updatedConversation = await ConversationModel.findOneAndUpdate(
     { _id: conversation._id, ownerId: userId },
-    { $inc: { unreadCount: 1 } },
+    {
+      $set: { lastMessageAt: message.sentAt, lastMessageSnippet: message.content },
+      $inc: { unreadCount: 1 }
+    },
     { returnDocument: "after" }
   );
   if (!updatedConversation) return;
@@ -509,8 +559,13 @@ function runOwnerLifecycle<T>(userId: string, operation: () => Promise<T>): Prom
     await previous.catch(() => undefined);
     const heldLease = heldLeasesByOwner.get(userId);
     const lease = heldLease ?? (redisLock && await redisLock.acquire(`zalo-personal:${userId}`, LIFECYCLE_LOCK_TTL_MS));
-    if (redisLock && !lease) {
+    if (!redisLock || !lease) {
       throw new AppError(503, "ZALO_PERSONAL_LOCK_UNAVAILABLE", "Zalo personal session is temporarily unavailable");
+    }
+    if (!heldLease) {
+      // Bắt đầu gia hạn ngay sau khi acquire để restore/login chậm không vượt TTL ban đầu.
+      heldLeasesByOwner.set(userId, lease);
+      startHeldLeaseRenewal(userId, lease);
     }
     let operationSucceeded = false;
     try {
@@ -523,15 +578,7 @@ function runOwnerLifecycle<T>(userId: string, operation: () => Promise<T>): Prom
         || runtimeErrorsByOwner.has(userId)
         || (pending?.status === "waiting_qr")
         || (!operationSucceeded && Boolean(pending));
-      if (heldLease) {
-        if (!retainsOwnership) await releaseHeldLease(userId, heldLease);
-      } else if (operationSucceeded && retainsOwnership && lease) {
-        // Chuyển lease sang map held sau khi operation đã publish connector ownership thành công.
-        heldLeasesByOwner.set(userId, lease);
-        startHeldLeaseRenewal(userId, lease);
-      } else {
-        await lease?.release().catch(() => undefined);
-      }
+      if (!retainsOwnership && lease) await releaseHeldLease(userId, lease);
     }
   })();
   const tail = running.then(() => undefined, () => undefined);
@@ -563,7 +610,7 @@ function startHeldLeaseRenewal(userId: string, lease: ZaloPersonalRedisLease): v
   if (leaseRenewalsByOwner.has(userId)) return;
   const renewal = setInterval(() => {
     if (heldLeasesByOwner.get(userId) !== lease || lostLeasesByOwner.get(userId) === lease) return;
-    void renew().then((retained) => {
+    void renewWithDeadline(renew).then((retained) => {
       if (!retained) markRedisLeaseLost(userId, lease);
     }, () => {
       markRedisLeaseLost(userId, lease);
@@ -573,43 +620,61 @@ function startHeldLeaseRenewal(userId: string, lease: ZaloPersonalRedisLease): v
   leaseRenewalsByOwner.set(userId, renewal);
 }
 
-// Mất lease là lỗi ownership, nên phải đi qua cùng hàng đợi với login/logout để không tạo listener cạnh tranh.
+// Redis command bị treo cũng phải được xem là mất lease trước khi TTL hết hạn.
+async function renewWithDeadline(renew: () => Promise<boolean>): Promise<boolean> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      renew(),
+      new Promise<boolean>((resolve) => {
+        timeout = setTimeout(() => resolve(false), LIFECYCLE_RENEW_INTERVAL_MS);
+        timeout.unref?.();
+      })
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+// Mất lease phải fence runtime ngay lập tức, không xếp sau một operation Mongo đang bị treo.
 function markRedisLeaseLost(userId: string, lease: ZaloPersonalRedisLease): void {
   if (heldLeasesByOwner.get(userId) !== lease || lostLeasesByOwner.has(userId)) return;
   lostLeasesByOwner.set(userId, lease);
-  void runOwnerLifecycle(userId, async () => {
-    if (heldLeasesByOwner.get(userId) !== lease) return;
-    const pending = pendingSessionsByOwner.get(userId);
-    const active = activeClientsByOwner.get(userId);
-    runtimeErrorsByOwner.set(userId, "ZALO_PERSONAL_REDIS_LEASE_LOST");
-    if (pending) {
-      pending.cancelled = true;
-      pending.status = "error";
-      pending.qrData = undefined;
-      pending.errorCode = "ZALO_PERSONAL_REDIS_LEASE_LOST";
-    }
-    await ZaloPersonalSessionModel.updateOne(
-      { ownerId: userId },
-      { $set: { status: "error", lastErrorCode: "ZALO_PERSONAL_REDIS_LEASE_LOST" } }
-    ).catch(() => undefined);
+  void fenceLostLease(userId, lease).catch(() => undefined);
+}
 
-    try {
-      if (active) {
-        if (pending?.api === active) await stopPendingApi(pending, active);
-        else await active.stopListener();
-      } else if (pending) {
-        if (pending.api) await stopPendingApi(pending, pending.api);
-        else await pending.client.disconnect();
-      }
-    } catch {
-      // Giữ guard và lease khi stop lỗi để process này không tự tạo listener cạnh tranh.
-      return;
+// Dừng native transport trước khi chờ persistence để lease loss không còn đường gửi/nhận tin.
+async function fenceLostLease(userId: string, lease: ZaloPersonalRedisLease): Promise<void> {
+  if (heldLeasesByOwner.get(userId) !== lease) return;
+  const pending = pendingSessionsByOwner.get(userId);
+  const active = activeClientsByOwner.get(userId);
+  runtimeErrorsByOwner.set(userId, "ZALO_PERSONAL_REDIS_LEASE_LOST");
+  if (pending) {
+    pending.cancelled = true;
+    pending.status = "error";
+    pending.qrData = undefined;
+    pending.errorCode = "ZALO_PERSONAL_REDIS_LEASE_LOST";
+  }
+  try {
+    if (active) {
+      if (pending?.api === active) await stopPendingApi(pending, active);
+      else await active.stopListener();
+    } else if (pending) {
+      if (pending.api) await stopPendingApi(pending, pending.api);
+      else await pending.client.disconnect();
     }
+  } catch {
+    // Giữ guard và lease khi stop lỗi để process này không tự tạo listener cạnh tranh.
+    return;
+  }
 
-    if (activeClientsByOwner.get(userId) === active) activeClientsByOwner.delete(userId);
-    if (pendingSessionsByOwner.get(userId) === pending) pendingSessionsByOwner.delete(userId);
-    await releaseHeldLease(userId, lease);
-  }).catch(() => undefined);
+  await ZaloPersonalSessionModel.updateOne(
+    { ownerId: userId },
+    { $set: { status: "error", lastErrorCode: "ZALO_PERSONAL_REDIS_LEASE_LOST" } }
+  ).catch(() => undefined);
+  if (activeClientsByOwner.get(userId) === active) activeClientsByOwner.delete(userId);
+  if (pendingSessionsByOwner.get(userId) === pending) pendingSessionsByOwner.delete(userId);
+  await releaseHeldLease(userId, lease);
 }
 
 // Chỉ ghi mã lỗi ổn định, không lưu nguyên nhân có thể chứa dữ liệu từ thư viện bên ngoài.
@@ -653,7 +718,8 @@ async function disposePendingQr(pending: PendingZaloPersonalSession, status: Pub
   pending.errorCode = errorCode;
   if (pending.api) await stopPendingApi(pending, pending.api);
   else await pending.client.disconnect();
-  await pending.loginTask;
+  // Chỉ chờ native promise; completion của nó có thể đã xếp sau operation logout hiện tại.
+  await pending.nativeLoginTask?.catch(() => undefined);
 }
 
 // Dùng một stop promise để completion, logout và thay QR không stop cùng API hai lần.

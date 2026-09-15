@@ -124,6 +124,8 @@ export async function startServer(dependencies: ServerDependencies = {}): Promis
     await restore();
     await restoreZalo();
   } catch (error) {
+    // Restore có thể đã tạo connector trước khi owner khác lỗi; dọn connector trước hạ tầng chung.
+    await shutdownZalo().catch(() => undefined);
     await closeRedisLock?.().catch(() => undefined);
     await disconnect().catch(() => undefined);
     throw error;
@@ -133,9 +135,10 @@ export async function startServer(dependencies: ServerDependencies = {}): Promis
   const socketServer = createRealtimeServer(httpServer);
 
   const shutdown = async () => {
+    // Listener Zalo phải dừng trước khi đóng Redis lease và database.
+    await shutdownZalo();
     socketServer.close();
     await closeRealtimeServer(socketServer);
-    await shutdownZalo();
     await closeRedisLock?.();
     await new Promise<void>((resolve) => {
       if (!httpServer.listening) {

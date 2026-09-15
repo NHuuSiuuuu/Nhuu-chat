@@ -49,10 +49,12 @@ describe("Zalo personal client adapter", () => {
     expect(api.getContext().credentials).not.toBe(cookieJar);
     await api.startListener();
     await api.sendMessage("thread-1", "hello");
+    await api.sendMessage("group-1", "hello group", "group");
     await client.disconnect();
     expect(listener.start).toHaveBeenCalledOnce();
     expect(listener.stop).toHaveBeenCalledOnce();
     expect(zcaApi.sendMessage).toHaveBeenCalledWith("hello", "thread-1", 0);
+    expect(zcaApi.sendMessage).toHaveBeenCalledWith("hello group", "group-1", 1);
     await client.login(api.getContext().credentials);
     expect(zca.login).toHaveBeenCalledWith({ imei: "imei", cookie: { cookies: [{ key: "sid", value: "opaque" }] }, userAgent: "ua" });
     vi.useRealTimers();
@@ -81,5 +83,27 @@ describe("Zalo personal client adapter", () => {
 
     expect(abort).toHaveBeenCalledOnce();
     await expect(login).rejects.toThrow("QR login aborted");
+  });
+
+  it("exposes native listener errors without leaving an unhandled event path", async () => {
+    const nativeListeners = new Map<string, (value: unknown) => unknown>();
+    const zcaApi = {
+      getContext: () => ({}),
+      fetchAccountInfo: async () => ({ profile: {} }),
+      listener: {
+        on: (event: string, listener: (value: unknown) => unknown) => nativeListeners.set(event, listener),
+        start: vi.fn(),
+        stop: vi.fn()
+      },
+      sendMessage: async () => ({ message: { msgId: 1 } })
+    };
+    const client = createZaloPersonalClient({ zcaFactory: () => ({ loginQR: async () => zcaApi, login: async () => zcaApi }) });
+    const api = await client.loginQR(vi.fn());
+    const onError = vi.fn();
+    api.onError(onError);
+
+    nativeListeners.get("error")?.(new Error("socket closed"));
+
+    expect(onError).toHaveBeenCalledOnce();
   });
 });
