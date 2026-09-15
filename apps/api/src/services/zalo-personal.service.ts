@@ -46,6 +46,7 @@ const pendingSessionsByOwner = new Map<string, PendingZaloPersonalSession>();
 const activeClientsByOwner = new Map<string, ZaloPersonalApi>();
 const heldLeasesByOwner = new Map<string, ZaloPersonalRedisLease>();
 const leaseRenewalsByOwner = new Map<string, ReturnType<typeof setInterval>>();
+const lostLeasesByOwner = new Map<string, ZaloPersonalRedisLease>();
 const runtimeErrorsByOwner = new Map<string, string>();
 const ownerLifecycleTails = new Map<string, Promise<void>>();
 let redisLock: ZaloPersonalRedisLock | undefined;
@@ -431,19 +432,67 @@ async function releaseHeldLease(userId: string, lease: ZaloPersonalRedisLease): 
   if (renewal) clearInterval(renewal);
   leaseRenewalsByOwner.delete(userId);
   heldLeasesByOwner.delete(userId);
+  if (lostLeasesByOwner.get(userId) === lease) lostLeasesByOwner.delete(userId);
   await lease.release().catch(() => undefined);
 }
 
 // Gia hạn định kỳ để listener dài hơn TTL vẫn giữ ownership phân tán của owner.
 function startHeldLeaseRenewal(userId: string, lease: ZaloPersonalRedisLease): void {
   const renew = lease.renew;
-  if (!renew || leaseRenewalsByOwner.has(userId)) return;
+  if (!renew) {
+    markRedisLeaseLost(userId, lease);
+    return;
+  }
+  if (leaseRenewalsByOwner.has(userId)) return;
   const renewal = setInterval(() => {
-    if (heldLeasesByOwner.get(userId) !== lease) return;
-    void renew().catch(() => undefined);
+    if (heldLeasesByOwner.get(userId) !== lease || lostLeasesByOwner.get(userId) === lease) return;
+    void renew().then((retained) => {
+      if (!retained) markRedisLeaseLost(userId, lease);
+    }, () => {
+      markRedisLeaseLost(userId, lease);
+    });
   }, LIFECYCLE_RENEW_INTERVAL_MS);
   renewal.unref?.();
   leaseRenewalsByOwner.set(userId, renewal);
+}
+
+// Mất lease là lỗi ownership, nên phải đi qua cùng hàng đợi với login/logout để không tạo listener cạnh tranh.
+function markRedisLeaseLost(userId: string, lease: ZaloPersonalRedisLease): void {
+  if (heldLeasesByOwner.get(userId) !== lease || lostLeasesByOwner.has(userId)) return;
+  lostLeasesByOwner.set(userId, lease);
+  void runOwnerLifecycle(userId, async () => {
+    if (heldLeasesByOwner.get(userId) !== lease) return;
+    const pending = pendingSessionsByOwner.get(userId);
+    const active = activeClientsByOwner.get(userId);
+    runtimeErrorsByOwner.set(userId, "ZALO_PERSONAL_REDIS_LEASE_LOST");
+    if (pending) {
+      pending.cancelled = true;
+      pending.status = "error";
+      pending.qrData = undefined;
+      pending.errorCode = "ZALO_PERSONAL_REDIS_LEASE_LOST";
+    }
+    await ZaloPersonalSessionModel.updateOne(
+      { ownerId: userId },
+      { $set: { status: "error", lastErrorCode: "ZALO_PERSONAL_REDIS_LEASE_LOST" } }
+    ).catch(() => undefined);
+
+    try {
+      if (active) {
+        if (pending?.api === active) await stopPendingApi(pending, active);
+        else await active.stopListener();
+      } else if (pending) {
+        if (pending.api) await stopPendingApi(pending, pending.api);
+        else await pending.client.disconnect();
+      }
+    } catch {
+      // Giữ guard và lease khi stop lỗi để process này không tự tạo listener cạnh tranh.
+      return;
+    }
+
+    if (activeClientsByOwner.get(userId) === active) activeClientsByOwner.delete(userId);
+    if (pendingSessionsByOwner.get(userId) === pending) pendingSessionsByOwner.delete(userId);
+    await releaseHeldLease(userId, lease);
+  }).catch(() => undefined);
 }
 
 // Chỉ ghi mã lỗi ổn định, không lưu nguyên nhân có thể chứa dữ liệu từ thư viện bên ngoài.

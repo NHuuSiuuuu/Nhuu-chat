@@ -575,4 +575,43 @@ describe("Zalo personal QR session lifecycle", () => {
     expect(api.stopListener).toHaveBeenCalledOnce();
     expect(release).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    ["returns false", async () => false],
+    ["rejects", async () => { throw new Error("redis unavailable"); }]
+  ])("fails closed when Redis renewal %s", async (_label, renew) => {
+    const release = vi.fn(async () => undefined);
+    const acquire = vi.fn(async () => ({ release, renew }));
+    const restoredClient = createQrClient();
+    dependencies.createClient.mockReturnValue(restoredClient);
+    dependencies.findOne.mockReturnValue({
+      select: () => ({ lean: async () => ({ encryptedCredentials: "ciphertext:stored", status: "connected", lastErrorCode: null }) })
+    });
+    dependencies.decryptSecret.mockReturnValue(JSON.stringify({ imei: "imei-1" }));
+    const {
+      getActiveZaloPersonalClient,
+      getZaloPersonalSessionStatus,
+      setZaloPersonalRedisLock,
+      startZaloPersonalQr
+    } = await import("./zalo-personal.service.js");
+    setZaloPersonalRedisLock({ acquire });
+
+    expect(await getActiveZaloPersonalClient("owner-lost-lease")).toBe(api);
+    vi.advanceTimersByTime(15_000);
+    await flushLifecycleQueue();
+
+    expect(api.stopListener).toHaveBeenCalledOnce();
+    expect(release).toHaveBeenCalledOnce();
+    expect(await getZaloPersonalSessionStatus("owner-lost-lease")).toEqual({
+      id: "owner-lost-lease",
+      status: "error",
+      errorCode: "ZALO_PERSONAL_REDIS_LEASE_LOST"
+    });
+    expect(await startZaloPersonalQr("owner-lost-lease")).toEqual({
+      id: "owner-lost-lease",
+      status: "error",
+      errorCode: "ZALO_PERSONAL_REDIS_LEASE_LOST"
+    });
+    expect(dependencies.createClient).toHaveBeenCalledOnce();
+  });
 });
