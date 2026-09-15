@@ -46,7 +46,10 @@ Không thay đổi `loadAuth`, `ProtectedRoute`, `pageFromPath`, redirect hay to
 type NetflixIntroProps = {
   onComplete: () => void;
   duration?: number;
+  ready?: boolean;
 };
+
+`duration` là thời lượng hiển thị tối thiểu; `ready` mặc định là `true` để component có thể dùng độc lập. Khi `ready` là `false`, intro giữ nguyên overlay sau khi hết duration. Khi cả duration và `ready` hoàn tất, component chuyển sang trạng thái fade-out 0.6 giây rồi mới gọi `onComplete` một lần.
 ```
 
 ## Error handling

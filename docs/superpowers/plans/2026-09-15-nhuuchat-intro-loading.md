@@ -39,12 +39,12 @@
 - Create: `apps/web/src/components/NetflixIntro.test.tsx`
 
 **Interfaces:**
-- Produces `NetflixIntro({ onComplete, duration = 1200 }: { onComplete: () => void; duration?: number })`.
+- Produces `NetflixIntro({ onComplete, duration = 1200, ready = true }: { onComplete: () => void; duration?: number; ready?: boolean })`.
 - Renders an accessible full-screen overlay with five bars, `NHuuChat`, and `aria-label="Đang khởi động NHuuChat"`.
 
 - [ ] **Step 1: Write the failing tests**
 
-  Add tests that assert the component source imports its CSS, renders exactly five bar elements with stable class/data markers, includes `NHuuChat`, uses the required easing/stagger values, and cleans up the completion timer. Add a behavior test with fake timers proving `onComplete` is called once after the default duration and not called after unmount.
+  Add tests that assert the component source imports its CSS, renders exactly five bar elements with stable class/data markers, includes `NHuuChat`, uses the required easing/stagger values, and cleans up completion timers. Add behavior tests with fake timers proving `onComplete` waits for both the minimum duration and `ready`, runs once after the 0.6-second exit transition, and is not called after unmount.
 
 - [ ] **Step 2: Run the focused tests to verify they fail**
 
@@ -54,7 +54,7 @@
 
 - [ ] **Step 3: Implement the minimal component and CSS**
 
-  In the component, render the overlay and bars from `[0, 1, 2, 3, 4]`, set each bar's CSS custom property with `React.CSSProperties`, start one `setTimeout` for `duration`, and clear it in the effect cleanup. Use CSS keyframes for bar rise, glow pulse, brand reveal, and overlay exit. Ensure the completion callback runs once and use `motion-reduce`/`prefers-reduced-motion` to reduce motion without skipping lifecycle completion.
+  In the component, render the overlay and bars from `[0, 1, 2, 3, 4]`, set each bar's CSS custom property with `React.CSSProperties`, track the minimum-duration and exit timers, and clear both in effect cleanup. Keep the overlay mounted while `ready` is false; once duration and `ready` are complete, apply the exit class, wait 600ms, then invoke the callback once. Use CSS keyframes for bar rise, glow pulse, brand reveal, and overlay exit. Use `motion-reduce`/`prefers-reduced-motion` to reduce motion without skipping lifecycle completion.
 
 - [ ] **Step 4: Run the focused tests to verify they pass**
 
@@ -71,11 +71,12 @@
 **Interfaces:**
 - `App` keeps the existing public props-free API.
 - Add a local typed preload helper, e.g. `preloadIntroDependencies(): Promise<void>`, which resolves `document.fonts.ready` when available and otherwise resolves immediately.
+- Pass `ready={introReady}` to `NetflixIntro`; `introReady` becomes true only after preload resolves or rejects safely.
 - Add a `PageSkeleton` fallback component with Vietnamese accessible status text.
 
 - [ ] **Step 1: Write the failing tests**
 
-  Add assertions that `App.tsx` owns `showIntro` initialized to `true`, renders `NetflixIntro`, waits on `Promise.all`/preload before completing, wraps the real app in `Suspense`, and contains a non-white skeleton fallback. Assert there are no storage calls or `/api/config` references. Add a unit test for the preload helper with supported and unsupported `document.fonts` shapes if the test environment permits.
+  Add assertions that `App.tsx` owns `showIntro` initialized to `true`, renders `NetflixIntro` with `ready={introReady}`, waits on `Promise.all`/preload before allowing completion, wraps the real app in `Suspense`, and contains a non-white skeleton fallback. Assert there are no storage calls or `/api/config` references. Add a unit test for the preload helper with supported and unsupported `document.fonts` shapes if the test environment permits.
 
 - [ ] **Step 2: Run the focused tests to verify they fail**
 
@@ -85,7 +86,7 @@
 
 - [ ] **Step 3: Implement minimal App integration**
 
-  Add `showIntro` state and preload state. Start preload in an effect only when the intro is shown; combine the minimum-duration promise and preload promise with `Promise.all`, then let `NetflixIntro` perform its fade-out and set `showIntro(false)` through `onComplete`. Keep auth state initialization synchronous and leave the existing page selection tree intact beneath `<Suspense fallback={<PageSkeleton />}>`. Do not add a fake API request or delay beyond the intro's minimum visual duration.
+  Add `showIntro` and `introReady` state. Start preload in an effect only when the intro is shown; catch preload failures so `introReady` always becomes true. Pass `ready={introReady}` to `NetflixIntro`, which owns the minimum-duration and fade-out lifecycle and sets `showIntro(false)` through `onComplete`. Keep auth state initialization synchronous and leave the existing page selection tree intact beneath `<Suspense fallback={<PageSkeleton />}>`. Do not add a fake API request or delay beyond the intro's minimum visual duration.
 
 - [ ] **Step 4: Run focused tests and existing App tests**
 
