@@ -5,82 +5,32 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
-Các ghi chú trong mục này được sắp xếp theo thứ tự mới nhất trước, cũ hơn sau. Khi phát hành phiên bản, toàn bộ mục sẽ được chuyển thành một tiêu đề ngày/phiên bản riêng.
+Chưa có thay đổi chưa phát hành.
 
-- Thêm nút xuất bản/gỡ xuất bản chatbot để bật hoặc tắt trả lời tự động theo từng trợ lý.
-- Đổi nút `Chat mới` cạnh `Xuất bản` thành thao tác xóa lịch sử tin nhắn trong khung preview; tạo chatbot mới chỉ thực hiện từ dropdown trợ lý.
-- Thêm dropdown chọn chatbot tại khu vực trợ lý mặc định; hỗ trợ chọn bot theo chủ đề, xóa bot khi hover/focus và tạo chatbot mới ở cuối danh sách.
-- Khi model Gemini theo tier hết quota hoặc tạm thời không khả dụng, chatbot thử model `GEMINI_CHAT_MODEL` đã cấu hình trước khi chuyển sang fallback.
-- Bổ sung modal quản lý tài liệu Knowledge Base: tải lên `.txt`/`.md`, tìm kiếm, hiển thị trạng thái, xóa tài liệu và kết nối API ingest/list/delete thật.
-- Hiển thị tên model Gemini thực tế đang được sử dụng ngay cạnh lựa chọn Model của từng trợ lý.
-- Cho phép chọn model chatbot theo từng trợ lý với ba mức `smart`, `balanced`, `economy`; lựa chọn được lưu qua API Assistant và áp dụng cho các lượt trả lời Gemini tiếp theo.
-- Mẫu trả lời cố định mặc định tắt gọi Gemini để phản hồi trực tiếp từ `responseTemplate`; form mẫu chào bổ sung tùy chọn bật viết lại bằng Gemini.
-- Bổ sung quản lý CRUD mẫu chào theo từng trợ lý: tải danh sách, thêm, sửa, xóa, bật/tắt; mẫu đã xóa không tự tạo lại trong lúc tải hoặc preview.
-- Cho phép Gemini dùng `instructions` và kiến thức chung cho câu hỏi không có RAG context; vẫn fallback khi context cửa hàng yếu hoặc Gemini không xác nhận câu trả lời.
-- Kết nối khung preview trong tab `Chatbot tự động` với API Assistant: tải trợ lý thật, gửi tin nhắn thử nghiệm qua endpoint preview, hiển thị lịch sử/loading/lỗi và tạo trợ lý qua backend.
-- Tự bổ sung mẫu `Chào khách hàng` cho Assistant chưa có mẫu chào, hỗ trợ `hi`, `hello`, `alo`, `xin chào`; không ghi đè mẫu chào tùy chỉnh đã tồn tại.
+## 2026-09-15
 
-- Hoàn thiện owner cho hội thoại Telegram Bot mới từ đăng ký admin đã xác thực, giữ mã hóa token và chống dùng đăng ký có owner để gửi thay owner khác; không lấy owner từ webhook/body.
-- Áp dụng pause cho tin agent thật từ Telegram cá nhân, loại echo bot; phối hợp lần kiểm tra pause/gửi cuối bằng khóa atomic trên hội thoại dùng chung với takeover, không tự retry gửi mơ hồ hay cưỡng chiếm khóa còn giữ.
-- Bổ sung chuẩn hóa/lưu document/file, sticker, audio/voice, video/video note và animation/GIF cho hai connector, dùng caption hoặc nhắc nhập văn bản; outbound media vẫn chưa hỗ trợ.
-- Cách ly knowledge legacy thiếu owner hoặc không khớp owner của parent khỏi hydration, giữ nguyên MongoDB và hướng dẫn re-ingestion dưới owner đã xác minh; không mở lại truy xuất unscoped.
-- Đổi fallback mặc định của trợ lý mới thành `Em chưa có đủ thông tin, nhân viên sẽ hỗ trợ.`; không ghi đè fallback riêng đã lưu.
-- Sửa ba lỗi hậu kiểm chatbot Telegram: phát unread từ kết quả tăng atomic khi tin cá nhân đến đồng thời; ghi diagnostics đã loại secret và thử handoff/pause kể cả lỗi trước claim, giữ ack/replay; giữ ID gửi cá nhân thành công đến muộn sau timeout để lọc echo mà không retry.
-- Nối inbound Telegram Bot và Telegram cá nhân vào `ChatbotOrchestrator.process` sau khi lưu tin khách; dùng chung bot delivery, token mã hóa/client session theo owner, template theo định danh kênh chuẩn và RAG đúng owner.
-- Giữ webhook validation/ack/idempotency; chống reply trùng khi replay, bỏ qua bot sender và echo của bot cá nhân kể cả khi echo đến trước kết quả gửi. Lỗi connector giữ tin khách, lưu failed/handoff và pause 30 phút, không tự gửi lại.
-- Chuẩn hóa ảnh/caption trong hai connector; ảnh không caption được nhắc nhập văn bản, chưa đọc/tải ảnh; outbound chatbot chỉ gửi text.
-- Ghi tài liệu CRUD trợ lý/template, preview không gửi tin thật, `GEMINI_API_KEY`, fallback/pause và các giới hạn: token Bot toàn hệ thống, dữ liệu legacy cần owner đáng tin cậy, unique index đa tài khoản chưa được migration, Facebook/Instagram/Zalo chưa có adapter tự gửi.
-- Thay placeholder tab `Chatbot tự động` bằng UI 3 cột gồm danh sách trợ lý, cấu hình Model/Kiến thức, modal tài liệu và khung preview chat responsive.
-- Mở rộng layout trang Trợ lý AI theo prompt: nội dung dùng lề ngang 24px, sidebar 300px, cột chính rộng toàn màn hình và xếp dọc dưới 1024px.
-- Đồng nhất wrapper responsive cho toàn bộ các tab Settings để chiều ngang không còn co giãn khi chuyển tab.
-- Thêm nút xóa trợ lý trong danh sách bên trái; dropdown tên trợ lý ở khung chat vẫn đồng bộ với lựa chọn từ sidebar.
-- Bỏ click/dropdown ở tiêu đề trợ lý trong khung chat; tiêu đề bên phải chỉ hiển thị tên trợ lý đang được chọn từ sidebar trái.
-- Khi bấm `+` thêm trợ lý, mở modal yêu cầu nhập tên trước khi tạo chatbot mới.
-- Đưa ngữ cảnh trợ lý và Page lên đầu sidebar; bổ sung khu vực Hướng dẫn với các nút xem mẫu, AI rules và viết lại trước phần Model/Kiến thức.
-- Sắp xếp lại workspace chatbot theo mẫu mới: thanh trợ lý ở phía trên và ba cột Hướng dẫn, Model/Kiến thức, Khung chat; danh sách trợ lý được mở từ menu trên cùng.
-- Thêm custom toast realtime khi khách gửi tin nhắn: hiển thị avatar, icon nền tảng local, nội dung, progress 5 giây và mở đúng hội thoại khi bấm.
-- Hiển thị icon nền tảng trong toast bằng SVG phẳng, bỏ nền hình tròn nhưng giữ nguyên biểu tượng và màu thương hiệu.
-- Thêm URL riêng cho từng tab Settings (ví dụ `/settings/general` và `/settings/quick-replies`), khôi phục đúng tab sau khi reload và hỗ trợ back/forward trình duyệt.
-- Mở rộng drawer danh sách hội thoại trên mobile để chiếm toàn bộ vùng làm việc, không còn giới hạn 395px.
-- Thêm nút mũi tên quay lại danh sách hội thoại trên mobile và nút mở danh sách trong empty state; sidebar thông tin bên phải chỉ chuyển sang drawer khi màn hình dưới `1000px`.
-- Thêm API hồ sơ người dùng tại `/api/v1/me` và `/api/v1/me/password`, đồng thời cố định header trên các trang web để không bị trôi khi cuộn.
-- Thêm avatar, tên tài khoản, role và dropdown Hồ sơ/Đăng xuất ở header; bổ sung trang hồ sơ frontend.
-- Thêm UI tab `Hỗ trợ trả lời` với danh sách trả lời nhanh, tìm kiếm và modal thêm mẫu bằng tiếng Việt; modal hỗ trợ chọn và xoá ảnh đính kèm.
-- Tích hợp Cloudinary cho ảnh đính kèm của mẫu trả lời nhanh với các biến `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`; chỉ nhận ảnh tối đa 5 MiB qua CRUD `/api/v1/quick-replies`.
-- Ghi rõ giới hạn hiện tại: việc gửi media trong message và upload video chưa được triển khai.
-- Ẩn thanh scrollbar trên các vùng cuộn của Inbox, gợi ý AI, sidebar và modal nhưng vẫn giữ thao tác cuộn.
-- Kết nối phần Trợ lý AI với backend: bật/tắt mô hình và gợi ý, chọn tier Gemini, trigger gợi ý theo thao tác, và cấu hình cửa sổ cảm xúc 3/6/10 tin nhắn.
-- Sửa layout switch và nhóm nút điều khiển Trợ lý AI để không tràn hoặc lệch trên màn hình hẹp.
-- Bổ sung giao diện Trợ lý AI trong Cài đặt với tab gợi ý trả lời, cấu hình mô hình, thanh toán và phát hiện cảm xúc.
-- Cập nhật model Gemini gợi ý trả lời sang `gemini-3.5-flash-lite` vì model `gemini-2.5-flash-lite` không còn khả dụng cho user mới.
-- Cập nhật gợi ý AI dùng 6 tin nhắn cuối của cả khách hàng và nhân viên, theo thứ tự thời gian, để Gemini có đủ ngữ cảnh hội thoại.
-- Bổ sung tài liệu cấu hình `GEMINI_API_KEY`/`GEMINI_CHAT_MODEL`, endpoint gợi ý trả lời Gemini, cơ chế fallback và giới hạn lưu trữ prompt/response.
-- Thêm chip gợi ý AI cục bộ trong form nhập tin nhắn; bấm để điền nội dung và làm mới để đổi bộ gợi ý.
-- Giảm cỡ chữ nội dung tin nhắn trong khung hội thoại xuống `text-sm` để phù hợp mật độ giao diện.
-- Căn giữa avatar 16px và tên tài khoản nền tảng trên cùng một dòng trong danh sách hội thoại.
-- Giữ icon nền tảng trong dòng hội thoại ở dạng logo phẳng, không bọc circle hoặc border.
-- Làm responsive tag trong danh sách hội thoại theo độ rộng sidebar bằng `ResizeObserver`, giữ tag trên một dòng và tự điều chỉnh số tag hiển thị cùng `+N`.
-- Bỏ dấu `...` khỏi nội dung tag; tag chỉ chuyển vào `+N` khi không đủ chiều rộng để tên luôn đọc được.
-- Giữ riêng vùng icon nền tảng khỏi vùng tag bằng layout flex có `overflow-hidden`, tránh tag che biểu tượng Telegram khi sidebar hẹp.
-- Bỏ 6 tag hardcode khỏi thanh Tag Bar; thanh này chỉ hiển thị tag do người dùng tạo trong mục `Thẻ hội thoại`.
-- Khi mở Inbox từ Dashboard, không tự chọn hội thoại đầu tiên; hiển thị hướng dẫn chọn hội thoại và trạng thái chưa có thông tin khách hàng ở sidebar phải.
-- Hiển thị tài khoản mạng xã hội đã kết nối (avatar/tên) ở dòng người phụ trách của từng hội thoại; giữ tag cạnh tên và icon nền tảng ở mép phải.
-- Cải thiện UI danh sách hội thoại theo `DEVELOPMENT_PROMPT.md`: dòng hội thoại thoáng hơn, avatar 48px, tên/thời gian rõ, preview có tag badge tùy chọn và nhận diện nền tảng bằng icon/label.
-- Kết nối tab `Thẻ hội thoại` với API CRUD: tải danh sách từ backend, thêm, sửa và xóa tag thật trong database, kèm trạng thái loading/lỗi trên Settings.
-- Thêm backend CRUD thẻ hội thoại dùng chung cho admin/agent qua `/api/v1/conversation-tags`, hỗ trợ tạo, sửa, xóa và kiểm tra tên/màu hex hợp lệ.
-- Sửa routing header bằng History API: logo điều hướng tới `/dashboard`, mục `Hội thoại` tới `/inbox`, đồng thời hỗ trợ back/forward của trình duyệt.
-- Bỏ avatar khỏi message của agent/chính mình; chỉ giữ avatar ở message khách để khung chat gọn hơn.
-- Căn chỉnh lại message: tin nhắn của chính mình nằm bên phải, action hover nằm bên trái bubble; message khách giữ hướng ngược lại.
-- Cập nhật UI message theo `DEVELOPMENT_PROMPT.md`: avatar, tên người gửi thực tế, timestamp, mention `@All` và nhóm thao tác khi hover.
-- Bổ sung `senderName` tùy chọn cho message contract và mapper Telegram để hiển thị đúng người gửi trong hội thoại nhóm.
-- Kết nối điều hướng header: bấm logo `NhuuChat` về Dashboard và bấm `Hội thoại` mở Inbox.
-- Cập nhật `docs/wiki/README.md` thành tài liệu Wiki chi tiết về trạng thái MVP, luồng Inbox responsive, cách cài đặt, kiểm thử, giới hạn và roadmap.
-- Thêm sidebar thông tin bổ trợ bên phải khung chat với tab `Thông tin`/`Tạo đơn`, khu vực ghi chú, đơn hàng và responsive drawer cho màn hình nhỏ.
-- Cải thiện responsive Inbox: ẩn danh sách hội thoại trái dưới breakpoint hẹp, thêm drawer danh sách và nút mở danh sách cạnh avatar trong khung chat.
-- Làm mới form nhập tin nhắn: textarea nhiều dòng, gửi bằng Enter, xuống dòng bằng Shift+Enter, gợi ý mẫu trả lời/thành viên, thanh công cụ và modal phím tắt.
-- Khôi phục quy ước lỗi validation trước refactor (`1e05c33`): giữ lỗi 400 có sẵn của auth/Telegram 2FA và lỗi 500 có sẵn của Telegram bot, QR-status thiếu id, auth thiếu body; không chuẩn hóa toàn bộ lỗi schema thành 400.
-- Bổ sung kiểm thử không cần Mongo cho chuẩn hóa/loại trùng tag khách hàng, phản hồi và chuyển tiếp lỗi customer/knowledge, cùng vòng đời lưu/xóa knowledge.
-- Chuyển toàn bộ xử lý gửi tin outbound vào message service; bổ sung kiểm thử hành vi gửi Telegram bot/cá nhân, lưu tin, phân quyền, lỗi và event controller.
+- Hoàn thiện gán chatbot cho kênh đã kết nối, giữ lựa chọn chatbot sau khi tải lại và bảo vệ phạm vi owner/kênh.
+- Thêm nút `Xuất bản`/`Gỡ xuất bản` để bật/tắt AI tự động trả lời theo từng chatbot.
+- Sửa sidebar hội thoại: khôi phục khả năng cuộn, sắp xếp hội thoại mới nhất lên trước và xử lý khóa gửi tin cũ.
+- Bổ sung kế hoạch và tài liệu cho tính năng gán chatbot vào kênh.
+
+## 2026-09-14
+
+- Kích hoạt chatbot tự động trên các kênh Telegram đã kết nối, có RAG đúng owner và cơ chế handoff/pause an toàn.
+- Hoàn thiện xử lý ownership Telegram, media/file, knowledge legacy và các lỗi replay/concurrent inbound.
+- Bổ sung chuẩn hóa dữ liệu, chống echo/trùng reply và giữ tin khách khi connector gửi lỗi.
+
+## 2026-09-11
+
+- Kết nối cài đặt Trợ lý AI với backend: model Gemini, gợi ý trả lời, trigger và cửa sổ cảm xúc 3/6/10 tin.
+- Cập nhật fallback model Gemini, ngữ cảnh 6 tin nhắn và sửa responsive giao diện cài đặt.
+- Ẩn scrollbar trên các vùng cuộn nhưng vẫn giữ thao tác cuộn.
+
+## 2026-09-10
+
+- Bổ sung gợi ý trả lời AI, quản lý thẻ hội thoại và UI Inbox responsive.
+- Bổ sung hồ sơ người dùng, header cố định, avatar, nhận diện nền tảng và toast realtime.
+- Cập nhật Wiki, tài liệu cấu hình Gemini và các kiểm thử liên quan.
 
 ## 2026-09-09
 
