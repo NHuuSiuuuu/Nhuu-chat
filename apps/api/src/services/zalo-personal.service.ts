@@ -56,6 +56,7 @@ export async function startZaloPersonalQr(userId: string): Promise<ZaloPersonalQ
   return runOwnerLifecycle(userId, async () => {
     // Active map vẫn giữ owner khi stop lỗi, nên QR mới không được phép tạo listener cạnh tranh.
     if (activeClientsByOwner.has(userId)) return getZaloPersonalSessionStatus(userId);
+    if (runtimeErrorsByOwner.has(userId)) return getZaloPersonalSessionStatus(userId);
 
     const existing = pendingSessionsByOwner.get(userId);
     if (existing && (existing.status === "expired" || isExpired(existing.expiresAt))) {
@@ -147,10 +148,12 @@ export async function logoutZaloPersonal(userId: string): Promise<void> {
 export async function getActiveZaloPersonalClient(userId: string): Promise<ZaloPersonalApi | undefined> {
   const active = activeClientsByOwner.get(userId);
   if (active) return active;
+  if (runtimeErrorsByOwner.has(userId)) return undefined;
 
   return runOwnerLifecycle(userId, async () => {
     const existing = activeClientsByOwner.get(userId);
     if (existing) return existing;
+    if (runtimeErrorsByOwner.has(userId)) return undefined;
 
     const session = await ZaloPersonalSessionModel.findOne({ ownerId: userId, status: "connected" })
       .select("+encryptedCredentials")
@@ -272,7 +275,13 @@ async function completeQrLogin(pending: PendingZaloPersonalSession, api: ZaloPer
 
 // Xóa session vừa ghi khi ownership đã đổi; nếu không xóa được thì chỉ giữ trạng thái lỗi an toàn.
 async function compensateStaleQrWrite(pending: PendingZaloPersonalSession, api: ZaloPersonalApi): Promise<void> {
-  await stopPendingApi(pending, api).catch(() => undefined);
+  try {
+    await stopPendingApi(pending, api);
+  } catch {
+    // Stop thất bại có thể để listener sống, nên giữ owner và session để chặn listener cạnh tranh.
+    await recordCompensationStopFailure(pending);
+    return;
+  }
   if (activeClientsByOwner.get(pending.ownerId) === api) activeClientsByOwner.delete(pending.ownerId);
 
   try {
@@ -291,6 +300,22 @@ async function compensateStaleQrWrite(pending: PendingZaloPersonalSession, api: 
       { $set: { status: "error", lastErrorCode: errorCode } }
     ).catch(() => undefined);
   }
+}
+
+// Chỉ lưu mã ổn định khi compensation không dừng được listener; credential vẫn được giữ để không mất ownership.
+async function recordCompensationStopFailure(pending: PendingZaloPersonalSession): Promise<void> {
+  const errorCode = "ZALO_PERSONAL_QR_COMPENSATION_STOP_FAILED";
+  runtimeErrorsByOwner.set(pending.ownerId, errorCode);
+  if (pendingSessionsByOwner.get(pending.ownerId)?.id === pending.id) {
+    pending.cancelled = true;
+    pending.status = "error";
+    pending.qrData = undefined;
+    pending.errorCode = errorCode;
+  }
+  await ZaloPersonalSessionModel.updateOne(
+    { ownerId: pending.ownerId },
+    { $set: { status: "error", lastErrorCode: errorCode } }
+  ).catch(() => undefined);
 }
 
 // Giới hạn số lần restore để lỗi credential hoặc mạng không tạo vòng reconnect vô hạn.

@@ -389,4 +389,33 @@ describe("Zalo personal QR session lifecycle", () => {
     expect(api.stopListener).toHaveBeenCalledOnce();
     expect(dependencies.deleteOne).toHaveBeenCalledWith({ ownerId: "owner-write-expiry" });
   });
+
+  it("retains the owner when stale-write compensation cannot stop its listener", async () => {
+    let resolveWrite!: () => void;
+    dependencies.findOneAndUpdate.mockImplementation(() => new Promise<void>((resolve) => { resolveWrite = resolve; }));
+    api.stopListener.mockRejectedValueOnce(new Error("native listener did not stop"));
+    const { getZaloPersonalQrStatus, getZaloPersonalSessionStatus, startZaloPersonalQr } = await import("./zalo-personal.service.js");
+
+    const qr = await startZaloPersonalQr("owner-compensation-stop-failure");
+    await flushLifecycleQueue();
+    vi.setSystemTime(new Date("2026-09-15T16:01:41.000Z"));
+    expect(getZaloPersonalQrStatus(qr.id, "owner-compensation-stop-failure").status).toBe("expired");
+
+    resolveWrite();
+    await flushLifecycleQueue();
+
+    expect(await getZaloPersonalSessionStatus("owner-compensation-stop-failure")).toEqual({
+      id: "owner-compensation-stop-failure",
+      status: "error",
+      errorCode: "ZALO_PERSONAL_QR_COMPENSATION_STOP_FAILED"
+    });
+    expect(dependencies.deleteOne).not.toHaveBeenCalledWith({ ownerId: "owner-compensation-stop-failure" });
+    await expect(startZaloPersonalQr("owner-compensation-stop-failure")).resolves.toEqual({
+      id: "owner-compensation-stop-failure",
+      status: "error",
+      errorCode: "ZALO_PERSONAL_QR_COMPENSATION_STOP_FAILED"
+    });
+    expect(dependencies.createClient).toHaveBeenCalledOnce();
+    expect(api.startListener).toHaveBeenCalledOnce();
+  });
 });
