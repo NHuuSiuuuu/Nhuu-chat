@@ -20,8 +20,20 @@ describe("production server bootstrap", () => {
       hydrateKnowledge: async () => {
         events.push("hydrate-knowledge");
       },
+      setupZaloPersonalRedisLock: async () => {
+        events.push("setup-zalo-personal-redis-lock");
+        return async () => {
+          events.push("close-zalo-personal-redis-lock");
+        };
+      },
       restorePersonalClients: async () => {
         events.push("restore-personal-sessions");
+      },
+      restoreZaloPersonalClients: async () => {
+        events.push("restore-zalo-personal-sessions");
+      },
+      shutdownZaloPersonalClients: async () => {
+        events.push("shutdown-zalo-personal-sessions");
       },
       disconnectDatabase: async () => {
         events.push("disconnect");
@@ -31,10 +43,15 @@ describe("production server bootstrap", () => {
       }
     });
 
-    expect(events).toEqual(["connect", "hydrate-knowledge", "restore-personal-sessions", "listen"]);
+    expect(events).toEqual([
+      "connect", "hydrate-knowledge", "setup-zalo-personal-redis-lock", "restore-personal-sessions",
+      "restore-zalo-personal-sessions", "listen"
+    ]);
     await handle.shutdown();
     expect(events).toEqual([
-      "connect", "hydrate-knowledge", "restore-personal-sessions", "listen", "disconnect"
+      "connect", "hydrate-knowledge", "setup-zalo-personal-redis-lock", "restore-personal-sessions",
+      "restore-zalo-personal-sessions", "listen", "shutdown-zalo-personal-sessions",
+      "close-zalo-personal-redis-lock", "disconnect"
     ]);
   });
 
@@ -46,6 +63,8 @@ describe("production server bootstrap", () => {
         connectDatabase: async () => undefined,
         hydrateKnowledge: async () => undefined,
         restorePersonalClients: async () => undefined,
+        restoreZaloPersonalClients: async () => undefined,
+        shutdownZaloPersonalClients: async () => undefined,
         disconnectDatabase,
         listen: async () => {
           throw new Error("port is unavailable");
@@ -60,6 +79,7 @@ describe("production server bootstrap", () => {
     const failure = new Error("knowledge hydration failed");
     const disconnectDatabase = vi.fn(async () => undefined);
     const restorePersonalClients = vi.fn(async () => undefined);
+    const restoreZaloPersonalClients = vi.fn(async () => undefined);
     const listen = vi.fn(async () => undefined);
 
     await expect(startServer({
@@ -68,12 +88,14 @@ describe("production server bootstrap", () => {
         throw failure;
       },
       restorePersonalClients,
+      restoreZaloPersonalClients,
       disconnectDatabase,
       listen
     })).rejects.toBe(failure);
 
     expect(disconnectDatabase).toHaveBeenCalledOnce();
     expect(restorePersonalClients).not.toHaveBeenCalled();
+    expect(restoreZaloPersonalClients).not.toHaveBeenCalled();
     expect(listen).not.toHaveBeenCalled();
   });
 
@@ -84,6 +106,7 @@ describe("production server bootstrap", () => {
       throw disconnectFailure;
     });
     const restorePersonalClients = vi.fn(async () => undefined);
+    const restoreZaloPersonalClients = vi.fn(async () => undefined);
     const listen = vi.fn(async () => undefined);
 
     await expect(startServer({
@@ -92,12 +115,14 @@ describe("production server bootstrap", () => {
         throw hydrationFailure;
       },
       restorePersonalClients,
+      restoreZaloPersonalClients,
       disconnectDatabase,
       listen
     })).rejects.toBe(hydrationFailure);
 
     expect(disconnectDatabase).toHaveBeenCalledOnce();
     expect(restorePersonalClients).not.toHaveBeenCalled();
+    expect(restoreZaloPersonalClients).not.toHaveBeenCalled();
     expect(listen).not.toHaveBeenCalled();
   });
 });

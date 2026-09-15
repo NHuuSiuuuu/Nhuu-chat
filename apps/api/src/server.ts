@@ -1,14 +1,22 @@
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 
 import { env } from "@nhuu-chat/config";
+import { createClient, type RedisClientType } from "redis";
 
 import { createApp } from "./app.js";
 import { hydrateKnowledgeVectorStore } from "./ai/knowledge-runtime.js";
 import { connectDatabase, disconnectDatabase } from "./db/mongoose.js";
 import { closeRealtimeServer, createRealtimeServer } from "./realtime/socket.js";
 import { restoreActivePersonalClients } from "./services/telegram-personal.service.js";
+import {
+  restoreActiveZaloPersonalClients,
+  setZaloPersonalRedisLock,
+  shutdownActiveZaloPersonalClients,
+  type ZaloPersonalRedisLock
+} from "./services/zalo-personal.service.js";
 
 import type { Server as HttpServer } from "node:http";
 
@@ -16,6 +24,9 @@ export interface ServerDependencies {
   connectDatabase?: (uri: string) => Promise<void>;
   hydrateKnowledge?: () => Promise<void>;
   restorePersonalClients?: () => Promise<void>;
+  restoreZaloPersonalClients?: () => Promise<void>;
+  shutdownZaloPersonalClients?: () => Promise<void>;
+  setupZaloPersonalRedisLock?: () => Promise<() => Promise<void>>;
   disconnectDatabase?: () => Promise<void>;
   listen?: (server: HttpServer, port: number) => Promise<void>;
 }
@@ -41,16 +52,72 @@ function listenHttpServer(server: HttpServer, port: number): Promise<void> {
   });
 }
 
+// Redis SET NX PX giữ một lease ngắn; chỉ token đã tạo lease mới được phép xóa nó.
+function createZaloPersonalRedisLock(client: RedisClientType): ZaloPersonalRedisLock {
+  return {
+    async acquire(key, ttlMs) {
+      const token = randomUUID();
+      try {
+        const acquired = await client.set(key, token, { NX: true, PX: ttlMs });
+        if (acquired !== "OK") return undefined;
+        return {
+          async release() {
+            await client.eval(
+              "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end",
+              { keys: [key], arguments: [token] }
+            ).catch(() => undefined);
+          }
+        };
+      } catch {
+        return undefined;
+      }
+    }
+  };
+}
+
+// Bootstrap chỉ bật distributed lock sau khi Redis xác nhận kết nối; lỗi kết nối vẫn fail-closed cho connector.
+async function setupZaloPersonalRedisLock(): Promise<() => Promise<void>> {
+  if (!process.env.REDIS_URL) {
+    setZaloPersonalRedisLock(undefined);
+    return async () => undefined;
+  }
+
+  const client = createClient({
+    url: process.env.REDIS_URL,
+    socket: { reconnectStrategy: false },
+    disableOfflineQueue: true
+  });
+  client.on("error", () => undefined);
+  try {
+    await client.connect();
+    setZaloPersonalRedisLock(createZaloPersonalRedisLock(client));
+  } catch {
+    setZaloPersonalRedisLock({ acquire: async () => undefined });
+  }
+
+  return async () => {
+    setZaloPersonalRedisLock(undefined);
+    if (client.isOpen) await client.quit().catch(() => undefined);
+  };
+}
+
 export async function startServer(dependencies: ServerDependencies = {}): Promise<ServerHandle> {
   const connect = dependencies.connectDatabase ?? connectDatabase;
   const hydrateKnowledge = dependencies.hydrateKnowledge ?? hydrateKnowledgeVectorStore;
   const restore = dependencies.restorePersonalClients ?? restoreActivePersonalClients;
+  const restoreZalo = dependencies.restoreZaloPersonalClients ?? restoreActiveZaloPersonalClients;
+  const shutdownZalo = dependencies.shutdownZaloPersonalClients ?? shutdownActiveZaloPersonalClients;
+  const setupRedisLock = dependencies.setupZaloPersonalRedisLock ?? setupZaloPersonalRedisLock;
   const disconnect = dependencies.disconnectDatabase ?? disconnectDatabase;
   await connect(env.MONGODB_URI);
+  let closeRedisLock: (() => Promise<void>) | undefined;
   try {
     await hydrateKnowledge();
+    closeRedisLock = await setupRedisLock();
     await restore();
+    await restoreZalo();
   } catch (error) {
+    await closeRedisLock?.().catch(() => undefined);
     await disconnect().catch(() => undefined);
     throw error;
   }
@@ -61,6 +128,8 @@ export async function startServer(dependencies: ServerDependencies = {}): Promis
   const shutdown = async () => {
     socketServer.close();
     await closeRealtimeServer(socketServer);
+    await shutdownZalo();
+    await closeRedisLock?.();
     await new Promise<void>((resolve) => {
       if (!httpServer.listening) {
         resolve();

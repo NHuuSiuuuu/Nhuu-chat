@@ -6,6 +6,7 @@ import { authRouter } from "./routes/auth.routes.js";
 import { errorHandler } from "./common/errors.js";
 import { telegramRouter } from "./routes/channels/telegram.routes.js";
 import { telegramPersonalRouter } from "./routes/channels/telegram-personal.routes.js";
+import { zaloPersonalRouter } from "./routes/channels/zalo-personal.routes.js";
 import { conversationRouter } from "./routes/conversations.routes.js";
 import { messageRouter } from "./routes/messages.routes.js";
 import { customerRouter } from "./routes/customers.routes.js";
@@ -33,6 +34,7 @@ export function createApp(): Express {
   app.use("/api/v1/auth", rateLimit({ windowMs: 60_000, max: 60 }), authRouter);
   app.use("/api/v1/channels/telegram", telegramRouter);
   app.use("/api/v1/channels/telegram-personal", telegramPersonalRouter);
+  app.use("/api/v1/channels/zalo-personal", zaloPersonalRouter);
   app.use("/api/v1/conversations", conversationRouter);
   app.use("/api/v1/messages", messageRouter);
   app.use("/api/v1/customers", customerRouter);
