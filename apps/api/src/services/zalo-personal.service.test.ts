@@ -760,12 +760,16 @@ describe("Zalo personal inbound message persistence", () => {
     expect(dependencies.messageCreate).toHaveBeenCalledWith(expect.objectContaining({
       conversationId: "conversation-1",
       platform: "zalo_personal",
-      externalMessageId: "zalo-message-1",
+      externalMessageId: "zalo_personal:zalo-account:zalo-message-1",
       senderType: "customer",
       senderId: "sender-1",
       deliveryStatus: "delivered",
       metadata: { senderName: "Khách hàng", messageType: "webchat" }
     }));
+    expect(dependencies.messageExists).toHaveBeenCalledWith({
+      platform: "zalo_personal",
+      externalMessageId: "zalo_personal:zalo-account:zalo-message-1"
+    });
     expect(dependencies.conversationFindOneAndUpdate).toHaveBeenNthCalledWith(
       2,
       { _id: "conversation-1", ownerId },
@@ -822,7 +826,7 @@ describe("Zalo personal inbound message persistence", () => {
       { upsert: true, new: true }
     );
     expect(dependencies.messageCreate).toHaveBeenCalledWith(expect.objectContaining({
-      platform: "zalo_personal", externalMessageId: "zalo-group-message-1", senderId: "member-7", type: "image",
+      platform: "zalo_personal", externalMessageId: "zalo_personal:zalo-account:zalo-group-message-1", senderId: "member-7", type: "image",
       metadata: { senderName: "Thành viên", messageType: "photo" }
     }));
   });
@@ -833,12 +837,37 @@ describe("Zalo personal inbound message persistence", () => {
 
     await listener(directEvent());
 
+    expect(dependencies.messageExists).toHaveBeenCalledWith({
+      platform: "zalo_personal",
+      externalMessageId: "zalo_personal:zalo-account:zalo-message-1"
+    });
     expect(dependencies.customerFindOneAndUpdate).not.toHaveBeenCalled();
     expect(dependencies.conversationFindOneAndUpdate).not.toHaveBeenCalled();
     expect(dependencies.messageCreate).not.toHaveBeenCalled();
     expect(dependencies.emitChatEvent).not.toHaveBeenCalled();
     expect(dependencies.emitInboxEventToRecipients).not.toHaveBeenCalled();
     expect(dependencies.processTelegramCustomerMessage).not.toHaveBeenCalled();
+  });
+
+  it("inbound allows a raw external id already used by another Zalo account", async () => {
+    const conversation = conversationDocument();
+    dependencies.conversationFindOneAndUpdate.mockResolvedValue(conversation);
+    dependencies.messageExists.mockImplementation(async ({ externalMessageId }: { externalMessageId: string }) => {
+      if (externalMessageId === "zalo_personal:other-account:zalo-message-1") return true;
+      if (externalMessageId === "zalo_personal:zalo-account:zalo-message-1") return false;
+      throw new Error(`unexpected idempotency key: ${externalMessageId}`);
+    });
+    const listener = await startInboundListener();
+
+    await listener(directEvent());
+
+    expect(dependencies.messageExists).toHaveBeenCalledWith({
+      platform: "zalo_personal",
+      externalMessageId: "zalo_personal:zalo-account:zalo-message-1"
+    });
+    expect(dependencies.messageCreate).toHaveBeenCalledWith(expect.objectContaining({
+      externalMessageId: "zalo_personal:zalo-account:zalo-message-1"
+    }));
   });
 
   it("inbound self messages are suppressed before persistence", async () => {

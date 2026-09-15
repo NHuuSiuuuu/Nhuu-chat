@@ -413,7 +413,10 @@ function attachZaloPersonalMessageSync(userId: string, api: ZaloPersonalApi): vo
 async function ingestZaloPersonalMessage(userId: string, message: NormalizedZaloPersonalMessage): Promise<void> {
   const session = await ZaloPersonalSessionModel.findOne({ ownerId: userId, status: "connected", lastErrorCode: null }).lean();
   if (!session || stringValue(session.ownerId) !== userId || message.isSelf) return;
-  if (await MessageModel.exists({ platform: "zalo_personal", externalMessageId: message.externalMessageId })) return;
+  const accountId = stringValue(session.zaloUserId);
+  if (!accountId) return;
+  const idempotencyKey = `zalo_personal:${accountId}:${message.externalMessageId}`;
+  if (await MessageModel.exists({ platform: "zalo_personal", externalMessageId: idempotencyKey })) return;
 
   const customer = await CustomerModel.findOneAndUpdate(
     { platform: "zalo_personal", platformId: message.senderId },
@@ -446,7 +449,7 @@ async function ingestZaloPersonalMessage(userId: string, message: NormalizedZalo
     storedMessage = await MessageModel.create({
       conversationId: conversation._id,
       platform: "zalo_personal",
-      externalMessageId: message.externalMessageId,
+      externalMessageId: idempotencyKey,
       senderType: "customer",
       senderId: message.senderId,
       type: message.type,

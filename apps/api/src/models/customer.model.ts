@@ -1,6 +1,6 @@
 import mongoose, { model, Schema, type InferSchemaType } from "mongoose";
 
-const platforms = ["facebook", "instagram", "zalo", "telegram", "telegram_personal"] as const;
+const platforms = ["facebook", "instagram", "zalo", "telegram", "telegram_personal", "zalo_personal"] as const;
 
 const customerSchema = new Schema(
   {

@@ -5,7 +5,7 @@ const conversationSchema = new Schema(
     customerId: { type: Schema.Types.ObjectId, ref: "Customer", required: true, index: true },
     platform: {
       type: String,
-      enum: ["facebook", "instagram", "zalo", "telegram", "telegram_personal"],
+      enum: ["facebook", "instagram", "zalo", "telegram", "telegram_personal", "zalo_personal"],
       required: true
     },
     channelId: { type: String, required: true },
@@ -26,6 +26,6 @@ const conversationSchema = new Schema(
 );
 
 export type Conversation = InferSchemaType<typeof conversationSchema>;
-conversationSchema.index({ platform: 1, channelId: 1 }, { unique: true });
+conversationSchema.index({ platform: 1, channelId: 1, ownerId: 1 }, { unique: true });
 export const ConversationModel =
   mongoose.models.Conversation ?? model<Conversation>("Conversation", conversationSchema);
