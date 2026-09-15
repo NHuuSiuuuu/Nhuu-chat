@@ -255,6 +255,11 @@ async function completeQrLogin(pending: PendingZaloPersonalSession, api: ZaloPer
     },
     { upsert: true, new: true }
   );
+  // Mongo có thể hoàn tất sau khi QR hết hạn hoặc bị hủy, nên phải bù trừ trước khi publish connected.
+  if (!isPendingReady(pending)) {
+    await compensateStaleQrWrite(pending, api);
+    return;
+  }
 
   pending.status = "connected";
   pending.qrData = undefined;
@@ -263,6 +268,29 @@ async function completeQrLogin(pending: PendingZaloPersonalSession, api: ZaloPer
   pending.username = nullableString(account.username) ?? undefined;
   runtimeErrorsByOwner.delete(pending.ownerId);
   activeClientsByOwner.set(pending.ownerId, api);
+}
+
+// Xóa session vừa ghi khi ownership đã đổi; nếu không xóa được thì chỉ giữ trạng thái lỗi an toàn.
+async function compensateStaleQrWrite(pending: PendingZaloPersonalSession, api: ZaloPersonalApi): Promise<void> {
+  await stopPendingApi(pending, api).catch(() => undefined);
+  if (activeClientsByOwner.get(pending.ownerId) === api) activeClientsByOwner.delete(pending.ownerId);
+
+  try {
+    await ZaloPersonalSessionModel.deleteOne({ ownerId: pending.ownerId });
+  } catch {
+    const errorCode = "ZALO_PERSONAL_QR_COMPENSATION_FAILED";
+    runtimeErrorsByOwner.set(pending.ownerId, errorCode);
+    if (pendingSessionsByOwner.get(pending.ownerId)?.id === pending.id) {
+      pending.cancelled = true;
+      pending.status = "error";
+      pending.qrData = undefined;
+      pending.errorCode = errorCode;
+    }
+    await ZaloPersonalSessionModel.updateOne(
+      { ownerId: pending.ownerId },
+      { $set: { status: "error", lastErrorCode: errorCode } }
+    ).catch(() => undefined);
+  }
 }
 
 // Giới hạn số lần restore để lỗi credential hoặc mạng không tạo vòng reconnect vô hạn.

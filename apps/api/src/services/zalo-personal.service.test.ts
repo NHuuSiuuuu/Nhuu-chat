@@ -364,4 +364,29 @@ describe("Zalo personal QR session lifecycle", () => {
     expect(await getActiveZaloPersonalClient("owner-restore-write-failure")).toBeUndefined();
     expect(restoredClient.disconnect).toHaveBeenCalledTimes(2);
   });
+
+  it("compensates a QR write that becomes expired before Mongo confirms it", async () => {
+    let resolveWrite!: () => void;
+    dependencies.findOneAndUpdate.mockImplementation(() => new Promise<void>((resolve) => { resolveWrite = resolve; }));
+    dependencies.findOne.mockReturnValue({ select: () => ({ lean: async () => null }) });
+    const { getActiveZaloPersonalClient, getZaloPersonalQrStatus, getZaloPersonalSessionStatus, startZaloPersonalQr } = await import("./zalo-personal.service.js");
+
+    const qr = await startZaloPersonalQr("owner-write-expiry");
+    await flushLifecycleQueue();
+    expect(dependencies.findOneAndUpdate).toHaveBeenCalledWith(
+      { ownerId: "owner-write-expiry" },
+      expect.anything(),
+      { upsert: true, new: true }
+    );
+    vi.setSystemTime(new Date("2026-09-15T16:01:41.000Z"));
+    expect(getZaloPersonalQrStatus(qr.id, "owner-write-expiry").status).toBe("expired");
+
+    resolveWrite();
+    await flushLifecycleQueue();
+
+    expect(await getActiveZaloPersonalClient("owner-write-expiry")).toBeUndefined();
+    expect((await getZaloPersonalSessionStatus("owner-write-expiry")).status).toBe("expired");
+    expect(api.stopListener).toHaveBeenCalledOnce();
+    expect(dependencies.deleteOne).toHaveBeenCalledWith({ ownerId: "owner-write-expiry" });
+  });
 });
