@@ -8,7 +8,14 @@ const dependencies = vi.hoisted(() => ({
   find: vi.fn(),
   findOneAndUpdate: vi.fn(),
   updateOne: vi.fn(),
-  deleteOne: vi.fn()
+  deleteOne: vi.fn(),
+  customerFindOneAndUpdate: vi.fn(),
+  conversationFindOneAndUpdate: vi.fn(),
+  messageCreate: vi.fn(),
+  messageExists: vi.fn(),
+  emitChatEvent: vi.fn(),
+  emitInboxEventToRecipients: vi.fn(),
+  processTelegramCustomerMessage: vi.fn()
 }));
 
 vi.mock("../channels/zalo-personal/zalo-personal.client.js", () => ({
@@ -22,6 +29,22 @@ vi.mock("../channels/zalo-personal/zalo-personal.model.js", () => ({
     updateOne: dependencies.updateOne,
     deleteOne: dependencies.deleteOne
   }
+}));
+vi.mock("../models/customer.model.js", () => ({
+  CustomerModel: { findOneAndUpdate: dependencies.customerFindOneAndUpdate }
+}));
+vi.mock("../models/conversation.model.js", () => ({
+  ConversationModel: { findOneAndUpdate: dependencies.conversationFindOneAndUpdate }
+}));
+vi.mock("../models/message.model.js", () => ({
+  MessageModel: { create: dependencies.messageCreate, exists: dependencies.messageExists }
+}));
+vi.mock("../realtime/socket.js", () => ({
+  emitChatEvent: dependencies.emitChatEvent,
+  emitInboxEventToRecipients: dependencies.emitInboxEventToRecipients
+}));
+vi.mock("../chatbot/telegram-inbound.service.js", () => ({
+  processTelegramCustomerMessage: dependencies.processTelegramCustomerMessage
 }));
 vi.mock("../common/crypto.js", () => ({
   encryptSecret: dependencies.encryptSecret,
@@ -613,5 +636,232 @@ describe("Zalo personal QR session lifecycle", () => {
       errorCode: "ZALO_PERSONAL_REDIS_LEASE_LOST"
     });
     expect(dependencies.createClient).toHaveBeenCalledOnce();
+  });
+});
+
+describe("Zalo personal inbound message persistence", () => {
+  const ownerId = "owner-inbound";
+  const session = { ownerId, zaloUserId: "zalo-account", displayName: "Nhuu" };
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-15T16:00:00.000Z"));
+    vi.clearAllMocks();
+    resetApi();
+    const { setZaloPersonalRedisLock, shutdownActiveZaloPersonalClients } = await import("./zalo-personal.service.js");
+    await shutdownActiveZaloPersonalClients();
+    setZaloPersonalRedisLock(undefined);
+    vi.clearAllMocks();
+    resetApi();
+    dependencies.createClient.mockImplementation(createQrClient);
+    dependencies.findOne.mockImplementation((filter: Record<string, unknown>) => ({
+      lean: async () => filter.status === "connected" ? session : null,
+      select: () => ({ lean: async () => null })
+    }));
+    dependencies.findOneAndUpdate.mockResolvedValue(undefined);
+    dependencies.updateOne.mockResolvedValue(undefined);
+    dependencies.deleteOne.mockResolvedValue(undefined);
+    dependencies.customerFindOneAndUpdate.mockResolvedValue({ _id: "customer-1" });
+    dependencies.messageExists.mockResolvedValue(false);
+    dependencies.messageCreate.mockResolvedValue({
+      _id: "message-local-1",
+      conversationId: "conversation-1",
+      platform: "zalo_personal",
+      senderType: "customer",
+      senderId: "sender-1",
+      type: "text",
+      content: "Xin chào",
+      deliveryStatus: "delivered",
+      metadata: { senderName: "Khách hàng" },
+      createdAt: new Date("2026-09-15T15:59:59.000Z"),
+      toObject() { return this; }
+    });
+    dependencies.processTelegramCustomerMessage.mockResolvedValue(undefined);
+  });
+
+  afterEach(async () => {
+    const { shutdownActiveZaloPersonalClients } = await import("./zalo-personal.service.js");
+    await shutdownActiveZaloPersonalClients();
+    vi.useRealTimers();
+  });
+
+  function conversationDocument() {
+    const conversation = {
+      _id: "conversation-1",
+      customerId: { _id: "customer-1", name: "Khách hàng", avatarUrl: "https://cdn.example/avatar.jpg" },
+      platform: "zalo_personal",
+      channelId: "thread-1",
+      ownerId,
+      assignedAgentId: null,
+      unreadCount: 0,
+      status: "open",
+      lastMessageAt: new Date("2026-09-15T15:59:59.000Z"),
+      lastMessageSnippet: "Xin chào",
+      conversationName: null,
+      conversationType: "private",
+      tagIds: [],
+      populate: vi.fn(async () => conversation),
+      toObject() { return this; }
+    };
+    return conversation;
+  }
+
+  async function startInboundListener() {
+    const { startZaloPersonalQr } = await import("./zalo-personal.service.js");
+    await startZaloPersonalQr(ownerId);
+    await flushLifecycleQueue();
+    expect(api.onMessage).toHaveBeenCalledOnce();
+    return api.onMessage.mock.calls[0]?.[0] as (event: unknown) => Promise<void>;
+  }
+
+  function directEvent(overrides: Record<string, unknown> = {}) {
+    return {
+      type: 0,
+      threadId: "thread-1",
+      data: {
+        msgId: "zalo-message-1",
+        uidFrom: "sender-1",
+        dName: "Khách hàng",
+        avatar: "https://cdn.example/avatar.jpg",
+        content: "Xin chào",
+        ts: 1_789_743_599_000,
+        msgType: "webchat",
+        ...overrides
+      }
+    };
+  }
+
+  it("inbound direct persists the customer message before emitting owner-scoped realtime updates", async () => {
+    const conversation = conversationDocument();
+    dependencies.conversationFindOneAndUpdate.mockImplementation(async (_filter: unknown, update: Record<string, unknown>) => {
+      if ("$inc" in update) conversation.unreadCount += 1;
+      return conversation;
+    });
+    const listener = await startInboundListener();
+
+    await listener(directEvent());
+
+    expect(dependencies.customerFindOneAndUpdate).toHaveBeenCalledWith(
+      { platform: "zalo_personal", platformId: "sender-1" },
+      expect.objectContaining({
+        $set: { name: "Khách hàng", avatarUrl: "https://cdn.example/avatar.jpg" },
+        $setOnInsert: { platform: "zalo_personal", platformId: "sender-1" }
+      }),
+      { upsert: true, new: true }
+    );
+    expect(dependencies.conversationFindOneAndUpdate).toHaveBeenNthCalledWith(
+      1,
+      { platform: "zalo_personal", channelId: "thread-1", ownerId },
+      expect.objectContaining({
+        $set: expect.objectContaining({ customerId: "customer-1", ownerId, conversationType: "private", conversationName: null, lastMessageSnippet: "Xin chào" })
+      }),
+      { upsert: true, new: true }
+    );
+    expect(dependencies.messageCreate).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: "conversation-1",
+      platform: "zalo_personal",
+      externalMessageId: "zalo-message-1",
+      senderType: "customer",
+      senderId: "sender-1",
+      deliveryStatus: "delivered",
+      metadata: { senderName: "Khách hàng", messageType: "webchat" }
+    }));
+    expect(dependencies.conversationFindOneAndUpdate).toHaveBeenNthCalledWith(
+      2,
+      { _id: "conversation-1", ownerId },
+      { $inc: { unreadCount: 1 } },
+      { returnDocument: "after" }
+    );
+    expect(dependencies.emitChatEvent).toHaveBeenCalledWith("chat:message_received", "conversation-1", expect.objectContaining({
+      platform: "zalo_personal", senderType: "customer", senderName: "Khách hàng", content: "Xin chào", deliveryStatus: "delivered"
+    }));
+    expect(dependencies.emitInboxEventToRecipients).toHaveBeenCalledWith(
+      "chat:conversation_updated",
+      [ownerId, ""],
+      expect.objectContaining({ platform: "zalo_personal", channelId: "thread-1", unreadCount: 1, customerName: "Khách hàng" })
+    );
+    expect(dependencies.processTelegramCustomerMessage).toHaveBeenCalledWith({
+      ownerId,
+      conversationId: "conversation-1",
+      customerMessageId: "message-local-1",
+      externalMessageId: "zalo-message-1",
+      platform: "zalo_personal",
+      channelId: "thread-1",
+      senderType: "customer",
+      type: "text",
+      content: "Xin chào"
+    });
+  });
+
+  it("inbound group preserves the group thread identity and sender metadata", async () => {
+    const conversation = conversationDocument();
+    dependencies.conversationFindOneAndUpdate.mockResolvedValue(conversation);
+    const listener = await startInboundListener();
+
+    await listener({
+      type: 1,
+      threadId: "group-7",
+      data: {
+        msgId: "zalo-group-message-1",
+        uidFrom: "member-7",
+        dName: "Thành viên",
+        content: "Ảnh mới",
+        ts: 1_789_743_600_000,
+        msgType: "photo"
+      }
+    });
+
+    expect(dependencies.customerFindOneAndUpdate).toHaveBeenCalledWith(
+      { platform: "zalo_personal", platformId: "member-7" },
+      expect.objectContaining({ $set: { name: "Thành viên" } }),
+      { upsert: true, new: true }
+    );
+    expect(dependencies.conversationFindOneAndUpdate).toHaveBeenCalledWith(
+      { platform: "zalo_personal", channelId: "group-7", ownerId },
+      expect.objectContaining({ $set: expect.objectContaining({ conversationType: "group", conversationName: "group-7" }) }),
+      { upsert: true, new: true }
+    );
+    expect(dependencies.messageCreate).toHaveBeenCalledWith(expect.objectContaining({
+      platform: "zalo_personal", externalMessageId: "zalo-group-message-1", senderId: "member-7", type: "image",
+      metadata: { senderName: "Thành viên", messageType: "photo" }
+    }));
+  });
+
+  it("inbound duplicate external ids do not increment unread or re-emit events", async () => {
+    dependencies.messageExists.mockResolvedValue(true);
+    const listener = await startInboundListener();
+
+    await listener(directEvent());
+
+    expect(dependencies.customerFindOneAndUpdate).not.toHaveBeenCalled();
+    expect(dependencies.conversationFindOneAndUpdate).not.toHaveBeenCalled();
+    expect(dependencies.messageCreate).not.toHaveBeenCalled();
+    expect(dependencies.emitChatEvent).not.toHaveBeenCalled();
+    expect(dependencies.emitInboxEventToRecipients).not.toHaveBeenCalled();
+    expect(dependencies.processTelegramCustomerMessage).not.toHaveBeenCalled();
+  });
+
+  it("inbound self messages are suppressed before persistence", async () => {
+    const listener = await startInboundListener();
+
+    await listener(directEvent({ uidFrom: "zalo-account", dName: "Nhuu" }));
+
+    expect(dependencies.messageExists).not.toHaveBeenCalled();
+    expect(dependencies.customerFindOneAndUpdate).not.toHaveBeenCalled();
+    expect(dependencies.messageCreate).not.toHaveBeenCalled();
+    expect(dependencies.emitChatEvent).not.toHaveBeenCalled();
+  });
+
+  it("inbound keeps persisted realtime updates when chatbot handoff fails", async () => {
+    const conversation = conversationDocument();
+    dependencies.conversationFindOneAndUpdate.mockResolvedValue(conversation);
+    dependencies.processTelegramCustomerMessage.mockRejectedValue(new Error("bot transport unavailable"));
+    const listener = await startInboundListener();
+
+    await expect(listener(directEvent())).resolves.toBeUndefined();
+
+    expect(dependencies.messageCreate).toHaveBeenCalledOnce();
+    expect(dependencies.emitChatEvent).toHaveBeenCalledOnce();
+    expect(dependencies.emitInboxEventToRecipients).toHaveBeenCalledOnce();
   });
 });

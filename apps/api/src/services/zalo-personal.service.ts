@@ -1,10 +1,18 @@
 import { randomUUID } from "node:crypto";
 
+import { processTelegramCustomerMessage } from "../chatbot/telegram-inbound.service.js";
 import { createZaloPersonalClient, type ZaloPersonalApi, type ZaloPersonalClient } from "../channels/zalo-personal/zalo-personal.client.js";
 import { ZaloPersonalSessionModel } from "../channels/zalo-personal/zalo-personal.model.js";
+import { normalizeZaloPersonalMessage, type NormalizedZaloPersonalMessage } from "../channels/zalo-personal/zalo-personal.normalizer.js";
 import { type ZaloPersonalStatus } from "../channels/zalo-personal/zalo-personal.schemas.js";
 import { decryptSecret, encryptSecret } from "../common/crypto.js";
 import { AppError } from "../common/errors.js";
+import { ConversationModel } from "../models/conversation.model.js";
+import { CustomerModel } from "../models/customer.model.js";
+import { MessageModel } from "../models/message.model.js";
+import { emitChatEvent, emitInboxEventToRecipients } from "../realtime/socket.js";
+import { toConversation } from "./conversation.service.js";
+import { toMessage } from "./message.service.js";
 
 const QR_TTL_MS = 100_000;
 const LIFECYCLE_LOCK_TTL_MS = 30_000;
@@ -275,6 +283,7 @@ async function completeQrLogin(pending: PendingZaloPersonalSession, api: ZaloPer
     await stopPendingApi(pending, api).catch(() => undefined);
     return;
   }
+  attachZaloPersonalMessageSync(pending.ownerId, api);
   await api.startListener();
   if (!isPendingReady(pending)) {
     await stopPendingApi(pending, api).catch(() => undefined);
@@ -368,6 +377,7 @@ async function restoreZaloPersonalClient(userId: string, encryptedCredentials: s
     const client = createZaloPersonalClient();
     try {
       const api = await client.login(credentials);
+      attachZaloPersonalMessageSync(userId, api);
       await api.startListener();
       await ZaloPersonalSessionModel.updateOne(
         { ownerId: userId },
@@ -383,6 +393,110 @@ async function restoreZaloPersonalClient(userId: string, encryptedCredentials: s
   }
 
   throw lastFailure instanceof Error ? lastFailure : new Error("Unable to restore Zalo personal session");
+}
+
+// Listener chỉ chuyển event đã chuẩn hóa vào cùng luồng lưu trữ, không để payload native rò sang service.
+function attachZaloPersonalMessageSync(userId: string, api: ZaloPersonalApi): void {
+  api.onMessage(async (event) => {
+    const session = await ZaloPersonalSessionModel.findOne({ ownerId: userId, status: "connected", lastErrorCode: null }).lean();
+    if (!session || stringValue(session.ownerId) !== userId) return;
+    const accountId = stringValue(session.zaloUserId);
+    if (!accountId) return;
+
+    const message = normalizeZaloPersonalMessage(event, accountId);
+    if (!message || message.isSelf) return;
+    await ingestZaloPersonalMessage(userId, message);
+  });
+}
+
+// Lưu tin inbound trước realtime để replay không thể phát event hoặc gọi bot lần thứ hai.
+async function ingestZaloPersonalMessage(userId: string, message: NormalizedZaloPersonalMessage): Promise<void> {
+  const session = await ZaloPersonalSessionModel.findOne({ ownerId: userId, status: "connected", lastErrorCode: null }).lean();
+  if (!session || stringValue(session.ownerId) !== userId || message.isSelf) return;
+  if (await MessageModel.exists({ platform: "zalo_personal", externalMessageId: message.externalMessageId })) return;
+
+  const customer = await CustomerModel.findOneAndUpdate(
+    { platform: "zalo_personal", platformId: message.senderId },
+    {
+      $set: {
+        name: message.senderName || "Zalo user",
+        ...(message.avatarUrl ? { avatarUrl: message.avatarUrl } : {})
+      },
+      $setOnInsert: { platform: "zalo_personal", platformId: message.senderId }
+    },
+    { upsert: true, new: true }
+  );
+  const conversation = await ConversationModel.findOneAndUpdate(
+    { platform: "zalo_personal", channelId: message.channelId, ownerId: userId },
+    {
+      $set: {
+        customerId: customer._id,
+        ownerId: userId,
+        conversationType: message.chatType,
+        conversationName: message.chatType === "group" ? message.channelId : null,
+        lastMessageAt: message.sentAt,
+        lastMessageSnippet: message.content
+      }
+    },
+    { upsert: true, new: true }
+  );
+
+  let storedMessage;
+  try {
+    storedMessage = await MessageModel.create({
+      conversationId: conversation._id,
+      platform: "zalo_personal",
+      externalMessageId: message.externalMessageId,
+      senderType: "customer",
+      senderId: message.senderId,
+      type: message.type,
+      content: message.content,
+      deliveryStatus: "delivered",
+      metadata: { senderName: message.senderName || "Zalo user", ...message.metadata }
+    });
+  } catch (error) {
+    if (isDuplicateKey(error)) return;
+    throw error;
+  }
+
+  const updatedConversation = await ConversationModel.findOneAndUpdate(
+    { _id: conversation._id, ownerId: userId },
+    { $inc: { unreadCount: 1 } },
+    { returnDocument: "after" }
+  );
+  if (!updatedConversation) return;
+
+  await updatedConversation.populate("customerId", "name avatarUrl");
+  await updatedConversation.populate("tagIds", "name color");
+  const conversationPayload = toConversation(updatedConversation.toObject(), {
+    name: stringValue(session.displayName),
+    avatarUrl: stringValue(session.avatarUrl)
+  });
+  emitChatEvent("chat:message_received", String(updatedConversation._id), toMessage(storedMessage.toObject()));
+  emitInboxEventToRecipients(
+    "chat:conversation_updated",
+    [userId, updatedConversation.assignedAgentId ? String(updatedConversation.assignedAgentId) : ""],
+    conversationPayload
+  );
+  try {
+    await processTelegramCustomerMessage({
+      ownerId: userId,
+      conversationId: String(updatedConversation._id),
+      customerMessageId: String(storedMessage._id),
+      externalMessageId: message.externalMessageId,
+      platform: "zalo_personal",
+      channelId: message.channelId,
+      senderType: "customer",
+      type: message.type,
+      content: message.content
+    });
+  } catch {
+    // Bot lỗi không được ném lại để native listener replay tin khách đã lưu thành công.
+  }
+}
+
+function isDuplicateKey(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === 11000;
 }
 
 // Hàng đợi FIFO giữ mọi mutation của một owner tuần tự; Redis lease chỉ mở khóa khi đã xác nhận ownership.
