@@ -7,6 +7,7 @@ MVP quản lý inbox chăm sóc khách hàng Telegram và trợ lý RAG. MongoDB
 - Workspace React/Vite + Node/Express/TypeScript.
 - JWT auth và role admin/agent/customer.
 - Dashboard onboarding và kết nối Telegram cá nhân bằng QR MTProto; session chỉ lưu mã hóa ở backend.
+- Backend Zalo cá nhân thử nghiệm qua QR, nhận media metadata và gửi text; credentials chỉ lưu mã hóa ở backend.
 - MongoDB/Mongoose domain models, mã hóa provider secret AES-256-GCM.
 - Telegram webhook có secret và idempotency.
 - Chatbot tự động dùng chung orchestration/delivery cho Telegram Bot và Telegram cá nhân, có template, RAG đúng owner, fallback và bàn giao.
@@ -73,7 +74,28 @@ Lượt gửi bot và chính sách pause của nhân viên dùng chung khóa ato
 
 Knowledge legacy thiếu owner được cách ly khỏi index: startup chỉ nạp chunk có owner khớp document có owner hợp lệ. Chunk thiếu owner, parent thiếu owner/không tồn tại hoặc owner không khớp không được đổi thành chuỗi `undefined`/`null` và không được truy xuất unscoped. Log `KNOWLEDGE_OWNER_QUARANTINED` chỉ ghi số chunk; dữ liệu gốc trong MongoDB giữ nguyên. Để phục hồi, người vận hành đọc các document/chunk thiếu owner hoặc sai liên kết, xác minh nguồn và chủ sở hữu ngoài hệ thống; đăng nhập bằng tài khoản admin của owner đã xác minh rồi gửi lại `title`/`content` qua `POST /api/v1/knowledge`. API lấy owner từ JWT, tạo document/chunk mới có scope; không dùng body `ownerId` hay tự nhận chủ cho bản ghi cũ. Nếu không xác minh được, tiếp tục cách ly. Không có migration xóa/đổi owner hàng loạt; re-ingestion phải là quyết định rõ ràng để tránh nhân bản nhiều lần.
 
-Index hội thoại vẫn duy nhất theo `(platform, channelId)` và tin nhắn theo `(platform, externalMessageId)`, có thể xung đột giữa chat/tài khoản khác nhau; cần thiết kế migration riêng trước triển khai nhiều tài khoản. Facebook, Instagram và Zalo chưa có adapter tự động gửi, dù preview/cấu hình có thể dùng tên nền tảng đó.
+Index hội thoại mới dùng `(platform, channelId, ownerId)`, nhưng database đã tồn tại phải chạy migration Zalo bên dưới trước khi rollout. Index tin nhắn vẫn là `(platform, externalMessageId)`; connector Zalo cá nhân namespace ID inbound theo tài khoản, còn các connector khác vẫn cần đánh giá collision khi triển khai nhiều tài khoản. Facebook và Instagram chưa có adapter tự động gửi; Zalo cá nhân mới ở trạng thái thử nghiệm.
+
+### Zalo cá nhân thử nghiệm
+
+Backend kết nối tài khoản Zalo cá nhân bằng `zca-js`, một API không chính thức mô phỏng Zalo Web. Chỉ bật trên tài khoản thử nghiệm vì Zalo có thể hạn chế hoặc khóa tài khoản. Chưa có xác nhận smoke test bằng tài khoản thật, reconnect WebSocket đầy đủ hoặc UI quản lý production.
+
+Trước khi bật connector, cấu hình `MONGODB_URI`, `ENCRYPTION_KEY` tối thiểu 32 ký tự và `REDIS_URL` dùng chung giữa mọi API process. Credentials được mã hóa AES-256-GCM trong MongoDB; QR chỉ tồn tại tạm thời trong memory. Bốn route sau yêu cầu JWT role `admin` và luôn lấy owner từ JWT:
+
+- `POST /api/v1/channels/zalo-personal/qr`: tạo phiên QR.
+- `GET /api/v1/channels/zalo-personal/qr/:id`: đọc trạng thái QR của owner hiện tại.
+- `GET /api/v1/channels/zalo-personal/status`: đọc trạng thái kết nối.
+- `POST /api/v1/channels/zalo-personal/logout`: dừng listener và xóa session đã lưu.
+
+QR không tạo được chuyển session sang `error` với mã `ZALO_QR_CREATE_FAILED`. Inbound hỗ trợ direct/group text và chuẩn hóa caption, URL/thumbnail cùng metadata an toàn từ attachment; outbound hiện chỉ gửi text.
+
+Với database đã tồn tại, thực hiện theo đúng thứ tự: sao lưu, mở maintenance window, chạy migration rồi mới rollout/restart API:
+
+```bash
+MONGODB_URI='mongodb+srv://...' pnpm --filter api run migrate:zalo-personal-conversation-index
+```
+
+Migration tạo unique index `(platform, channelId, ownerId)` trước khi xóa legacy `(platform, channelId)`, không tự chạy khi startup và có thể chạy lại. Nếu đã có owner-scoped index dùng `partialFilterExpression`, `sparse` hoặc `collation`, migration dừng mà không xóa legacy index; người vận hành phải kiểm tra và sửa index không tương thích trước khi chạy lại.
 
 ### Trả lời nhanh và ảnh Cloudinary
 
@@ -130,7 +152,7 @@ Test Mongo integration cần `MONGODB_TEST_URI` trỏ tới database test riêng
 - Chưa chạy Playwright E2E trên môi trường deploy thật.
 - Redis adapter và Mongo integration cần xác minh trên Atlas/CI sạch.
 - Vector store hiện là adapter in-memory cho MVP; Mongo Atlas Vector Search vẫn là lựa chọn production chưa triển khai.
-- Meta/Instagram OAuth, Zalo, WebRTC và load test thực tế nằm ngoài MVP hiện tại.
+- Meta/Instagram OAuth, Zalo cá nhân production UI/live smoke/reconnect đầy đủ, WebRTC và load test thực tế nằm ngoài MVP hiện tại.
 
 ## Lệnh kiểm tra
 

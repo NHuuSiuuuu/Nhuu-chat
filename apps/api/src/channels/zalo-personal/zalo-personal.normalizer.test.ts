@@ -74,6 +74,51 @@ describe("Zalo personal message normalizer", () => {
     expect(JSON.stringify(result)).not.toContain("do-not-persist");
   });
 
+  it("normalizes caption and safe media fields from a native zca-js attachment object", () => {
+    const result = normalizeZaloPersonalMessage({
+      type: 1,
+      threadId: "group-native-photo",
+      data: {
+        msgId: "message-native-photo",
+        uidFrom: "sender-1",
+        dName: "Khách hàng",
+        ts: "1700000002000",
+        msgType: "chat.photo",
+        content: {
+          title: "Menu mùa thu",
+          description: "Ảnh menu mới",
+          href: "https://cdn.example/menu.jpg",
+          thumb: "https://cdn.example/menu-thumb.jpg",
+          childnumber: 1,
+          action: "",
+          params: JSON.stringify({ width: 1200, height: 800, accessToken: "do-not-persist" }),
+          type: "photo"
+        },
+        propertyExt: { ext: "image/jpeg", color: 0, size: 0, type: 0, subType: 0 }
+      }
+    }, "account-1");
+
+    expect(result).toMatchObject({
+      type: "image",
+      content: "Menu mùa thu",
+      metadata: {
+        messageType: "chat.photo",
+        media: {
+          ext: "image/jpeg",
+          title: "Menu mùa thu",
+          description: "Ảnh menu mới",
+          href: "https://cdn.example/menu.jpg",
+          thumb: "https://cdn.example/menu-thumb.jpg",
+          childnumber: 1,
+          action: "",
+          params: { width: 1200, height: 800 },
+          type: "photo"
+        }
+      }
+    });
+    expect(JSON.stringify(result)).not.toContain("do-not-persist");
+  });
+
   it("returns null for malformed or empty events", () => {
     expect(normalizeZaloPersonalMessage(null, "account-1")).toBeNull();
     expect(normalizeZaloPersonalMessage({}, "account-1")).toBeNull();

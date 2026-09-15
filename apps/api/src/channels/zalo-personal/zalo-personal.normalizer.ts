@@ -21,7 +21,8 @@ export function normalizeZaloPersonalMessage(event: unknown, accountId: string):
   const externalMessageId = stringValue(data.msgId) ?? stringValue(data.cliMsgId);
   const channelId = stringValue(event.threadId);
   const senderId = stringValue(data.uidFrom);
-  const content = typeof data.content === "string" ? data.content : "";
+  const attachment = isPlainRecord(data.content) ? data.content : undefined;
+  const content = typeof data.content === "string" ? data.content : attachmentCaption(attachment);
   if (!externalMessageId || !channelId || !senderId || (!content && !hasMedia(data))) return null;
 
   const isSelf = senderId === accountId;
@@ -29,7 +30,7 @@ export function normalizeZaloPersonalMessage(event: unknown, accountId: string):
   const type = classifyMessage(data);
   const sentAt = parseTimestamp(data.ts);
   if (!sentAt) return null;
-  const media = safeMediaMetadata(data.propertyExt);
+  const media = safeMediaMetadata(data.propertyExt, attachment);
 
   return {
     platform: "zalo_personal",
@@ -81,11 +82,35 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 const SENSITIVE_METADATA_KEY = /token|secret|credential|cookie|authorization|password|session|imei|useragent|api[_-]?key|signature/i;
 const SENSITIVE_METADATA_VALUE = /(?:token|secret|credential|cookie|authorization|password|session|api[_-]?key|signature)=/i;
 
-// Chỉ giữ metadata media là plain object và loại bỏ trường nhạy cảm trước khi lưu payload từ thư viện native.
-function safeMediaMetadata(value: unknown): Record<string, unknown> | undefined {
-  if (!isPlainRecord(value)) return undefined;
-  const metadata = safePlainRecord(value);
+// Lấy title trước description vì đây là hai trường text mà zca-js công bố cho attachment content.
+function attachmentCaption(attachment: Record<string, unknown> | undefined): string {
+  if (!attachment) return "";
+  return stringValue(attachment.title) ?? stringValue(attachment.description) ?? "";
+}
+
+// Gộp metadata định dạng và attachment thật, đồng thời lọc dữ liệu nhạy cảm trước khi persistence.
+function safeMediaMetadata(propertyExt: unknown, attachment: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  const metadata = isPlainRecord(propertyExt) ? safePlainRecord(propertyExt) : {};
+  if (attachment) Object.assign(metadata, safeAttachmentMetadata(attachment));
   return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
+// Params của zca-js là JSON string nên chỉ giữ object đã parse và sanitize, không lưu nguyên chuỗi opaque.
+function safeAttachmentMetadata(attachment: Record<string, unknown>): Record<string, unknown> {
+  const metadata = safePlainRecord(attachment);
+  delete metadata.params;
+  if (typeof attachment.params !== "string") return metadata;
+
+  try {
+    const params = JSON.parse(attachment.params) as unknown;
+    if (isPlainRecord(params)) {
+      const safeParams = safePlainRecord(params);
+      if (Object.keys(safeParams).length > 0) metadata.params = safeParams;
+    }
+  } catch {
+    // Params không phải JSON hợp lệ không đủ an toàn để lưu lại.
+  }
+  return metadata;
 }
 
 function safePlainRecord(value: Record<string, unknown>): Record<string, unknown> {

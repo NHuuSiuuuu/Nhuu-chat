@@ -15,6 +15,9 @@ interface ConversationIndex {
   name: string;
   key: ConversationIndexKey;
   unique?: boolean;
+  sparse?: boolean;
+  partialFilterExpression?: Record<string, unknown>;
+  collation?: Record<string, unknown>;
 }
 
 export interface ConversationIndexCollection {
@@ -41,13 +44,25 @@ function hasExactIndexKey(index: ConversationIndex, expected: ConversationIndexK
   );
 }
 
+// Chỉ chấp nhận index unique phủ toàn bộ collection với comparison mặc định như index migration tạo ra.
+function hasCompatibleOwnerScopedOptions(index: ConversationIndex): boolean {
+  return index.unique === true
+    && index.sparse !== true
+    && index.partialFilterExpression === undefined
+    && index.collation === undefined;
+}
+
 export async function migrateConversationOwnerScopedIndex(
   collection: ConversationIndexCollection
 ): Promise<ConversationOwnerIndexMigrationResult> {
   const indexes = await collection.listIndexes().toArray();
-  const ownerScopedIndexExists = indexes.some(
-    (index) => index.unique === true && hasExactIndexKey(index, OWNER_SCOPED_CONVERSATION_UNIQUE_INDEX)
+  const ownerScopedIndexes = indexes.filter(
+    (index) => hasExactIndexKey(index, OWNER_SCOPED_CONVERSATION_UNIQUE_INDEX)
   );
+  if (ownerScopedIndexes.some((index) => !hasCompatibleOwnerScopedOptions(index))) {
+    throw new Error("Existing owner-scoped conversation index has incompatible options");
+  }
+  const ownerScopedIndexExists = ownerScopedIndexes.length > 0;
   const legacyIndexes = indexes.filter(
     (index) => index.unique === true && hasExactIndexKey(index, LEGACY_CONVERSATION_UNIQUE_INDEX)
   );

@@ -129,6 +129,22 @@ describe("Zalo personal QR session lifecycle", () => {
     completeLogin();
   });
 
+  it("reports the approved QR creation error code when native QR login rejects", async () => {
+    const failedClient = createQrClient();
+    failedClient.loginQR.mockRejectedValue(new Error("native QR generation failed"));
+    dependencies.createClient.mockReturnValue(failedClient);
+    const { getZaloPersonalSessionStatus, startZaloPersonalQr } = await import("./zalo-personal.service.js");
+
+    await startZaloPersonalQr("owner-qr-create-failure");
+    await flushLifecycleQueue();
+
+    expect(await getZaloPersonalSessionStatus("owner-qr-create-failure")).toEqual({
+      id: expect.any(String),
+      status: "error",
+      errorCode: "ZALO_QR_CREATE_FAILED"
+    });
+  });
+
   it("marks the QR session connected and persists only encrypted credentials after login", async () => {
     const { getZaloPersonalQrStatus, startZaloPersonalQr } = await import("./zalo-personal.service.js");
 

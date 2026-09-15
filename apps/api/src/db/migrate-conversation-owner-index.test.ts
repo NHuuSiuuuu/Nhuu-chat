@@ -62,4 +62,33 @@ describe("migrateConversationOwnerScopedIndex", () => {
     expect(collection.createIndex).not.toHaveBeenCalled();
     expect(collection.dropIndex).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ["partial", { partialFilterExpression: { platform: "telegram" } }],
+    ["sparse", { sparse: true }],
+    ["collated", { collation: { locale: "vi" } }]
+  ])("fails safely when the existing owner-scoped index is %s", async (_label, incompatibleOptions) => {
+    const collection = {
+      listIndexes: () => ({
+        toArray: async () => [
+          { name: "platform_1_channelId_1", key: LEGACY_CONVERSATION_UNIQUE_INDEX, unique: true },
+          {
+            name: "platform_1_channelId_1_ownerId_1",
+            key: OWNER_SCOPED_CONVERSATION_UNIQUE_INDEX,
+            unique: true,
+            ...incompatibleOptions
+          }
+        ]
+      }),
+      createIndex: vi.fn(),
+      dropIndex: vi.fn()
+    };
+
+    await expect(migrateConversationOwnerScopedIndex(collection)).rejects.toThrow(
+      "Existing owner-scoped conversation index has incompatible options"
+    );
+
+    expect(collection.createIndex).not.toHaveBeenCalled();
+    expect(collection.dropIndex).not.toHaveBeenCalled();
+  });
 });

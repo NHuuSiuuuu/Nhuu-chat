@@ -631,7 +631,7 @@ async function recordLogoutStopFailure(userId: string, pending: PendingZaloPerso
 async function recordQrLoginFailure(pending: PendingZaloPersonalSession): Promise<void> {
   if (!isPendingReady(pending)) return;
   pending.status = "error";
-  pending.errorCode = "ZALO_PERSONAL_LOGIN_FAILED";
+  pending.errorCode = "ZALO_QR_CREATE_FAILED";
   await pending.client.disconnect().catch(() => undefined);
 }
 
