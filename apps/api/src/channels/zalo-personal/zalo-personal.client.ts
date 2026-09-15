@@ -6,7 +6,11 @@ type ZcaCredentials = {
   userAgent: string;
   language?: string;
 };
-type ZcaQrEvent = { type: number; data: { image: string } | null };
+type ZcaQrEvent = {
+  type: number;
+  data: { image: string } | null;
+  actions?: { abort?: () => unknown } | null;
+};
 type ZcaThreadType = 0 | 1;
 type ZcaConstructor = new (options?: { selfListen?: boolean }) => { loginQR(options: Record<string, never>, callback: (event: ZcaQrEvent) => unknown): Promise<ZcaApi>; login(credentials: ZcaCredentials): Promise<ZcaApi> };
 const ZaloConstructor = (zca as unknown as { Zalo: ZcaConstructor }).Zalo;
@@ -47,16 +51,23 @@ export function createZaloPersonalClient(options: ZcaClientOptions = {}): ZaloPe
 
 class ZaloPersonalClientAdapter implements ZaloPersonalClient {
   private activeApi: ZaloPersonalApi | undefined;
+  private abortQrLogin: (() => unknown) | undefined;
 
   constructor(private readonly createZca: NonNullable<ZcaClientOptions["zcaFactory"]>) {}
 
   async loginQR(onQr: (payload: { qrData: string; expiresAt: Date }) => void): Promise<ZaloPersonalApi> {
-    const zcaApi = await this.createZca().loginQR({}, (event) => {
-      if (event.type !== 0 || !event.data) return;
-      onQr({ qrData: event.data.image, expiresAt: new Date(Date.now() + 100_000) });
-    });
-    this.activeApi = this.wrapApi(zcaApi);
-    return this.activeApi;
+    try {
+      const zcaApi = await this.createZca().loginQR({}, (event) => {
+        // Giữ action abort nội bộ để disconnect hủy được native QR đang chờ quét.
+        if (typeof event.actions?.abort === "function") this.abortQrLogin = event.actions.abort;
+        if (event.type !== 0 || !event.data) return;
+        onQr({ qrData: event.data.image, expiresAt: new Date(Date.now() + 100_000) });
+      });
+      this.activeApi = this.wrapApi(zcaApi);
+      return this.activeApi;
+    } finally {
+      this.abortQrLogin = undefined;
+    }
   }
 
   async login(credentials: unknown): Promise<ZaloPersonalApi> {
@@ -66,6 +77,9 @@ class ZaloPersonalClientAdapter implements ZaloPersonalClient {
   }
 
   async disconnect(): Promise<void> {
+    const abort = this.abortQrLogin;
+    this.abortQrLogin = undefined;
+    abort?.();
     if (!this.activeApi) return;
     await this.activeApi.stopListener();
     this.activeApi = undefined;

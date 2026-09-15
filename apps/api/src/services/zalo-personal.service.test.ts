@@ -152,7 +152,7 @@ describe("Zalo personal QR session lifecycle", () => {
   });
 
   it("keeps the connected owner and encrypted session when listener shutdown fails", async () => {
-    const { getActiveZaloPersonalClient, logoutZaloPersonal, startZaloPersonalQr } = await import("./zalo-personal.service.js");
+    const { getActiveZaloPersonalClient, getZaloPersonalSessionStatus, logoutZaloPersonal, startZaloPersonalQr } = await import("./zalo-personal.service.js");
     const connectedQr = await startZaloPersonalQr("owner-stop-failure");
     await Promise.resolve();
     await Promise.resolve();
@@ -166,6 +166,7 @@ describe("Zalo personal QR session lifecycle", () => {
       { ownerId: "owner-stop-failure" },
       { $set: { status: "error", lastErrorCode: "ZALO_PERSONAL_LOGOUT_STOP_FAILED" } }
     );
+    expect((await getZaloPersonalSessionStatus("owner-stop-failure")).status).toBe("error");
     expect(connectedQr.id).toBeTypeOf("string");
   });
 
@@ -174,7 +175,7 @@ describe("Zalo personal QR session lifecycle", () => {
     dependencies.createClient.mockReturnValue(restoredClient);
     dependencies.findOne.mockImplementation(() => ({
       select: () => ({ lean: async () => ({ encryptedCredentials: "ciphertext:stored", status: "connected" }) }),
-      lean: async () => ({ _id: "session-restore", status: "error", lastErrorCode: "ZALO_PERSONAL_LOGOUT_STOP_FAILED" })
+      lean: async () => ({ _id: "session-restore", status: "connected" })
     }));
     dependencies.decryptSecret.mockReturnValue(JSON.stringify({ imei: "imei-1" }));
     const { getActiveZaloPersonalClient, logoutZaloPersonal, startZaloPersonalQr } = await import("./zalo-personal.service.js");
@@ -233,6 +234,86 @@ describe("Zalo personal QR session lifecycle", () => {
     expect(dependencies.deleteOne).toHaveBeenCalledWith({ ownerId: "owner-logout-race" });
   });
 
+  it("waits for a canceled native QR login before allowing a replacement", async () => {
+    let resolveOldLogin!: (value: typeof api) => void;
+    const oldClient = createQrClient();
+    oldClient.loginQR.mockImplementation(async (onQr) => {
+      onQr({ qrData: "data:image/png;base64,old", expiresAt: new Date("2026-09-15T16:01:40.000Z") });
+      return new Promise<typeof api>((resolve) => { resolveOldLogin = resolve; });
+    });
+    const replacementClient = createQrClient();
+    replacementClient.loginQR.mockImplementation(async (onQr) => {
+      onQr({ qrData: "data:image/png;base64,replacement", expiresAt: new Date("2026-09-15T16:03:00.000Z") });
+      await new Promise<void>(() => undefined);
+      return api;
+    });
+    dependencies.createClient
+      .mockReturnValueOnce(oldClient)
+      .mockReturnValueOnce(replacementClient);
+    const { logoutZaloPersonal, startZaloPersonalQr } = await import("./zalo-personal.service.js");
+
+    await startZaloPersonalQr("owner-unresolved-login");
+    let logoutFinished = false;
+    const logout = logoutZaloPersonal("owner-unresolved-login").then(() => { logoutFinished = true; });
+    const replacement = startZaloPersonalQr("owner-unresolved-login");
+    await Promise.resolve();
+    expect(logoutFinished).toBe(false);
+    expect(replacementClient.loginQR).not.toHaveBeenCalled();
+
+    resolveOldLogin(api);
+    await logout;
+    const nextQr = await replacement;
+
+    expect(nextQr).toMatchObject({ status: "waiting_qr", qrData: "data:image/png;base64,replacement" });
+    expect(api.startListener).not.toHaveBeenCalled();
+    expect(dependencies.findOneAndUpdate).not.toHaveBeenCalledWith(
+      { ownerId: "owner-unresolved-login" },
+      expect.anything(),
+      expect.anything()
+    );
+    expect(api.stopListener).toHaveBeenCalledOnce();
+  });
+
+  it("discards a QR API that expires while account lookup is blocked", async () => {
+    let finishAccountLookup!: () => void;
+    const expiringClient = createQrClient();
+    expiringClient.loginQR.mockImplementation(async (onQr) => {
+      onQr({ qrData: "data:image/png;base64,expiring", expiresAt: new Date("2026-09-15T16:01:40.000Z") });
+      return api;
+    });
+    const replacementClient = createQrClient();
+    replacementClient.loginQR.mockImplementation(async (onQr) => {
+      onQr({ qrData: "data:image/png;base64,replacement", expiresAt: new Date("2026-09-15T16:03:00.000Z") });
+      await new Promise<void>(() => undefined);
+      return api;
+    });
+    dependencies.createClient
+      .mockReturnValueOnce(expiringClient)
+      .mockReturnValueOnce(replacementClient);
+    api.getAccountInfo.mockImplementation(() => new Promise((resolve) => {
+      finishAccountLookup = () => resolve({ id: "zalo-1", displayName: "Nhuu", username: "nhuu" });
+    }));
+    const { getZaloPersonalQrStatus, startZaloPersonalQr } = await import("./zalo-personal.service.js");
+
+    const qr = await startZaloPersonalQr("owner-expire-during-account");
+    await Promise.resolve();
+    await Promise.resolve();
+    vi.setSystemTime(new Date("2026-09-15T16:01:41.000Z"));
+    expect(getZaloPersonalQrStatus(qr.id, "owner-expire-during-account").status).toBe("expired");
+    finishAccountLookup();
+    await flushLifecycleQueue();
+    const replacement = await startZaloPersonalQr("owner-expire-during-account");
+
+    expect(api.startListener).not.toHaveBeenCalled();
+    expect(dependencies.findOneAndUpdate).not.toHaveBeenCalledWith(
+      { ownerId: "owner-expire-during-account" },
+      expect.anything(),
+      expect.anything()
+    );
+    expect(replacement).toMatchObject({ status: "waiting_qr", qrData: "data:image/png;base64,replacement" });
+    expect(api.stopListener).toHaveBeenCalledOnce();
+  });
+
   it("replaces a QR after status polling has observed its expiry", async () => {
     let finishFirstLogin!: () => void;
     const firstClient = createQrClient();
@@ -254,7 +335,11 @@ describe("Zalo personal QR session lifecycle", () => {
     const first = await startZaloPersonalQr("owner-expired");
     vi.setSystemTime(new Date("2026-09-15T16:01:41.000Z"));
     expect(getZaloPersonalQrStatus(first.id, "owner-expired").status).toBe("expired");
-    const replacement = await startZaloPersonalQr("owner-expired");
+    const replacementPromise = startZaloPersonalQr("owner-expired");
+    await Promise.resolve();
+    expect(replacementClient.loginQR).not.toHaveBeenCalled();
+    finishFirstLogin();
+    const replacement = await replacementPromise;
 
     expect(replacement.id).not.toBe(first.id);
     expect(replacement).toMatchObject({ status: "waiting_qr", qrData: "data:image/png;base64,replacement" });

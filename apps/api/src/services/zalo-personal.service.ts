@@ -34,10 +34,15 @@ type PendingZaloPersonalSession = {
   username?: string;
   zaloUserId?: string;
   errorCode?: string;
+  cancelled: boolean;
+  loginTask?: Promise<void>;
+  api?: ZaloPersonalApi;
+  apiStopTask?: Promise<void>;
 };
 
 const pendingSessionsByOwner = new Map<string, PendingZaloPersonalSession>();
 const activeClientsByOwner = new Map<string, ZaloPersonalApi>();
+const runtimeErrorsByOwner = new Map<string, string>();
 const ownerLifecycleTails = new Map<string, Promise<void>>();
 let redisLock: ZaloPersonalRedisLock | undefined;
 
@@ -54,11 +59,10 @@ export async function startZaloPersonalQr(userId: string): Promise<ZaloPersonalQ
 
     const existing = pendingSessionsByOwner.get(userId);
     if (existing && (existing.status === "expired" || isExpired(existing.expiresAt))) {
-      pendingSessionsByOwner.delete(userId);
       try {
-        await existing.client.disconnect();
+        await disposePendingQr(existing, "expired", "ZALO_PERSONAL_QR_EXPIRED");
+        pendingSessionsByOwner.delete(userId);
       } catch {
-        pendingSessionsByOwner.set(userId, existing);
         existing.status = "error";
         existing.errorCode = "ZALO_PERSONAL_QR_DISPOSE_FAILED";
         throw new AppError(503, "ZALO_PERSONAL_QR_DISPOSE_FAILED", "Zalo personal QR is temporarily unavailable");
@@ -72,12 +76,19 @@ export async function startZaloPersonalQr(userId: string): Promise<ZaloPersonalQ
       ownerId: userId,
       client: createZaloPersonalClient(),
       status: "waiting_qr",
-      expiresAt: new Date(Date.now() + QR_TTL_MS)
+      expiresAt: new Date(Date.now() + QR_TTL_MS),
+      cancelled: false
     };
     pendingSessionsByOwner.set(userId, pending);
 
     // Adapter chạy nền để callback QR có thể trả về ngay cả khi người dùng chưa quét mã.
-    void runQrLogin(pending);
+    const login = pending.client.loginQR((payload) => {
+      if (!isPendingReady(pending)) return;
+      pending.qrData = payload.qrData;
+      pending.expiresAt = payload.expiresAt;
+    });
+    pending.loginTask = runQrLogin(pending, login);
+    void pending.loginTask;
 
     return toQrStatus(pending);
   });
@@ -97,6 +108,9 @@ export function getZaloPersonalQrStatus(id: string, userId: string): ZaloPersona
 }
 
 export async function getZaloPersonalSessionStatus(userId: string): Promise<ZaloPersonalStatus> {
+  const runtimeError = runtimeErrorsByOwner.get(userId);
+  if (runtimeError) return { id: userId, status: "error", errorCode: runtimeError };
+
   const pending = pendingSessionsByOwner.get(userId);
   if (pending) return toQrStatus(pending);
 
@@ -117,14 +131,15 @@ export async function logoutZaloPersonal(userId: string): Promise<void> {
     try {
       // Khi QR đã connected, active API là nguồn listener duy nhất để không stop hai lần qua adapter.
       if (active) await active.stopListener();
-      else await pending?.client.disconnect();
+      else if (pending) await disposePendingQr(pending, "error", "ZALO_PERSONAL_QR_CANCELLED");
     } catch {
-      await recordLogoutStopFailure(userId);
+      await recordLogoutStopFailure(userId, pending);
       throw new AppError(503, "ZALO_PERSONAL_LOGOUT_FAILED", "Zalo personal logout is temporarily unavailable");
     }
 
     pendingSessionsByOwner.delete(userId);
     activeClientsByOwner.delete(userId);
+    runtimeErrorsByOwner.delete(userId);
     await ZaloPersonalSessionModel.deleteOne({ ownerId: userId });
   });
 }
@@ -176,37 +191,51 @@ export async function shutdownActiveZaloPersonalClients(): Promise<void> {
 
   const active = [...activeClientsByOwner.values()];
   activeClientsByOwner.clear();
+  runtimeErrorsByOwner.clear();
   await Promise.all(active.map((client) => client.stopListener().catch(() => undefined)));
 }
 
-// Đưa cả completion và failure vào hàng đợi owner để logout không thể bị completion ghi đè sau đó.
-async function runQrLogin(pending: PendingZaloPersonalSession): Promise<void> {
-  let api: ZaloPersonalApi | undefined;
+// Theo dõi native login ngoài queue nhưng đưa completion vào queue sau khi đã kiểm tra cancellation.
+async function runQrLogin(pending: PendingZaloPersonalSession, login: Promise<ZaloPersonalApi>): Promise<void> {
   try {
-    api = await pending.client.loginQR((payload) => {
-      if (pendingSessionsByOwner.get(pending.ownerId)?.id !== pending.id) return;
-      pending.qrData = payload.qrData;
-      pending.expiresAt = payload.expiresAt;
-    });
-    await runOwnerLifecycle(pending.ownerId, () => completeQrLogin(pending, api!));
+    const api = await login;
+    pending.api = api;
+    if (!isPendingReady(pending)) {
+      await stopPendingApi(pending, api);
+      return;
+    }
+    await runOwnerLifecycle(pending.ownerId, () => completeQrLogin(pending, api));
   } catch {
-    await runOwnerLifecycle(pending.ownerId, () => recordQrLoginFailure(pending, api));
+    if (pending.cancelled) return;
+    await runOwnerLifecycle(pending.ownerId, () => recordQrLoginFailure(pending));
   }
 }
 
 // Hoàn tất sau loginQR: listener chỉ được đánh dấu active sau khi credential đã mã hóa được ghi thành công.
 async function completeQrLogin(pending: PendingZaloPersonalSession, api: ZaloPersonalApi): Promise<void> {
-  if (pendingSessionsByOwner.get(pending.ownerId)?.id !== pending.id) {
-    await api.stopListener().catch(() => undefined);
+  if (!isPendingReady(pending)) {
+    await stopPendingApi(pending, api).catch(() => undefined);
     return;
   }
 
   const account = await api.getAccountInfo();
+  if (!isPendingReady(pending)) {
+    await stopPendingApi(pending, api).catch(() => undefined);
+    return;
+  }
   const zaloUserId = stringValue(account.id);
   const credentials = JSON.stringify(api.getContext().credentials);
   if (!zaloUserId || !credentials) throw new Error("Zalo login response is incomplete");
 
+  if (!isPendingReady(pending)) {
+    await stopPendingApi(pending, api).catch(() => undefined);
+    return;
+  }
   await api.startListener();
+  if (!isPendingReady(pending)) {
+    await stopPendingApi(pending, api).catch(() => undefined);
+    return;
+  }
   await ZaloPersonalSessionModel.findOneAndUpdate(
     { ownerId: pending.ownerId },
     {
@@ -232,6 +261,7 @@ async function completeQrLogin(pending: PendingZaloPersonalSession, api: ZaloPer
   pending.zaloUserId = zaloUserId;
   pending.displayName = nullableString(account.displayName) ?? undefined;
   pending.username = nullableString(account.username) ?? undefined;
+  runtimeErrorsByOwner.delete(pending.ownerId);
   activeClientsByOwner.set(pending.ownerId, api);
 }
 
@@ -249,6 +279,7 @@ async function restoreZaloPersonalClient(userId: string, encryptedCredentials: s
         { ownerId: userId },
         { $set: { status: "connected", lastSeenAt: new Date(), lastErrorCode: null } }
       );
+      runtimeErrorsByOwner.delete(userId);
       activeClientsByOwner.set(userId, api);
       return api;
     } catch (error) {
@@ -284,7 +315,14 @@ function runOwnerLifecycle<T>(userId: string, operation: () => Promise<T>): Prom
 }
 
 // Chỉ ghi mã lỗi ổn định, không lưu nguyên nhân có thể chứa dữ liệu từ thư viện bên ngoài.
-async function recordLogoutStopFailure(userId: string): Promise<void> {
+async function recordLogoutStopFailure(userId: string, pending: PendingZaloPersonalSession | undefined): Promise<void> {
+  runtimeErrorsByOwner.set(userId, "ZALO_PERSONAL_LOGOUT_STOP_FAILED");
+  if (pending) {
+    pending.cancelled = true;
+    pending.status = "error";
+    pending.qrData = undefined;
+    pending.errorCode = "ZALO_PERSONAL_LOGOUT_STOP_FAILED";
+  }
   await ZaloPersonalSessionModel.updateOne(
     { ownerId: userId },
     { $set: { status: "error", lastErrorCode: "ZALO_PERSONAL_LOGOUT_STOP_FAILED" } }
@@ -292,14 +330,35 @@ async function recordLogoutStopFailure(userId: string): Promise<void> {
 }
 
 // Login lỗi sau logout chỉ dọn API vừa tạo; không được tạo lại pending hay session đã bị xóa.
-async function recordQrLoginFailure(pending: PendingZaloPersonalSession, api: ZaloPersonalApi | undefined): Promise<void> {
-  if (pendingSessionsByOwner.get(pending.ownerId)?.id !== pending.id) {
-    await api?.stopListener().catch(() => undefined);
-    return;
-  }
+async function recordQrLoginFailure(pending: PendingZaloPersonalSession): Promise<void> {
+  if (!isPendingReady(pending)) return;
   pending.status = "error";
   pending.errorCode = "ZALO_PERSONAL_LOGIN_FAILED";
   await pending.client.disconnect().catch(() => undefined);
+}
+
+// Hủy QR cũ rồi chờ task native dừng hẳn để không có hai login cùng owner chạy song song.
+async function disposePendingQr(pending: PendingZaloPersonalSession, status: PublicStatus, errorCode: string): Promise<void> {
+  pending.cancelled = true;
+  pending.status = status;
+  pending.qrData = undefined;
+  pending.errorCode = errorCode;
+  if (pending.api) await stopPendingApi(pending, pending.api);
+  else await pending.client.disconnect();
+  await pending.loginTask;
+}
+
+// Dùng một stop promise để completion, logout và thay QR không stop cùng API hai lần.
+function stopPendingApi(pending: PendingZaloPersonalSession, api: ZaloPersonalApi): Promise<void> {
+  pending.apiStopTask ??= api.stopListener();
+  return pending.apiStopTask;
+}
+
+function isPendingReady(pending: PendingZaloPersonalSession): boolean {
+  return pendingSessionsByOwner.get(pending.ownerId)?.id === pending.id
+    && !pending.cancelled
+    && pending.status === "waiting_qr"
+    && !isExpired(pending.expiresAt);
 }
 
 function toQrStatus(session: PendingZaloPersonalSession): ZaloPersonalQrStatus {

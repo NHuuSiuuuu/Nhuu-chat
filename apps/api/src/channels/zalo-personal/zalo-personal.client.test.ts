@@ -62,4 +62,24 @@ describe("Zalo personal client adapter", () => {
     await createZaloPersonalClient().loginQR(vi.fn());
     expect(nativeConstruction.options.at(-1)).toEqual({ selfListen: true });
   });
+
+  it("aborts an unresolved native QR login when the adapter disconnects", async () => {
+    let rejectNativeLogin!: (error: Error) => void;
+    const abort = vi.fn(() => rejectNativeLogin(new Error("QR login aborted")));
+    const zca = {
+      loginQR: vi.fn((_options: unknown, callback: (event: unknown) => void) => {
+        callback({ type: 0, data: { image: "data:image/png;base64,qr" }, actions: { abort } });
+        return new Promise<never>((_resolve, reject) => { rejectNativeLogin = reject; });
+      }),
+      login: vi.fn()
+    };
+    const client = createZaloPersonalClient({ zcaFactory: () => zca });
+
+    const login = client.loginQR(vi.fn());
+    await Promise.resolve();
+    await client.disconnect();
+
+    expect(abort).toHaveBeenCalledOnce();
+    await expect(login).rejects.toThrow("QR login aborted");
+  });
 });
