@@ -831,6 +831,45 @@ describe("Zalo personal inbound message persistence", () => {
     }));
   });
 
+  it("inbound media-only messages persist safe metadata and emit without crashing", async () => {
+    const conversation = conversationDocument();
+    dependencies.conversationFindOneAndUpdate.mockResolvedValue(conversation);
+    dependencies.messageCreate.mockImplementation(async (input: Record<string, unknown>) => ({
+      _id: "message-media-1",
+      createdAt: new Date("2026-09-15T16:00:00.000Z"),
+      toObject() { return { ...input, _id: this._id, createdAt: this.createdAt }; }
+    }));
+    const listener = await startInboundListener();
+
+    await expect(listener(directEvent({
+      msgId: "zalo-media-1",
+      content: "",
+      msgType: "photo",
+      propertyExt: {
+        url: "https://cdn.example/photo.jpg",
+        fileName: "photo.jpg",
+        accessToken: "do-not-persist"
+      }
+    }))).resolves.toBeUndefined();
+
+    expect(dependencies.messageCreate).toHaveBeenCalledWith(expect.objectContaining({
+      externalMessageId: "zalo_personal:zalo-account:zalo-media-1",
+      type: "image",
+      content: "",
+      metadata: {
+        senderName: "Khách hàng",
+        messageType: "photo",
+        media: { url: "https://cdn.example/photo.jpg", fileName: "photo.jpg" }
+      }
+    }));
+    expect(dependencies.emitChatEvent).toHaveBeenCalledWith("chat:message_received", "conversation-1", expect.objectContaining({
+      type: "image", content: ""
+    }));
+    expect(dependencies.processTelegramCustomerMessage).toHaveBeenCalledWith(expect.objectContaining({
+      externalMessageId: "zalo-media-1", type: "image", content: ""
+    }));
+  });
+
   it("inbound duplicate external ids do not increment unread or re-emit events", async () => {
     dependencies.messageExists.mockResolvedValue(true);
     const listener = await startInboundListener();

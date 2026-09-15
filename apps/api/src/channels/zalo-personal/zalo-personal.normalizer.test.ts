@@ -43,6 +43,37 @@ describe("Zalo personal message normalizer", () => {
     });
   });
 
+  it("preserves safe metadata for media-only messages without retaining secrets", () => {
+    const result = normalizeZaloPersonalMessage({
+      type: 0,
+      threadId: "thread-media",
+      data: {
+        msgId: "message-media-1",
+        uidFrom: "sender-1",
+        content: "",
+        ts: 1700000001000,
+        msgType: "photo",
+        propertyExt: {
+          url: "https://cdn.example/photo.jpg",
+          fileName: "photo.jpg",
+          width: 1200,
+          accessToken: "do-not-persist",
+          cookie: "do-not-persist"
+        }
+      }
+    }, "account-1");
+
+    expect(result).toMatchObject({
+      type: "image",
+      content: "",
+      metadata: {
+        messageType: "photo",
+        media: { url: "https://cdn.example/photo.jpg", fileName: "photo.jpg", width: 1200 }
+      }
+    });
+    expect(JSON.stringify(result)).not.toContain("do-not-persist");
+  });
+
   it("returns null for malformed or empty events", () => {
     expect(normalizeZaloPersonalMessage(null, "account-1")).toBeNull();
     expect(normalizeZaloPersonalMessage({}, "account-1")).toBeNull();

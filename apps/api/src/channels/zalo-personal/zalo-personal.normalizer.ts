@@ -29,6 +29,7 @@ export function normalizeZaloPersonalMessage(event: unknown, accountId: string):
   const type = classifyMessage(data);
   const sentAt = parseTimestamp(data.ts);
   if (!sentAt) return null;
+  const media = safeMediaMetadata(data.propertyExt);
 
   return {
     platform: "zalo_personal",
@@ -42,7 +43,7 @@ export function normalizeZaloPersonalMessage(event: unknown, accountId: string):
     sentAt,
     chatType,
     isSelf,
-    metadata: { messageType: data.msgType }
+    metadata: { messageType: data.msgType, ...(media ? { media } : {}) }
   };
 }
 
@@ -75,4 +76,36 @@ function parseTimestamp(value: unknown): Date | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+const SENSITIVE_METADATA_KEY = /token|secret|credential|cookie|authorization|password|session|imei|useragent|api[_-]?key|signature/i;
+const SENSITIVE_METADATA_VALUE = /(?:token|secret|credential|cookie|authorization|password|session|api[_-]?key|signature)=/i;
+
+// Chỉ giữ metadata media là plain object và loại bỏ trường nhạy cảm trước khi lưu payload từ thư viện native.
+function safeMediaMetadata(value: unknown): Record<string, unknown> | undefined {
+  if (!isPlainRecord(value)) return undefined;
+  const metadata = safePlainRecord(value);
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
+function safePlainRecord(value: Record<string, unknown>): Record<string, unknown> {
+  const safe: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (SENSITIVE_METADATA_KEY.test(key)) continue;
+    if (typeof entry === "string") {
+      if (!SENSITIVE_METADATA_VALUE.test(entry)) safe[key] = entry;
+    } else if (typeof entry === "number" || typeof entry === "boolean" || entry === null) {
+      safe[key] = entry;
+    } else if (isPlainRecord(entry)) {
+      const nested = safePlainRecord(entry);
+      if (Object.keys(nested).length > 0) safe[key] = nested;
+    }
+  }
+  return safe;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
