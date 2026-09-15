@@ -61,7 +61,14 @@ describe("getConversationReplySuggestions", () => {
   it("uses the six newest messages with sender labels and chronological order", async () => {
     const result = await getConversationReplySuggestions("conversation-1", adminAuth);
 
-    expect(conversationModelMocks.findOne).toHaveBeenCalledWith({ _id: "conversation-1" });
+    expect(conversationModelMocks.findOne).toHaveBeenCalledWith({
+      _id: "conversation-1",
+      $or: [
+        { platform: { $ne: "zalo_personal" } },
+        { ownerId: "admin-1" },
+        { assignedAgentId: "admin-1" }
+      ]
+    });
     expect(messageModelMocks.find).toHaveBeenCalledWith({ conversationId: "conversation-1" });
     expect(messageModelMocks.find().sort).toHaveBeenCalledWith({ createdAt: -1, _id: -1 });
     expect(messageModelMocks.find().limit).toHaveBeenCalledWith(6);

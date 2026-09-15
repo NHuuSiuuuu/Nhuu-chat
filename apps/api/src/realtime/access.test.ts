@@ -25,6 +25,32 @@ describe("conversation realtime access", () => {
   it("builds a conversation scope for each inbox role", () => {
     expect(conversationAccessFilter({ id: "user-1", role: "customer" })).toEqual({ ownerId: "user-1" });
     expect(conversationAccessFilter({ id: "agent-1", role: "agent" })).toEqual({ assignedAgentId: "agent-1" });
-    expect(conversationAccessFilter({ id: "admin-1", role: "admin" })).toEqual({});
+    expect(conversationAccessFilter({ id: "admin-1", role: "admin" })).toEqual({
+      $or: [
+        { platform: { $ne: "zalo_personal" } },
+        { ownerId: "admin-1" },
+        { assignedAgentId: "admin-1" }
+      ]
+    });
+  });
+
+  it("isolates Zalo personal rooms by owner while preserving admin access to existing platforms", () => {
+    const admin = { id: "admin-2", role: "admin" };
+
+    expect(canJoinConversation(admin, {
+      platform: "zalo_personal",
+      ownerId: "admin-1",
+      assignedAgentId: null
+    })).toBe(false);
+    expect(canJoinConversation(admin, {
+      platform: "zalo_personal",
+      ownerId: "admin-1",
+      assignedAgentId: "admin-2"
+    })).toBe(true);
+    expect(canJoinConversation(admin, {
+      platform: "telegram",
+      ownerId: "admin-1",
+      assignedAgentId: null
+    })).toBe(true);
   });
 });

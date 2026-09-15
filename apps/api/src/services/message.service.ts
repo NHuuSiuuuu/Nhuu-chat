@@ -8,6 +8,16 @@ import type { AuthUser } from "./auth.service.js";
 import { toConversation } from "./conversation.service.js";
 import { readProviderSecretByName } from "./provider-secret.service.js";
 
+type ZaloConversationType = "private" | "group";
+type ZaloOutboundClient = {
+  getAccountInfo: () => Promise<{ id?: unknown }>;
+  sendMessage: (
+    threadId: string,
+    content: string,
+    conversationType: ZaloConversationType
+  ) => Promise<{ id: string }>;
+};
+
 async function resolveTelegramPersonalRecipient(client: {
   getEntity: (channelId: string) => Promise<unknown>;
   getDialogs: (options: { limit: number }) => Promise<Array<{ id?: unknown; entity?: unknown }>>;
@@ -53,6 +63,7 @@ export async function createOutboundMessage(input: { conversationId: string; pla
   return MessageModel.create({ ...input, senderType: "agent", type: "text" });
 }
 
+// Kiểm tra quyền, gửi qua đúng connector và luôn lưu trạng thái truy vết của lần gửi Zalo cá nhân.
 export async function sendOutboundMessage(
   input: { conversationId: string; content: string },
   auth?: AuthUser
@@ -64,7 +75,7 @@ export async function sendOutboundMessage(
   if (!conversation) {
     throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
   }
-  if (!auth || !canJoinConversation(auth, conversation)) {
+  if (!auth) {
     throw new AppError(403, "FORBIDDEN", "You do not have access to this conversation");
   }
 
@@ -75,6 +86,9 @@ export async function sendOutboundMessage(
       "FORBIDDEN",
       conversation.platform === "telegram_personal" ? "You do not own this Telegram connection" : "You do not own this Zalo connection"
     );
+  }
+  if (!canJoinConversation(auth, conversation)) {
+    throw new AppError(403, "FORBIDDEN", "You do not have access to this conversation");
   }
   // Tạm dừng bot sau kiểm tra quyền và trước connector để nhân viên tiếp quản cả khi gửi bị lỗi.
   await pauseBot(conversationId, new Date());
@@ -99,9 +113,27 @@ export async function sendOutboundMessage(
       if (!client) {
         throw new AppError(409, "ZALO_PERSONAL_DISCONNECTED", "Zalo personal session is not active");
       }
-      const sent = await client.sendMessage(conversation.channelId, content);
-      externalMessageId = sent.id;
+      const account = await client.getAccountInfo();
+      const zaloAccountId = String(account.id ?? "").trim();
+      if (!zaloAccountId) throw new Error("Zalo personal account id is unavailable");
+      const conversationType: ZaloConversationType = conversation.conversationType === "group" ? "group" : "private";
+      // Truyền loại hội thoại đến adapter để group không bị gửi nhầm qua endpoint direct.
+      const sent = await (client as unknown as ZaloOutboundClient).sendMessage(
+        conversation.channelId,
+        content,
+        conversationType
+      );
+      externalMessageId = `zalo_personal:${zaloAccountId}:${sent.id}`;
     } catch (error) {
+      await createOutboundMessage({
+        conversationId,
+        platform: conversation.platform,
+        senderId: "agent",
+        content,
+        externalMessageId: undefined,
+        // AppError xảy ra trước khi gửi; lỗi connector thường không xác định được phía Zalo đã nhận hay chưa.
+        deliveryStatus: error instanceof AppError ? "failed" : "pending"
+      });
       if (error instanceof AppError) throw error;
       throw new AppError(502, "ZALO_PERSONAL_DELIVERY_FAILED", "Zalo personal message delivery failed");
     }

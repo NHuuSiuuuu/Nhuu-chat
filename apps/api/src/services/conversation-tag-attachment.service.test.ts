@@ -45,7 +45,14 @@ describe("conversation tag attachment", () => {
       tags: [{ id: "507f1f77bcf86cd799439011", name: "Mua hàng", color: "#22c55e" }]
     });
     expect(conversationTagModel.countDocuments).toHaveBeenCalledWith({ _id: { $in: ["507f1f77bcf86cd799439011"] } });
-    expect(conversationModel.findOneAndUpdate).toHaveBeenCalledWith({ _id: "conversation-1" }, { $set: { tagIds: ["507f1f77bcf86cd799439011"] } }, { new: true });
+    expect(conversationModel.findOneAndUpdate).toHaveBeenCalledWith({
+      _id: "conversation-1",
+      $or: [
+        { platform: { $ne: "zalo_personal" } },
+        { ownerId: "admin-1" },
+        { assignedAgentId: "admin-1" }
+      ]
+    }, { $set: { tagIds: ["507f1f77bcf86cd799439011"] } }, { new: true });
   });
 
   it("rejects a tag id that does not exist", async () => {

@@ -57,7 +57,17 @@ export function emitInboxEvent(event: string, ownerId: string | null, payload: u
 
 export function emitInboxEventToRecipients(event: string, recipientIds: string[], payload: unknown): void {
   if (!activeServer) return;
-  const rooms = ["inbox:admins", ...new Set(recipientIds.filter(Boolean).map((recipientId) => `inbox:${recipientId}`))];
+  const isZaloPersonal = Boolean(
+    payload
+    && typeof payload === "object"
+    && "platform" in payload
+    && payload.platform === "zalo_personal"
+  );
+  // Zalo cá nhân chỉ phát đến owner/người được phân công; các nền tảng cũ vẫn dùng phòng admin chung.
+  const rooms = [
+    ...(isZaloPersonal ? [] : ["inbox:admins"]),
+    ...new Set(recipientIds.filter(Boolean).map((recipientId) => `inbox:${recipientId}`))
+  ];
   activeServer.to(rooms).emit(event, payload);
 }
 
