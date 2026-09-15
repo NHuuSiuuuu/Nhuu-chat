@@ -8,7 +8,8 @@ type ZcaCredentials = {
 };
 type ZcaQrEvent = { type: number; data: { image: string } | null };
 type ZcaThreadType = 0 | 1;
-const ZaloConstructor = (zca as unknown as { Zalo: new () => { loginQR(options: Record<string, never>, callback: (event: ZcaQrEvent) => unknown): Promise<ZcaApi>; login(credentials: ZcaCredentials): Promise<ZcaApi> } }).Zalo;
+type ZcaConstructor = new (options?: { selfListen?: boolean }) => { loginQR(options: Record<string, never>, callback: (event: ZcaQrEvent) => unknown): Promise<ZcaApi>; login(credentials: ZcaCredentials): Promise<ZcaApi> };
+const ZaloConstructor = (zca as unknown as { Zalo: ZcaConstructor }).Zalo;
 
 export interface ZaloPersonalApi {
   getContext(): { credentials: unknown };
@@ -41,7 +42,7 @@ interface ZcaClientOptions {
 }
 
 export function createZaloPersonalClient(options: ZcaClientOptions = {}): ZaloPersonalClient {
-  return new ZaloPersonalClientAdapter(options.zcaFactory ?? (() => new ZaloConstructor()));
+  return new ZaloPersonalClientAdapter(options.zcaFactory ?? (() => new ZaloConstructor({ selfListen: true })));
 }
 
 class ZaloPersonalClientAdapter implements ZaloPersonalClient {
@@ -52,7 +53,7 @@ class ZaloPersonalClientAdapter implements ZaloPersonalClient {
   async loginQR(onQr: (payload: { qrData: string; expiresAt: Date }) => void): Promise<ZaloPersonalApi> {
     const zcaApi = await this.createZca().loginQR({}, (event) => {
       if (event.type !== 0 || !event.data) return;
-      onQr({ qrData: event.data.image, expiresAt: new Date(Date.now() + 120_000) });
+      onQr({ qrData: event.data.image, expiresAt: new Date(Date.now() + 100_000) });
     });
     this.activeApi = this.wrapApi(zcaApi);
     return this.activeApi;
@@ -96,10 +97,18 @@ class ZaloPersonalClientAdapter implements ZaloPersonalClient {
 }
 
 function extractCredentials(context: Record<string, unknown>): unknown {
+  const cookie = context.cookie;
+  const serializedCookie = isRecord(cookie) && typeof cookie.toJSON === "function"
+    ? cookie.toJSON()
+    : cookie;
   return {
     imei: context.imei,
-    cookie: context.cookie,
+    cookie: serializedCookie,
     userAgent: context.userAgent,
     ...(context.language ? { language: context.language } : {})
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

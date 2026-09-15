@@ -47,5 +47,17 @@ describe("Zalo personal message normalizer", () => {
     expect(normalizeZaloPersonalMessage(null, "account-1")).toBeNull();
     expect(normalizeZaloPersonalMessage({}, "account-1")).toBeNull();
     expect(normalizeZaloPersonalMessage({ type: 0, threadId: "thread", data: { content: "" } }, "account-1")).toBeNull();
+    expect(normalizeZaloPersonalMessage({ type: 2, threadId: "thread", data: { msgId: "message-3", uidFrom: "sender-1", content: "hello", ts: 1700000000000 } }, "account-1")).toBeNull();
+  });
+
+  it("uses sender identity for self messages even when the event flag contradicts it", () => {
+    const result = normalizeZaloPersonalMessage({
+      type: 0,
+      threadId: "thread-direct",
+      isSelf: true,
+      data: { msgId: "message-4", uidFrom: "other-account", content: "hello", ts: 1700000000000 }
+    }, "account-1");
+
+    expect(result?.isSelf).toBe(false);
   });
 });

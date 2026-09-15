@@ -16,6 +16,7 @@ export interface NormalizedZaloPersonalMessage {
 // Chuẩn hóa payload zca-js về contract inbound và loại bỏ event thiếu định danh tối thiểu.
 export function normalizeZaloPersonalMessage(event: unknown, accountId: string): NormalizedZaloPersonalMessage | null {
   if (!isRecord(event) || !isRecord(event.data)) return null;
+  if (event.type !== 0 && event.type !== 1) return null;
   const data = event.data;
   const externalMessageId = stringValue(data.msgId) ?? stringValue(data.cliMsgId);
   const channelId = stringValue(event.threadId);
@@ -23,7 +24,7 @@ export function normalizeZaloPersonalMessage(event: unknown, accountId: string):
   const content = typeof data.content === "string" ? data.content : "";
   if (!externalMessageId || !channelId || !senderId || (!content && !hasMedia(data))) return null;
 
-  const isSelf = event.isSelf === true || senderId === accountId && event.isSelf !== false;
+  const isSelf = senderId === accountId;
   const chatType = event.type === 1 ? "group" : "private";
   const type = classifyMessage(data);
   const sentAt = parseTimestamp(data.ts);
