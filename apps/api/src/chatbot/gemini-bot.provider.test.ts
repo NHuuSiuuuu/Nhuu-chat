@@ -164,7 +164,7 @@ describe("Gemini bot reply provider", () => {
       }]
     })).resolves.toEqual({
       answer: "Nhân viên sẽ hỗ trợ bạn ngay.",
-      handoff: true,
+      handoff: false,
       sources: []
     });
     expect(generateContent).not.toHaveBeenCalled();
@@ -201,6 +201,24 @@ describe("Gemini bot reply provider", () => {
       assistant,
       message: "Đổi hàng trong bao lâu?",
       context: [{ documentId: "policy", chunkIndex: 0, content: "Liên hệ nhân viên", score: 0.8 }]
+    })).resolves.toEqual({
+      answer: "Nhân viên sẽ hỗ trợ bạn ngay.",
+      handoff: false,
+      sources: []
+    });
+  });
+
+  it("preserves an explicit handoff request from Gemini", async () => {
+    generateContent.mockResolvedValue({
+      text: JSON.stringify({ answer: "Cần nhân viên", grounded: true, handoff: true })
+    });
+    const { GeminiBotProvider } = await importProvider();
+    const provider = new GeminiBotProvider();
+
+    await expect(provider.reply({
+      assistant,
+      message: "Gặp nhân viên",
+      context: []
     })).resolves.toEqual({
       answer: "Nhân viên sẽ hỗ trợ bạn ngay.",
       handoff: true,

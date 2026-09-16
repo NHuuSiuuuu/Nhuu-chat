@@ -27,8 +27,9 @@ interface GeminiReplyPayload {
   handoff: unknown;
 }
 
-function fallback(input: BotReplyInput): BotReplyResult {
-  return { answer: input.assistant.fallbackMessage, handoff: true, sources: [] };
+// Trả fallback thiếu căn cứ; chỉ đánh dấu bàn giao khi lỗi hạ tầng cần nhân viên tiếp quản.
+function fallback(input: BotReplyInput, handoff = false): BotReplyResult {
+  return { answer: input.assistant.fallbackMessage, handoff, sources: [] };
 }
 
 function exactTemplate(input: BotReplyInput): BotReplyResult {
@@ -148,7 +149,7 @@ export class GeminiBotProvider implements BotReplyProvider {
         : "";
 
       if (!payload || payload.grounded !== true || payload.handoff !== false || !answer) {
-        return input.template ? exactTemplate(input) : fallback(input);
+        return input.template ? exactTemplate(input) : fallback(input, payload?.handoff === true);
       }
 
       return {
@@ -159,7 +160,7 @@ export class GeminiBotProvider implements BotReplyProvider {
           : context.map(({ documentId, chunkIndex }) => ({ documentId, chunkIndex }))
       };
     } catch {
-      return input.template ? exactTemplate(input) : fallback(input);
+      return input.template ? exactTemplate(input) : fallback(input, true);
     } finally {
       if (timeoutId !== undefined) clearTimeout(timeoutId);
     }

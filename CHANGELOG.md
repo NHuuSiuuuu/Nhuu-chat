@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa chatbot không tự pause sau fallback thiếu thông tin; khách có thể tiếp tục nhắn và bot vẫn xử lý, trong khi handoff thật và lỗi provider vẫn giữ cơ chế pause.
 - Sửa chatbot tự động cho Zalo cá nhân: bổ sung adapter gửi phản hồi qua session Zalo đang hoạt động và giữ đúng loại hội thoại direct/group.
 - Thêm API `POST /api/v1/channels/telegram-personal/logout` để hủy kết nối Telegram cá nhân, dừng client/QR và xóa session nhưng giữ nguyên dữ liệu Inbox.
 - Thêm nút tùy chọn trên tài khoản Zalo và Telegram đã kết nối cùng modal xác nhận hủy kích hoạt; dữ liệu hội thoại/tin nhắn vẫn được giữ nguyên.

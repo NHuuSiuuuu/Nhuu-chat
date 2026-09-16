@@ -245,6 +245,40 @@ describe("chatbot orchestration", () => {
     }
   );
 
+  it("keeps the bot active when the provider returns an insufficient-information fallback", async () => {
+    const { input } = await seedBotConversation();
+    const { orchestrator, reply, sendText } = harness();
+    reply
+      .mockResolvedValueOnce({ answer: fallback, handoff: false, sources: [] })
+      .mockResolvedValueOnce({ answer: "Mình có thể tiếp tục hỗ trợ bạn.", handoff: false, sources: [] });
+
+    expect(await orchestrator.process(input)).toEqual({ status: "sent" });
+    expect(await ConversationModel.findById(input.conversationId)).toMatchObject({
+      status: "open",
+      botPausedUntil: null
+    });
+
+    const nextMessage = await MessageModel.create({
+      conversationId: input.conversationId,
+      platform: "telegram",
+      senderType: "customer",
+      senderId: "42",
+      content: "hi",
+      deliveryStatus: "delivered"
+    });
+    expect(await orchestrator.process({
+      ...input,
+      customerMessageId: String(nextMessage._id),
+      content: "hi"
+    })).toEqual({ status: "sent" });
+    expect(reply).toHaveBeenCalledTimes(2);
+    expect(sendText).toHaveBeenCalledTimes(2);
+    expect(await ConversationModel.findById(input.conversationId)).toMatchObject({
+      status: "open",
+      botPausedUntil: null
+    });
+  });
+
   it("rechecks pause after a slow provider so an agent can take over", async () => {
     const { input } = await seedBotConversation();
     const { orchestrator, reply, sendText } = harness();
