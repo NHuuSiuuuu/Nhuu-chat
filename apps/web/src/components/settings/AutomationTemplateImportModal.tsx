@@ -1,7 +1,6 @@
 import { useState } from "react";
 
 import type { AutomationTemplateImportRow } from "../../lib/automation-template-import.js";
-import { parseAutomationTemplateFile } from "../../lib/automation-template-import.js";
 
 interface AutomationTemplateImportModalProps {
   isSaving: boolean;
@@ -21,10 +20,17 @@ export function AutomationTemplateImportModal({
   async function selectFile(file: File | undefined) {
     if (!file) return;
     setIsReading(true);
-    const result = await parseAutomationTemplateFile(file);
-    setPreview(result.rows);
-    setErrors(result.errors);
-    setIsReading(false);
+    try {
+      const { parseAutomationTemplateFile } = await import("../../lib/automation-template-import.js");
+      const result = await parseAutomationTemplateFile(file);
+      setPreview(result.rows);
+      setErrors(result.errors);
+    } catch {
+      setPreview([]);
+      setErrors([{ row: 0, message: "Không thể đọc file. Vui lòng kiểm tra lại định dạng." }]);
+    } finally {
+      setIsReading(false);
+    }
   }
 
   return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4" role="presentation" onMouseDown={onClose}>
