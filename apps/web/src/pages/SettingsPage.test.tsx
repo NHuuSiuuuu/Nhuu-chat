@@ -195,6 +195,9 @@ describe("Settings page", () => {
     expect(source).toContain("Xóa mẫu chào");
     expect(source).toContain("Cho phép Gemini viết lại");
     expect(source).toContain("allowAiRewrite");
+    expect(styles).toContain('[aria-label="Cấu hình chatbot"] > .mt-3.grid.gap-2 {');
+    expect(styles).toContain('overflow-y: auto;');
+    expect(styles).toContain('scrollbar-width: none;');
   });
 
   it("uses the wide AI assistant content layout from the UI prompt", () => {

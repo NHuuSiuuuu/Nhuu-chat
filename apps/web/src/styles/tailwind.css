@@ -54,3 +54,16 @@
     display: none;
   }
 }
+@layer components {
+  /* Giới hạn chiều cao danh sách mẫu chào nhưng vẫn cho phép cuộn khi có nhiều mẫu. */
+  [aria-label="Cấu hình chatbot"] > .mt-3.grid.gap-2 {
+    max-height: 16rem;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  [aria-label="Cấu hình chatbot"] > .mt-3.grid.gap-2::-webkit-scrollbar {
+    display: none;
+  }
+}
