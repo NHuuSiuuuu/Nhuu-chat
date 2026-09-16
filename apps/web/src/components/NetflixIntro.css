@@ -5,7 +5,7 @@
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: #f7fbff;
+  background: var(--color-blue-600);
   color: var(--color-blue-600);
   opacity: 1;
   transform: scale(1);
@@ -31,11 +31,10 @@
 }
 
 .nhuu-intro__brand {
+  display: block;
+  width: clamp(14rem, 48vw, 28rem);
+  height: auto;
   opacity: 0;
-  font-size: clamp(1.8rem, 7vw, 4.5rem);
-  font-weight: 900;
-  letter-spacing: clamp(0.18rem, 1.5vw, 0.8rem);
-  color: var(--color-blue-600);
   animation: nhuu-intro-brand 0.55s cubic-bezier(0.65, 0, 0.35, 1) 0.12s forwards;
 }
 
@@ -45,7 +44,7 @@
   font-size: clamp(0.85rem, 2.4vw, 1.15rem);
   font-weight: 600;
   letter-spacing: clamp(0.02rem, 0.3vw, 0.1rem);
-  color: color-mix(in srgb, var(--color-blue-600) 72%, #273348);
+  color: color-mix(in srgb, white 88%, var(--color-blue-600));
   animation: nhuu-intro-tagline 0.45s ease-out 0.42s forwards;
 }
 

@@ -80,7 +80,7 @@ export function NetflixIntro({ onComplete, duration = DEFAULT_DURATION, ready = 
   return <div className={`nhuu-intro${isExiting ? " nhuu-intro--exiting" : ""}`} aria-label="Đang khởi động NHuuChat" role="status">
     <div className="nhuu-intro__glow" aria-hidden="true" />
     <div className="nhuu-intro__content">
-      <div className="nhuu-intro__brand">NHuuChat</div>
+      <img className="nhuu-intro__brand" src="/nhuu-logo.svg" alt="NhuuChat" />
       <div className="nhuu-intro__tagline">Quản lý chat đa kênh thông minh</div>
     </div>
   </div>;

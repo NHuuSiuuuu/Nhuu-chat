@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thay chữ thương hiệu ở màn hình loading bằng logo NhuuChat trong suốt và đồng bộ nền xanh với header.
 - Thay logo chữ trong header bằng logo NhuuChat chính thức, giữ liên kết về Dashboard và hiển thị rõ trên màn hình nhỏ.
 - Tách nền xanh khỏi asset logo NhuuChat để logo hòa đúng vào nền header, không còn xuất hiện mảng nền nhỏ lệch bên trong header.
 - Thêm công tắc `Bot tự động` trong Inbox; tắt công tắc tương đương tiếp quản hội thoại và được lưu bền theo từng hội thoại, không tự bật lại sau 30 phút.
