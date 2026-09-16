@@ -27,6 +27,14 @@ These instructions apply to the entire `Nhuu-chat` project.
 - Use non-destructive git commands.
 - Read `DEVELOPMENT_PROMPT.md` only when the user explicitly requests it.
 
+## Git Workflow
+
+- After completing the requested change and passing the applicable verification, create a focused local commit automatically.
+- Before creating a commit, inspect the diff and stage only files required for the current request; preserve unrelated dirty files.
+- Always ask the user for confirmation before pushing any commit to a remote repository.
+- Always ask the user for confirmation before merging into another branch, including `main`.
+- Report the commit hash and verification results before asking whether to push.
+
 ## File Modification Rules
 
 - Modify only the files required to fulfill the request.
