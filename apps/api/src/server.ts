@@ -178,10 +178,8 @@ export async function startServer(dependencies: ServerDependencies = {}): Promis
   try {
     await hydrateKnowledge();
     closeRedisLock = await setupRedisLock();
-    await restoreWithStartupDeadline(restore, "Telegram personal");
-    await restoreWithStartupDeadline(restoreZalo, "Zalo personal");
   } catch (error) {
-    // Restore có thể đã tạo connector trước khi owner khác lỗi; dọn connector trước hạ tầng chung.
+    // Lỗi bootstrap hạ tầng phải dọn connector trước khi đóng database chung.
     await shutdownZalo().catch(() => undefined);
     await closeRedisLock?.().catch(() => undefined);
     await disconnect().catch(() => undefined);
@@ -223,6 +221,10 @@ export async function startServer(dependencies: ServerDependencies = {}): Promis
       void shutdown();
     });
   }
+
+  // Chỉ restore listener sau khi HTTP bind thành công, tránh process lỗi giữ kết nối Zalo cạnh tranh.
+  await restoreWithStartupDeadline(restore, "Telegram personal");
+  await restoreWithStartupDeadline(restoreZalo, "Zalo personal");
 
   return { shutdown };
 }

@@ -16,6 +16,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Hiển thị trang `Chức năng đang được phát triển` khi chọn các tab header Đơn hàng, Bài viết hoặc Thống kê; mỗi tab có route riêng để giữ đúng trạng thái khi tải lại.
 - Vô hiệu hóa các tab Settings chưa phát triển, hiển thị con trỏ không cho phép click và giữ nguyên các tab Thẻ hội thoại, Trợ lý AI đang hoạt động.
 - Hiển thị custom toast khi người dùng click vào tab Settings chưa phát triển; tab không chuyển nội dung và thông báo tự đóng sau 5 giây.
+- Sửa lỗi tiến trình API khởi động trùng mở listener Zalo trước khi kiểm tra port HTTP, gây `ZALO_PERSONAL_LISTENER_ERROR`; server chỉ restore listener sau khi bind HTTP thành công.
 - Gắn URL thật cho các mục điều hướng header để truy cập trực tiếp Đơn hàng, Bài viết và Thống kê không bị rơi vào liên kết rỗng.
 - Thêm backend thử nghiệm cho Zalo cá nhân: quản lý phiên QR, lưu credentials đã mã hóa, cô lập dữ liệu theo owner và chuẩn hóa tin nhắn inbound/outbound; đây là API không chính thức nên tài khoản có nguy cơ bị Zalo hạn chế hoặc khóa.
 - Bổ sung migration thủ công, idempotent cho unique index conversation Zalo cá nhân: trong maintenance window, sao lưu database rồi chạy `MONGODB_URI=... pnpm --filter api run migrate:zalo-personal-conversation-index` trước khi rollout connector; helper tạo `{ platform, channelId, ownerId }` trước khi xóa legacy `{ platform, channelId }` và không chạy khi server khởi động.

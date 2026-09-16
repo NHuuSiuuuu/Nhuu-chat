@@ -44,13 +44,13 @@ describe("production server bootstrap", () => {
     });
 
     expect(events).toEqual([
-      "connect", "hydrate-knowledge", "setup-zalo-personal-redis-lock", "restore-personal-sessions",
-      "restore-zalo-personal-sessions", "listen"
+      "connect", "hydrate-knowledge", "setup-zalo-personal-redis-lock", "listen",
+      "restore-personal-sessions", "restore-zalo-personal-sessions"
     ]);
     await handle.shutdown();
     expect(events).toEqual([
-      "connect", "hydrate-knowledge", "setup-zalo-personal-redis-lock", "restore-personal-sessions",
-      "restore-zalo-personal-sessions", "listen", "shutdown-zalo-personal-sessions",
+      "connect", "hydrate-knowledge", "setup-zalo-personal-redis-lock",
+      "listen", "restore-personal-sessions", "restore-zalo-personal-sessions", "shutdown-zalo-personal-sessions",
       "close-zalo-personal-redis-lock", "disconnect"
     ]);
   });
@@ -73,6 +73,27 @@ describe("production server bootstrap", () => {
     ).rejects.toThrow("port is unavailable");
 
     expect(disconnectDatabase).toHaveBeenCalledOnce();
+  });
+
+  it("does not restore personal listeners when the HTTP port is unavailable", async () => {
+    const restorePersonalClients = vi.fn(async () => undefined);
+    const restoreZaloPersonalClients = vi.fn(async () => undefined);
+
+    await expect(startServer({
+      connectDatabase: async () => undefined,
+      hydrateKnowledge: async () => undefined,
+      setupZaloPersonalRedisLock: async () => async () => undefined,
+      restorePersonalClients,
+      restoreZaloPersonalClients,
+      shutdownZaloPersonalClients: async () => undefined,
+      disconnectDatabase: async () => undefined,
+      listen: async () => {
+        throw new Error("port is unavailable");
+      }
+    })).rejects.toThrow("port is unavailable");
+
+    expect(restorePersonalClients).not.toHaveBeenCalled();
+    expect(restoreZaloPersonalClients).not.toHaveBeenCalled();
   });
 
   it("disconnects without restoring or listening when knowledge hydration fails", async () => {
