@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa dòng thông tin hội thoại: dùng biểu tượng nền tảng thật thay cho avatar chữ và badge `Zalo` giả khi chưa có tên tài khoản cụ thể.
 - Thay chữ thương hiệu ở màn hình loading bằng logo NhuuChat trong suốt, giữ nguyên nền loading sáng.
 - Thay logo chữ trong header bằng logo NhuuChat chính thức, giữ liên kết về Dashboard và hiển thị rõ trên màn hình nhỏ.
 - Tách nền xanh khỏi asset logo NhuuChat để logo hòa đúng vào nền header, không còn xuất hiện mảng nền nhỏ lệch bên trong header.
