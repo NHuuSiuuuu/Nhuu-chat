@@ -544,6 +544,7 @@ async function ingestZaloPersonalMessage(userId: string, message: NormalizedZalo
       externalMessageId: message.externalMessageId,
       platform: "zalo_personal",
       channelId: message.channelId,
+      conversationType: message.chatType,
       senderType: "customer",
       type: message.type,
       content: message.content

@@ -20,7 +20,8 @@ export async function isTelegramPersonalBotEcho(ownerId: string, channelId: stri
 }
 
 // Chỉ đăng ký hai connector thật; session cá nhân luôn được chọn theo owner đã xác thực.
-export const resolveTelegramBotAdapter: ResolveBotAdapter = async ({ platform, ownerId }) => {
+export const resolveTelegramBotAdapter: ResolveBotAdapter = async (input) => {
+  const { platform, ownerId } = input;
   if (platform === "telegram") {
     const registration = await ProviderSecretModel.findOne({ provider: "telegram", name: "bot-token" }).lean();
     if (registration?.ownerId && String(registration.ownerId) !== ownerId) return undefined;
@@ -62,6 +63,17 @@ export const resolveTelegramBotAdapter: ResolveBotAdapter = async ({ platform, o
             if (pending.size === 0) personalBotSends.delete(key);
           }, 10_000).unref();
         }
+      }
+    };
+  }
+  if (platform === "zalo_personal") {
+    const { getActiveZaloPersonalClient } = await import("../services/zalo-personal.service.js");
+    const client = await getActiveZaloPersonalClient(ownerId);
+    if (!client) return undefined;
+    return {
+      sendText: async ({ channelId, content }) => {
+        const sent = await client.sendMessage(channelId, content, input.conversationType ?? "private");
+        return { externalMessageId: String(sent.id) };
       }
     };
   }

@@ -9,6 +9,7 @@ export interface NormalizedCustomerMessage {
   externalMessageId?: string;
   platform: string;
   channelId: string;
+  conversationType?: "private" | "group";
   senderType: "customer" | "agent" | "bot";
   content: string;
   type: "text" | "image" | "video" | "audio" | "file" | "template";

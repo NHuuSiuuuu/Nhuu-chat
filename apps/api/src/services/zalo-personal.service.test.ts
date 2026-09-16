@@ -881,6 +881,7 @@ describe("Zalo personal inbound message persistence", () => {
       externalMessageId: "zalo-message-1",
       platform: "zalo_personal",
       channelId: "thread-1",
+      conversationType: "private",
       senderType: "customer",
       type: "text",
       content: "Xin chào"
