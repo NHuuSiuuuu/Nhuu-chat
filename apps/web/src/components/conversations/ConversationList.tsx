@@ -66,7 +66,7 @@ export function ConversationList({ items, activeId, onSelect, isLoading = false,
       {isLoading ? <div aria-label="Đang tải danh sách hội thoại">{[1, 2, 3, 4, 5].map((row) => <div className={`flex min-h-[88px] items-start gap-3 border-b border-gray-100 px-3 py-3.5 ${collapsed ? "justify-center px-2" : ""}`} key={row}><span className={`size-[48px] shrink-0 rounded-full bg-gray-200 ${collapsed ? "size-[42px]" : ""} animate-pulse`} /><span className={`min-w-0 flex-1 space-y-2 pt-1 ${collapsed ? "hidden" : ""}`}><span className="block h-3 w-3/4 animate-pulse rounded bg-gray-200" /><span className="block h-3 w-full animate-pulse rounded bg-gray-100" /><span className="block h-3 w-1/2 animate-pulse rounded bg-gray-100" /></span></div>)}</div> : filtered.length === 0 ? <div className="conversation-list-empty px-4 py-10 text-center text-[13px] text-gray-400">{collapsed ? "" : "Chưa có hội thoại"}</div> : filtered.map((item) => {
         const name = conversationDisplayName(item);
         const accountName = conversationAccountName({ accountName: item.accountName, platform: item.platform });
-        const hasExplicitAccountName = Boolean(item.accountName?.trim());
+        const hasExplicitAccountName = Boolean(item.accountName?.trim()) && accountName.toLowerCase() !== conversationPlatformLabel(item.platform).toLowerCase();
         const platform = platformIconProvider(item.platform);
         const tags = item.tags ?? [];
         const visibleTags = tags.slice(0, getVisibleConversationTagCount(sidebarWidth, tags));

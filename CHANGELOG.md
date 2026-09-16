@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa trường hợp API trả tên tài khoản trùng tên nền tảng: không còn dựng avatar chữ `Z` cho Zalo, luôn hiển thị biểu tượng nền tảng thật.
 - Sửa dòng thông tin hội thoại: dùng biểu tượng nền tảng thật thay cho avatar chữ và badge `Zalo` giả khi chưa có tên tài khoản cụ thể.
 - Thay chữ thương hiệu ở màn hình loading bằng logo NhuuChat trong suốt, giữ nguyên nền loading sáng.
 - Thay logo chữ trong header bằng logo NhuuChat chính thức, giữ liên kết về Dashboard và hiển thị rõ trên màn hình nhỏ.
