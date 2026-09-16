@@ -27,7 +27,7 @@ async function retrieveContext(ownerId: string, message: string): Promise<BotRep
   return knowledgeVectorStore.search(
     await knowledgeEmbedding.embed(message),
     MAX_CONTEXT_CHUNKS,
-    { ownerId }
+    { ownerId, query: message }
   );
 }
 

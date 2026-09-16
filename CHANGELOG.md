@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa RAG ưu tiên từ khóa/cụm từ tiếng Việt trong câu hỏi khi xếp hạng knowledge, tránh lấy nhầm tài liệu khiến chatbot trả fallback dù tài liệu đúng đã được tải lên.
 - Khôi phục nút `+ Thêm mẫu chào` bên cạnh `Import kịch bản` để người dùng vẫn có thể tạo mẫu riêng lẻ.
 - Đưa nút `Lưu hướng dẫn` và `Import kịch bản` lên cùng dòng tiêu đề khu vực tương ứng trong Trợ lý AI, giúp người dùng dễ nhận biết.
 - Thêm nút lưu nội dung Hướng dẫn cho từng trợ lý AI, tránh mất thay đổi khi đổi trợ lý hoặc tải lại trang.

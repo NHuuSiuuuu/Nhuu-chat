@@ -133,7 +133,8 @@ export class ChatbotOrchestrator {
           const context = template
             ? []
             : await knowledgeVectorStore.search(await knowledgeEmbedding.embed(content), 5, {
-                ownerId: input.ownerId
+                ownerId: input.ownerId,
+                query: content
               });
           signal.throwIfAborted();
           const history = await MessageModel.find({

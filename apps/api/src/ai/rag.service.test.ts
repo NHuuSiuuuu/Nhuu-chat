@@ -53,4 +53,34 @@ describe("RagService", () => {
     expect(result.answer).toContain("Selected policy");
     expect(result.answer).not.toContain("Other policy");
   });
+
+  it("returns the address chunk when cosine similarity favors unrelated knowledge", async () => {
+    const embedding = new DeterministicEmbeddingProvider();
+    const store = new InMemoryVectorStore();
+    const question = "cho tôi địa chỉ";
+    const questionVector = await embedding.embed(question);
+
+    await store.upsert([
+      {
+        ownerId: "owner-1",
+        documentId: "unrelated",
+        chunkIndex: 0,
+        content: "Học phí khóa giao tiếp dành cho sinh viên.",
+        embedding: questionVector
+      },
+      {
+        ownerId: "owner-1",
+        documentId: "address",
+        chunkIndex: 0,
+        content: "Địa chỉ trung tâm Global English: 123 đường ABC, Hà Nội.",
+        embedding: await embedding.embed("Địa chỉ trung tâm Global English: 123 đường ABC, Hà Nội.")
+      }
+    ]);
+
+    const result = await new RagService(embedding, store, new GroundedEchoProvider())
+      .answer(question, { ownerId: "owner-1" });
+
+    expect(result.answer).toContain("Địa chỉ trung tâm Global English");
+    expect(result.answer).not.toContain("Học phí khóa giao tiếp");
+  });
 });
