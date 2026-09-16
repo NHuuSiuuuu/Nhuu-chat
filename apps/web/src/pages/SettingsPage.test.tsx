@@ -155,6 +155,8 @@ describe("Settings page", () => {
     expect(source).toContain('method: "POST"');
     expect(source).toContain('method: "PATCH"');
     expect(source).toContain("saveAssistant");
+    expect(source).toContain("Lưu hướng dẫn");
+    expect(source).toContain("void saveAssistant()");
     expect(source).toContain("Không thể lưu hướng dẫn trợ lý");
     expect(source).toContain("Tư vấn khách hàng");
     expect(source).toContain("Không thể gửi tin nhắn thử nghiệm");
