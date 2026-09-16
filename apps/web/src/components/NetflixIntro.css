@@ -5,7 +5,7 @@
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: var(--color-blue-600);
+  background: #f7fbff;
   color: var(--color-blue-600);
   opacity: 1;
   transform: scale(1);
@@ -44,7 +44,7 @@
   font-size: clamp(0.85rem, 2.4vw, 1.15rem);
   font-weight: 600;
   letter-spacing: clamp(0.02rem, 0.3vw, 0.1rem);
-  color: color-mix(in srgb, white 88%, var(--color-blue-600));
+  color: color-mix(in srgb, var(--color-blue-600) 72%, #273348);
   animation: nhuu-intro-tagline 0.45s ease-out 0.42s forwards;
 }
 

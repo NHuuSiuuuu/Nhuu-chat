@@ -13,7 +13,7 @@ describe("NetflixIntro", () => {
 
     expect(source).toContain('./NetflixIntro.css');
     expect(source).toContain('aria-label="Đang khởi động NHuuChat"');
-    expect(source).toContain('src="/nhuu-logo.svg"');
+    expect(source).toContain('src="/nhuu-logo-loading.svg"');
     expect(source).toContain('alt="NhuuChat"');
     expect(source).toContain("Quản lý chat đa kênh thông minh");
     expect(source).not.toContain("nhuu-intro__bar");
