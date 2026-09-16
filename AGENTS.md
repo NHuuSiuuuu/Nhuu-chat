@@ -31,9 +31,9 @@ These instructions apply to the entire `Nhuu-chat` project.
 
 - After completing the requested change and passing the applicable verification, create a focused local commit automatically.
 - Before creating a commit, inspect the diff and stage only files required for the current request; preserve unrelated dirty files.
-- Always ask the user for confirmation before pushing any commit to a remote repository.
+- After verification and a focused local commit, push the current feature branch to its configured remote automatically so the user can test the change.
 - Always ask the user for confirmation before merging into another branch, including `main`.
-- Report the commit hash and verification results before asking whether to push.
+- Report the commit hash, push result, and verification results after pushing.
 
 ## File Modification Rules
 
