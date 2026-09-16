@@ -114,14 +114,14 @@ export async function registerTelegramChannel(config: TelegramChannelConfigInput
 }
 
 export async function orchestrateTelegramReply(input: TelegramReplyInput, deps: { now: () => Date; answer: (content: string) => Promise<{ answer: string; sources: unknown[]; handoff: boolean }>; createBotMessage: (input: TelegramReplyInput, answer: string) => Promise<{ id: string }>; enqueue: (command: { messageId: string; conversationId: string; platform: "telegram"; channelId: string; content: string }) => Promise<string> }): Promise<void> {
-  if (isBotPaused(input.botPausedUntil ?? null, deps.now())) return;
+  if (input.botEnabled === false || isBotPaused(input.botPausedUntil ?? null, deps.now())) return;
   const result = await deps.answer(input.content);
-  const { botPausedUntil: _botPausedUntil, ...messageInput } = input;
+  const { botPausedUntil: _botPausedUntil, botEnabled: _botEnabled, ...messageInput } = input;
   const message = await deps.createBotMessage(messageInput, result.answer);
   await deps.enqueue({ messageId: message.id, conversationId: input.conversationId, platform: "telegram", channelId: input.channelId, content: result.answer });
 }
 
-interface TelegramReplyInput { conversationId: string; channelId: string; content: string; botPausedUntil?: Date | null; }
+interface TelegramReplyInput { conversationId: string; channelId: string; content: string; botPausedUntil?: Date | null; botEnabled?: boolean; }
 
 function isDuplicateKey(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === 11000;

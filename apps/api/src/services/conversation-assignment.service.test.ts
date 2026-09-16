@@ -14,7 +14,7 @@ vi.mock("../models/conversation.model.js", () => ({ ConversationModel: dependenc
 vi.mock("../models/user.model.js", () => ({ UserModel: dependencies.user }));
 vi.mock("../orchestration/bot-pause.service.js", () => ({ pauseBot: dependencies.pauseBot }));
 
-import { updateAssignment } from "./conversation.service.js";
+import { updateAssignment, updateBotEnabled } from "./conversation.service.js";
 
 describe("conversation assignment handoff", () => {
   beforeEach(() => {
@@ -49,5 +49,15 @@ describe("conversation assignment handoff", () => {
     await updateAssignment("conversation-1", null);
 
     expect(dependencies.pauseBot).not.toHaveBeenCalled();
+  });
+
+  it("persists the bot switch state when an agent turns automatic replies off", async () => {
+    await updateBotEnabled("conversation-1", false);
+
+    expect(dependencies.conversation.findByIdAndUpdate).toHaveBeenCalledWith(
+      "conversation-1",
+      { $set: { botEnabled: false } },
+      { new: true }
+    );
   });
 });

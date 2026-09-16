@@ -47,10 +47,23 @@ export async function updateAssignment(id: string, assignedAgentId: string | nul
   if (assignedAgentId !== null && (!isValidObjectId(assignedAgentId) || !(await UserModel.exists({ _id: assignedAgentId, role: "agent" })))) {
     throw new AppError(400, "INVALID_AGENT", "assignedAgentId must identify an agent");
   }
-  const row = await ConversationModel.findByIdAndUpdate(id, { assignedAgentId }, { new: true }).populate("customerId", "name avatarUrl").populate("tagIds", "name color").lean();
+  const update = assignedAgentId === null
+    ? { assignedAgentId }
+    : { $set: { assignedAgentId, botEnabled: false } };
+  const row = await ConversationModel.findByIdAndUpdate(id, update, { new: true }).populate("customerId", "name avatarUrl").populate("tagIds", "name color").lean();
   if (!row) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
   // Khi nhân viên nhận hội thoại, khóa bot ngay để không phát sinh câu trả lời song song.
   if (assignedAgentId !== null) await pauseBot(id, new Date());
+  return toConversation(row);
+}
+
+// Lưu công tắc bot theo từng hội thoại; bật lại thì xóa pause tạm thời để bot hoạt động ngay.
+export async function updateBotEnabled(id: string, botEnabled: boolean) {
+  const update = botEnabled
+    ? { $set: { botEnabled: true, botPausedUntil: null } }
+    : { $set: { botEnabled: false } };
+  const row = await ConversationModel.findByIdAndUpdate(id, update, { new: true }).populate("customerId", "name avatarUrl").populate("tagIds", "name color").lean();
+  if (!row) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
   return toConversation(row);
 }
 
@@ -146,7 +159,7 @@ export function toConversation(row: any, account?: { name?: string; avatarUrl?: 
   const result: any = {
     id: String(row._id), customerId: String(customer?._id ?? row.customerId), platform: row.platform,
     channelId: row.channelId, assignedAgentId: row.assignedAgentId ? String(row.assignedAgentId) : null,
-    unreadCount: row.unreadCount, status: row.status,
+    botEnabled: row.botEnabled !== false, unreadCount: row.unreadCount, status: row.status,
     lastMessageAt: new Date(row.lastMessageAt).toISOString(), lastMessageSnippet: row.lastMessageSnippet,
     customerName: customer?.name ?? row.customerName ?? undefined,
     customerAvatarUrl: customer?.avatarUrl ?? row.customerAvatarUrl ?? undefined,

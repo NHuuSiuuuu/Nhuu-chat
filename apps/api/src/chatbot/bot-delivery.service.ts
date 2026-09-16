@@ -51,7 +51,7 @@ export class BotDeliveryService {
         platform: input.platform,
         channelId: input.channelId
       }).lean();
-      if (!conversation || isBotPaused(conversation.botPausedUntil, now())) {
+      if (!conversation || conversation.botEnabled === false || isBotPaused(conversation.botPausedUntil, now())) {
         await BotProcessingModel.updateOne(
           { ...filter, botMessageId: { $exists: false } },
           {
@@ -102,7 +102,7 @@ export class BotDeliveryService {
                 channelId: input.channelId
               }).lean();
               signal.throwIfAborted();
-              if (!latest || isBotPaused(latest.botPausedUntil, now())) throw new Error("BOT_PAUSED");
+              if (!latest || latest.botEnabled === false || isBotPaused(latest.botPausedUntil, now())) throw new Error("BOT_PAUSED");
               try {
                 return await withBotTimeout(() => adapter.sendText({ channelId: input.channelId, content: input.content }), this.options.timeoutMs ?? 10_000);
               } catch {

@@ -16,6 +16,7 @@ const conversationSchema = new Schema(
     assignedAgentId: { type: Schema.Types.ObjectId, ref: "User", default: null, index: true },
     unreadCount: { type: Number, default: 0, min: 0 },
     status: { type: String, enum: ["open", "pending", "closed"], default: "open", index: true },
+    botEnabled: { type: Boolean, default: true, index: true },
     botPausedUntil: { type: Date, default: null },
     sendLeaseId: { type: String, default: null },
     sendLeaseAt: { type: Date, default: null },

@@ -89,6 +89,7 @@ export interface ConversationContract {
   platform: ChatPlatform;
   channelId: string;
   assignedAgentId: string | null;
+  botEnabled?: boolean;
   unreadCount: number;
   status: ConversationStatus;
   lastMessageAt: string;

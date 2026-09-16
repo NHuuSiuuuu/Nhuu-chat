@@ -28,6 +28,10 @@ export const conversationAssignmentSchema = z.object({
   assignedAgentId: z.string().nullable()
 });
 
+export const conversationBotSchema = z.object({
+  botEnabled: z.boolean()
+});
+
 export const conversationStatusSchema = z.object({
   status: z.enum(["open", "pending", "closed"])
 });

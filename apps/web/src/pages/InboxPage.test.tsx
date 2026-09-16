@@ -212,11 +212,12 @@ describe("Inbox Tailwind migration", () => {
     const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
     const chat = readFileSync(new URL("../components/conversations/ChatWindow.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain("/assignment");
-    expect(source).toContain('assignedAgentId: user.id');
-    expect(source).toContain("onTakeOver");
-    expect(chat).toContain("Tiếp quản hội thoại");
-    expect(chat).toContain("onTakeOver");
+    expect(source).toContain("/bot");
+    expect(source).toContain("botEnabled");
+    expect(source).toContain("onToggleBot");
+    expect(chat).toContain('role="switch"');
+    expect(chat).toContain("Bot tự động");
+    expect(chat).toContain("onToggleBot");
   });
 
   it("renders the conversation platform as an icon in the chat header", () => {

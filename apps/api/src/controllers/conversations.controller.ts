@@ -6,6 +6,7 @@ import { ConversationModel } from "../models/conversation.model.js";
 import { emitChatEvent, emitInboxEventToRecipients } from "../realtime/socket.js";
 import {
   conversationAssignmentSchema,
+  conversationBotSchema,
   conversationIdSchema,
   conversationListQuerySchema,
   conversationStatusSchema,
@@ -16,6 +17,7 @@ import {
   listConversations as listConversationRecords,
   markConversationRead as markConversationReadRecord,
   updateAssignment as updateConversationAssignment,
+  updateBotEnabled as updateConversationBotEnabled,
   updateStatus as updateConversationStatus,
   updateConversationTags as updateConversationTagsRecord,
   getConversationReplySuggestions as getConversationReplySuggestionsRecord
@@ -78,6 +80,18 @@ export const updateAssignment: RequestHandler = async (request, response, next) 
       throw new AppError(400, "INVALID_REQUEST", "assignedAgentId is invalid");
     }
     const result = await updateConversationAssignment(id, body.data.assignedAgentId);
+    emitChatEvent("chat:conversation_updated", id, result);
+    response.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateBotEnabled: RequestHandler = async (request, response, next) => {
+  try {
+    const id = conversationIdSchema.parse({ id: request.params.id }).id;
+    const body = conversationBotSchema.parse(request.body);
+    const result = await updateConversationBotEnabled(id, body.botEnabled);
     emitChatEvent("chat:conversation_updated", id, result);
     response.json(result);
   } catch (error) {

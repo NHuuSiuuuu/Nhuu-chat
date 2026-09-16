@@ -6,6 +6,7 @@ import {
   listConversations,
   markConversationRead,
   updateAssignment,
+  updateBotEnabled,
   updateStatus,
   updateConversationTags,
   getConversationReplySuggestions
@@ -18,6 +19,7 @@ conversationRouter.get("/", requireRole(...inboxAccessRoles), listConversations)
 conversationRouter.get("/:id/messages", requireRole(...inboxAccessRoles), listMessages);
 conversationRouter.patch("/:id/read", requireRole(...inboxAccessRoles), markConversationRead);
 conversationRouter.patch("/:id/assignment", requireRole("admin", "agent"), updateAssignment);
+conversationRouter.patch("/:id/bot", requireRole("admin", "agent"), updateBotEnabled);
 conversationRouter.patch("/:id/status", requireRole("admin", "agent"), updateStatus);
 conversationRouter.put("/:id/tags", requireRole("admin", "agent"), updateConversationTags);
 conversationRouter.post("/:id/ai-suggestions", requireRole("admin", "agent"), getConversationReplySuggestions);

@@ -6,6 +6,16 @@ import { CustomerModel } from "./customer.model.js";
 import { MessageModel } from "./message.model.js";
 
 describe("Zalo personal canonical model support", () => {
+  it("defaults new conversations to an enabled bot", () => {
+    const conversation = new ConversationModel({
+      customerId: new mongoose.Types.ObjectId(),
+      platform: "zalo_personal",
+      channelId: "thread-bot-default"
+    });
+
+    expect(conversation.botEnabled).toBe(true);
+  });
+
   it("accepts zalo_personal in each canonical platform validator", async () => {
     const customer = new CustomerModel({ name: "Khách Zalo", platform: "zalo_personal", platformId: "zalo-user-1" });
     const conversation = new ConversationModel({

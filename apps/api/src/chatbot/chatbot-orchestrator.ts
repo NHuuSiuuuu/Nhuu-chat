@@ -64,7 +64,7 @@ export class ChatbotOrchestrator {
         platform: input.platform,
         channelId: input.channelId
       }).lean();
-      if (!conversation || isBotPaused(conversation.botPausedUntil, now()))
+      if (!conversation || conversation.botEnabled === false || isBotPaused(conversation.botPausedUntil, now()))
         return { status: "skipped" };
       const message = await MessageModel.findOne({
         _id: input.customerMessageId,
