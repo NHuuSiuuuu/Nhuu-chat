@@ -10,6 +10,7 @@ import { MessageModel } from "../models/message.model.js";
 import type { AiSuggestionsResponse } from "@nhuu-chat/contracts";
 import { shouldGenerateSuggestions, type AiSuggestionTrigger } from "../ai/ai-settings.js";
 import { getAiSettings } from "./ai-settings.service.js";
+import { pauseBot } from "../orchestration/bot-pause.service.js";
 
 const REPLY_SUGGESTION_CONTEXT_SIZE = 6;
 
@@ -48,6 +49,8 @@ export async function updateAssignment(id: string, assignedAgentId: string | nul
   }
   const row = await ConversationModel.findByIdAndUpdate(id, { assignedAgentId }, { new: true }).populate("customerId", "name avatarUrl").populate("tagIds", "name color").lean();
   if (!row) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
+  // Khi nhân viên nhận hội thoại, khóa bot ngay để không phát sinh câu trả lời song song.
+  if (assignedAgentId !== null) await pauseBot(id, new Date());
   return toConversation(row);
 }
 

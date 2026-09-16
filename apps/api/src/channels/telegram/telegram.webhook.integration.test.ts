@@ -107,7 +107,7 @@ describe("Telegram channel routes", () => {
     expect(await MessageModel.countDocuments({ senderType: "customer", deliveryStatus: "delivered" })).toBe(1);
     expect(await MessageModel.findOne({ senderType: "bot" }).lean()).toMatchObject({ deliveryStatus: "failed", metadata: { handoff: true, errorCode: "DELIVERY_FAILED" } });
     expect(await BotProcessingModel.findOne().lean()).toMatchObject({ status: "failed", errorCode: "DELIVERY_FAILED" });
-    expect(await ConversationModel.findById(conversation._id).lean()).toMatchObject({ status: "pending", botPausedUntil: expect.any(Date) });
+    expect(await ConversationModel.findById(conversation._id).lean()).toMatchObject({ status: "open", botPausedUntil: null });
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
@@ -130,7 +130,7 @@ describe("Telegram channel routes", () => {
     expect((await request(createApp()).post(path).send(textUpdate)).status).toBe(204);
     const first = await MessageModel.findOne({ senderType: "customer" }).lean();
     expect(first).toMatchObject({ metadata: { botFailure: { code: "PROCESSING_FAILED" } } });
-    expect(await ConversationModel.findById(conversation._id).lean()).toMatchObject({ status: "pending", botPausedUntil: expect.any(Date) });
+    expect(await ConversationModel.findById(conversation._id).lean()).toMatchObject({ status: "open", botPausedUntil: null });
     expect(await BotProcessingModel.countDocuments()).toBe(0);
     expect((await request(createApp()).post(path).send(textUpdate)).status).toBe(204);
     expect((await MessageModel.findOne({ senderType: "customer" }).lean())?.metadata.botFailure).toEqual(first!.metadata.botFailure);

@@ -114,8 +114,8 @@ describe("bot delivery", () => {
         errorCode: "PERSISTENCE_FAILED"
       });
       expect(await ConversationModel.findById(command.conversationId)).toMatchObject({
-        status: "pending",
-        botPausedUntil: new Date(now.getTime() + 1_800_000)
+        status: "open",
+        botPausedUntil: null
       });
       expect(await service.deliver(command)).toEqual({ status: "skipped" });
       expect(await MessageModel.countDocuments({ senderType: "bot" })).toBe(0);
@@ -271,7 +271,7 @@ describe("bot delivery", () => {
   });
 
   it.each(["missing", "throws", "timeout", "resolve-throws"])(
-    "records %s adapter failure and hands off without resending",
+    "records %s adapter failure without pausing or resending",
     async (kind) => {
       const { command, sendText } = await arrange();
       if (kind === "throws") sendText.mockRejectedValue(new Error("token=secret"));
@@ -290,14 +290,14 @@ describe("bot delivery", () => {
       expect(await MessageModel.countDocuments({ senderType: "bot" })).toBe(1);
       expect(await MessageModel.findOne({ senderType: "bot" })).toMatchObject({
         deliveryStatus: "failed",
-        metadata: { handoff: true }
+        metadata: { handoff: false }
       });
       const processing = await BotProcessingModel.findById(command.processingId);
       expect(processing).toMatchObject({ status: "failed", errorCode: expect.any(String) });
       expect(JSON.stringify(processing)).not.toContain("secret");
       expect(await ConversationModel.findById(command.conversationId)).toMatchObject({
-        status: "pending",
-        botPausedUntil: new Date(now.getTime() + 1_800_000)
+        status: "open",
+        botPausedUntil: null
       });
     }
   );

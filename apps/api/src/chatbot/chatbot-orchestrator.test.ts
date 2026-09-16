@@ -48,7 +48,7 @@ describe("chatbot orchestration", () => {
         })
     );
     const { orchestrator, reply, sendText } = harness();
-    expect(await orchestrator.process(input)).toEqual({ status: "handed_off" });
+    expect(await orchestrator.process(input)).toEqual({ status: "sent" });
     finishSearch();
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(reply).not.toHaveBeenCalled();
@@ -223,7 +223,7 @@ describe("chatbot orchestration", () => {
   });
 
   it.each(["handoff", "throw", "timeout", "empty"])(
-    "uses one configured fallback and pauses on provider %s",
+    "uses one configured fallback without pausing when provider %s is not a customer handoff",
     async (kind) => {
       const { input } = await seedBotConversation();
       const { orchestrator, reply, sendText } = harness();
@@ -232,18 +232,31 @@ describe("chatbot orchestration", () => {
       if (kind === "throw") reply.mockRejectedValue(new Error("secret provider failure"));
       if (kind === "timeout") reply.mockImplementation(() => new Promise(() => {}));
       if (kind === "empty") reply.mockResolvedValue({ answer: " ", handoff: false, sources: [] });
-      expect(await orchestrator.process(input)).toEqual({ status: "handed_off" });
+      expect(await orchestrator.process(input)).toEqual({ status: "sent" });
       expect(sendText).toHaveBeenCalledExactlyOnceWith({ channelId: "42", content: fallback });
       expect(await ConversationModel.findById(input.conversationId)).toMatchObject({
-        status: "pending",
-        botPausedUntil: new Date(now.getTime() + 30 * 60_000),
-        unreadCount: 2
+        status: "open",
+        botPausedUntil: null,
+        unreadCount: 1
       });
-      expect(await BotProcessingModel.findOne()).toMatchObject({ status: "handed_off" });
-      expect(await orchestrator.process(input)).toEqual({ status: "skipped" });
+      expect(await BotProcessingModel.findOne()).toMatchObject({ status: "sent" });
       expect(await MessageModel.countDocuments({ senderType: "bot" })).toBe(1);
     }
   );
+
+  it("pauses only when the customer selects Gặp nhân viên", async () => {
+    const { input } = await seedBotConversation();
+    const { orchestrator, reply, sendText } = harness();
+    reply.mockResolvedValue({ answer: "Em sẽ chuyển anh/chị đến nhân viên.", handoff: false, sources: [] });
+
+    expect(await orchestrator.process({ ...input, content: "Gặp nhân viên" })).toEqual({ status: "handed_off" });
+    expect(reply).not.toHaveBeenCalled();
+    expect(sendText).toHaveBeenCalledExactlyOnceWith({ channelId: "42", content: fallback });
+    expect(await ConversationModel.findById(input.conversationId)).toMatchObject({
+      status: "pending",
+      botPausedUntil: new Date(now.getTime() + 30 * 60_000)
+    });
+  });
 
   it("keeps the bot active when the provider returns an insufficient-information fallback", async () => {
     const { input } = await seedBotConversation();

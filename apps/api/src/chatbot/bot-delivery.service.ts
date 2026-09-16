@@ -112,7 +112,7 @@ export class BotDeliveryService {
           }, this.options.timeoutMs ?? 10_000),
         updateDelivery: async (_command, state) => {
           const failed = state.status === "failed";
-          const handoff = input.handoff || failed;
+          const handoff = input.handoff;
           const status = failed ? "failed" : handoff ? "handed_off" : "sent";
           const errorCode = failed ? "DELIVERY_FAILED" : undefined;
           // Cập nhật trạng thái gửi, bàn giao và snippet cùng transaction trước khi phát realtime.
@@ -204,15 +204,14 @@ export class BotDeliveryService {
             $set: {
               deliveryStatus: "failed",
               "metadata.errorCode": "PERSISTENCE_FAILED",
-              "metadata.handoff": true
+              "metadata.handoff": input.handoff
             }
           }
         ).catch(() => undefined);
         await ConversationModel.updateOne(
           { _id: input.conversationId, ownerId: input.ownerId },
           {
-            $set: { status: "pending" },
-            $max: { botPausedUntil: new Date(now().getTime() + 1_800_000) }
+            $set: { status: input.handoff ? "pending" : "open" }
           }
         ).catch(() => undefined);
       } else {
@@ -228,8 +227,7 @@ export class BotDeliveryService {
             await ConversationModel.updateOne(
               { _id: input.conversationId, ownerId: input.ownerId },
               {
-                $set: { status: "pending" },
-                $max: { botPausedUntil: new Date(now().getTime() + 1_800_000) }
+                $set: { status: input.handoff ? "pending" : "open" }
               },
               { session }
             );

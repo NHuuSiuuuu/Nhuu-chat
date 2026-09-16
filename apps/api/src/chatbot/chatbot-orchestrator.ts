@@ -27,6 +27,16 @@ const defaultProvider: BotReplyProvider = {
   }
 };
 
+// Chỉ coi lựa chọn rõ ràng của khách là yêu cầu chuyển nhân viên; fallback không tự tạo handoff.
+export function customerRequestedAgent(content: string): boolean {
+  return content
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim() === "gap nhan vien";
+}
+
 export class ChatbotOrchestrator {
   constructor(
     private readonly options: {
@@ -154,7 +164,7 @@ export class ChatbotOrchestrator {
         result = { answer: assistant.fallbackMessage, handoff: true, sources: [] };
       }
 
-      const handoff = result.handoff || !result.answer.trim();
+      const handoff = customerRequestedAgent(input.content);
       return await this.options.delivery.deliver({
         ...input,
         processingId,
@@ -173,8 +183,7 @@ export class ChatbotOrchestrator {
         await ConversationModel.updateOne(
           { _id: input.conversationId, ownerId: input.ownerId },
           {
-            $set: { status: "pending" },
-            $max: { botPausedUntil: new Date(now().getTime() + 1_800_000) }
+            $set: { status: "open" }
           }
         ).catch(() => undefined);
       }

@@ -22,7 +22,7 @@ export async function processTelegramCustomerMessage(input: NormalizedCustomerMe
     )),
     Promise.resolve().then(() => ConversationModel.findOneAndUpdate(
       { _id: input.conversationId, ownerId: input.ownerId, platform: input.platform, channelId: input.channelId },
-      { $set: { status: "pending" }, $max: { botPausedUntil: new Date(now.getTime() + 1_800_000) } },
+      { $set: { status: "open" } },
       { returnDocument: "after" }
     ).populate("customerId", "name avatarUrl").populate("tagIds", "name color").lean())
   ]);

@@ -156,7 +156,7 @@ describe("Telegram personal inbound chatbot integration", () => {
     await telegram.listener!(event);
     expect(await MessageModel.countDocuments({ senderType: "customer", deliveryStatus: "delivered" })).toBe(1);
     expect(await MessageModel.findOne({ senderType: "bot" }).lean()).toMatchObject({ deliveryStatus: "failed", metadata: { handoff: true, errorCode: "DELIVERY_FAILED" } });
-    expect(await ConversationModel.findOne().lean()).toMatchObject({ status: "pending", botPausedUntil: expect.any(Date), unreadCount: 1 });
+    expect(await ConversationModel.findOne().lean()).toMatchObject({ status: "open", botPausedUntil: null, unreadCount: 1 });
     expect(await BotProcessingModel.findOne().lean()).toMatchObject({ status: "failed" });
     expect(telegram.sendMessage).toHaveBeenCalledOnce();
   });
@@ -214,7 +214,7 @@ describe("Telegram personal inbound chatbot integration", () => {
     await telegram.listener!(event);
     const first = await MessageModel.findOne({ senderType: "customer" }).lean();
     expect(first).toMatchObject({ metadata: { botFailure: { code: "PROCESSING_FAILED" } } });
-    expect(await ConversationModel.findOne().lean()).toMatchObject({ status: "pending", botPausedUntil: expect.any(Date) });
+    expect(await ConversationModel.findOne().lean()).toMatchObject({ status: "open", botPausedUntil: null });
     expect(await BotProcessingModel.countDocuments()).toBe(0);
     await telegram.listener!(event);
     expect((await MessageModel.findOne({ senderType: "customer" }).lean())?.metadata.botFailure).toEqual(first!.metadata.botFailure);
