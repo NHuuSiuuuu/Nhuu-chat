@@ -1,6 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 289 161" role="img" aria-labelledby="title">
   <title id="title">NhuuChat</title>
-  <rect width="289" height="161" rx="8" fill="#1264e8"/>
   <g fill="none" stroke="#fff" stroke-linecap="round" stroke-width="6">
     <path d="M55 48 44 24M77 46l11-22"/>
     <circle cx="43" cy="21" r="4" fill="#fff" stroke="none"/>
