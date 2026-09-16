@@ -334,6 +334,26 @@ describe("Zalo personal QR session lifecycle", () => {
     expect(api.stopListener).toHaveBeenCalledOnce();
   });
 
+  it("does not block logout forever when native QR login never settles", async () => {
+    const stuckClient = createQrClient();
+    stuckClient.loginQR.mockImplementation(async (onQr) => {
+      onQr({ qrData: "data:image/png;base64:stuck", expiresAt: new Date("2026-09-15T16:01:40.000Z") });
+      return new Promise<typeof api>(() => undefined);
+    });
+    dependencies.createClient.mockReturnValue(stuckClient);
+    const { logoutZaloPersonal, startZaloPersonalQr } = await import("./zalo-personal.service.js");
+
+    await startZaloPersonalQr("owner-stuck-login");
+    const logout = logoutZaloPersonal("owner-stuck-login");
+    const result = Promise.race([
+      logout.then(() => "logout" as const),
+      new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 5_000))
+    ]);
+
+    await vi.advanceTimersByTimeAsync(2_001);
+    await expect(result).resolves.toBe("logout");
+  });
+
   it("discards a QR API that expires while account lookup is blocked", async () => {
     let finishAccountLookup!: () => void;
     const expiringClient = createQrClient();

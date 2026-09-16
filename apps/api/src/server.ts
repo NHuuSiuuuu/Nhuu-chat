@@ -84,6 +84,32 @@ function createZaloPersonalRedisLock(client: RedisClientType): ZaloPersonalRedis
   };
 }
 
+// Dùng lease trong bộ nhớ khi phát triển một API process; production vẫn bắt buộc Redis để chống chạy trùng listener.
+export function createInMemoryZaloPersonalRedisLock(): ZaloPersonalRedisLock {
+  const leases = new Map<string, { token: string; expiresAt: number }>();
+
+  return {
+    async acquire(key, ttlMs) {
+      const current = leases.get(key);
+      if (current && current.expiresAt > Date.now()) return undefined;
+
+      const token = randomUUID();
+      leases.set(key, { token, expiresAt: Date.now() + ttlMs });
+      return {
+        async release() {
+          if (leases.get(key)?.token === token) leases.delete(key);
+        },
+        async renew() {
+          const lease = leases.get(key);
+          if (!lease || lease.token !== token || lease.expiresAt <= Date.now()) return false;
+          lease.expiresAt = Date.now() + ttlMs;
+          return true;
+        }
+      };
+    }
+  };
+}
+
 // Bootstrap chỉ bật distributed lock sau khi Redis xác nhận kết nối; lỗi kết nối vẫn fail-closed cho connector.
 async function setupZaloPersonalRedisLock(): Promise<() => Promise<void>> {
   if (!process.env.REDIS_URL) {
@@ -101,7 +127,12 @@ async function setupZaloPersonalRedisLock(): Promise<() => Promise<void>> {
     await client.connect();
     setZaloPersonalRedisLock(createZaloPersonalRedisLock(client));
   } catch {
-    setZaloPersonalRedisLock({ acquire: async () => undefined });
+    if (env.NODE_ENV === "development") {
+      console.warn("Redis unavailable; using an in-memory Zalo personal lease for development");
+      setZaloPersonalRedisLock(createInMemoryZaloPersonalRedisLock());
+    } else {
+      setZaloPersonalRedisLock({ acquire: async () => undefined });
+    }
   }
 
   return async () => {

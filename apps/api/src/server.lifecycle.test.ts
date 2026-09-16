@@ -8,7 +8,7 @@ process.env.ENCRYPTION_KEY ??= "test-encryption-key-that-is-at-least-32-characte
 process.env.TELEGRAM_BOT_TOKEN ??= "test-telegram-token";
 process.env.TELEGRAM_WEBHOOK_SECRET ??= "test-telegram-webhook-secret";
 
-const { startServer } = await import("./server.js");
+const { createInMemoryZaloPersonalRedisLock, startServer } = await import("./server.js");
 
 describe("production server bootstrap", () => {
   it("connects before listen and disconnects during shutdown", async () => {
@@ -148,5 +148,17 @@ describe("production server bootstrap", () => {
     expect(listen).toHaveBeenCalledOnce();
     await handle.shutdown();
     vi.useRealTimers();
+  });
+
+  it("keeps a single-process development lease exclusive and renewable", async () => {
+    const lock = createInMemoryZaloPersonalRedisLock();
+    const first = await lock.acquire("zalo:owner-1", 1_000);
+
+    expect(first).toBeDefined();
+    expect(await lock.acquire("zalo:owner-1", 1_000)).toBeUndefined();
+    expect(await first?.renew?.()).toBe(true);
+
+    await first?.release();
+    expect(await lock.acquire("zalo:owner-1", 1_000)).toBeDefined();
   });
 });

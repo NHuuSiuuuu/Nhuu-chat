@@ -15,6 +15,7 @@ import { toConversation } from "./conversation.service.js";
 import { toMessage } from "./message.service.js";
 
 const QR_TTL_MS = 100_000;
+const NATIVE_LOGIN_CLEANUP_TIMEOUT_MS = 2_000;
 const LIFECYCLE_LOCK_TTL_MS = 30_000;
 const LIFECYCLE_RENEW_INTERVAL_MS = LIFECYCLE_LOCK_TTL_MS / 2;
 const RESTORE_ATTEMPTS = 2;
@@ -718,8 +719,25 @@ async function disposePendingQr(pending: PendingZaloPersonalSession, status: Pub
   pending.errorCode = errorCode;
   if (pending.api) await stopPendingApi(pending, pending.api);
   else await pending.client.disconnect();
-  // Chỉ chờ native promise; completion của nó có thể đã xếp sau operation logout hiện tại.
-  await pending.nativeLoginTask?.catch(() => undefined);
+  // Chờ native promise có giới hạn để adapter không thể treo vô hạn khi thư viện không phát tín hiệu hủy.
+  await waitForNativeLoginCleanup(pending.nativeLoginTask);
+}
+
+// Cho phép logout/replacement hoàn tất dù zca-js không resolve promise sau khi QR bị hủy.
+async function waitForNativeLoginCleanup(loginTask: Promise<void> | undefined): Promise<void> {
+  if (!loginTask) return;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      loginTask.catch(() => undefined),
+      new Promise<void>((resolve) => {
+        timeout = setTimeout(resolve, NATIVE_LOGIN_CLEANUP_TIMEOUT_MS);
+        timeout.unref?.();
+      })
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 // Dùng một stop promise để completion, logout và thay QR không stop cùng API hai lần.
