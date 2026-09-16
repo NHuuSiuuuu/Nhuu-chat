@@ -4,8 +4,10 @@ import type { AiModelTier, AiSentimentWindow, AiSettingsContract, AiSuggestionMo
 import { DashboardTopbar } from "../components/dashboard/DashboardTopbar.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
 import { DevelopmentToast } from "../components/conversations/MessageToast.js";
+import { AutomationTemplateImportModal } from "../components/settings/AutomationTemplateImportModal.js";
 import { apiRequest } from "../lib/api.js";
 import { resolveApiBaseUrl } from "../lib/api-url.js";
+import type { AutomationTemplateImportRow } from "../lib/automation-template-import.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 const TAGS_API_PATH = "/api/v1/conversation-tags";
@@ -293,6 +295,7 @@ function ChatbotAutomationSettings({ token, refresh }: { token: string; refresh?
   const [templates, setTemplates] = useState<AutomationTemplateContract[]>([]);
   const [isTemplatesLoading, setIsTemplatesLoading] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<AutomationTemplateContract | null>(null);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [isAssistantMenuOpen, setIsAssistantMenuOpen] = useState(false);
@@ -368,6 +371,23 @@ function ChatbotAutomationSettings({ token, refresh }: { token: string; refresh?
       setEditingTemplate(null);
     } catch {
       setError(editingTemplate ? "Không thể sửa mẫu chào" : "Không thể thêm mẫu chào");
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  }
+
+  async function importTemplates(rows: AutomationTemplateImportRow[]) {
+    if (!selected) return;
+    setIsSavingTemplate(true);
+    try {
+      const result = await apiRequest<{ imported: number; templates: AutomationTemplateContract[] }>(API_URL, `${ASSISTANTS_API_PATH}/${selected.id}/templates/import`, token, {
+        method: "POST",
+        body: JSON.stringify({ templates: rows })
+      }, refresh);
+      setTemplates((current) => [...current, ...result.templates]);
+      setIsImportModalOpen(false);
+    } catch {
+      setError("Không thể import kịch bản");
     } finally {
       setIsSavingTemplate(false);
     }
@@ -516,8 +536,12 @@ function ChatbotAutomationSettings({ token, refresh }: { token: string; refresh?
       <section className="min-h-[420px] border-r border-gray-200 p-4 max-[1024px]:border-r-0 max-[1024px]:border-b" aria-label="Cấu hình chatbot"><div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3"><h3 className="pt-2 text-sm font-bold text-gray-800">Model</h3><div className="flex min-w-0 flex-col items-end gap-1"><select className="max-w-full rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-sm font-semibold text-gray-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:opacity-60" aria-label="Model chatbot" value={modelTier} onChange={(event) => void saveModelTier(event.target.value as AiModelTier)} disabled={!selected || isSavingModel}><option value="smart">Thông minh nhất</option><option value="balanced">Cân bằng</option><option value="economy">Tiết kiệm</option></select><small className="max-w-full truncate text-[11px] text-gray-400" title={modelNameByTier[modelTier]}>Model đang sử dụng: {modelNameByTier[modelTier]}</small></div></div><div className="mt-5 flex items-center justify-between border-b border-gray-100 pb-3"><h3 className="text-sm font-bold text-gray-800">Kiến thức</h3><button className="rounded-md px-2 py-1 text-xs font-semibold text-sky-600 hover:bg-sky-50" type="button" onClick={() => setIsKnowledgeModalOpen(true)}>Quản lý tài liệu</button></div><p className="mt-3 text-xs text-gray-400">Thêm menu, giá, topping và chính sách để AI tư vấn chính xác.</p><div className="mt-5 flex items-center justify-between border-b border-gray-100 pb-3"><h3 className="text-sm font-bold text-gray-800">Mẫu chào</h3><button className="rounded-md px-2 py-1 text-xs font-semibold text-sky-600 hover:bg-sky-50" type="button" onClick={openCreateTemplate} disabled={!selected}>+ Thêm mẫu chào</button></div>{isTemplatesLoading ? <p className="mt-3 text-xs text-gray-400">Đang tải mẫu chào...</p> : <div className="mt-3 grid gap-2">{templates.map((template) => <div className="rounded-lg bg-gray-50 px-2.5 py-2" key={template.id}><div className="flex items-start justify-between gap-2"><div className="min-w-0"><strong className="block truncate text-xs text-gray-700">{template.name}</strong><small className="block truncate text-[11px] text-gray-400">{template.keywords.join(", ")}</small></div><div className="flex shrink-0 gap-1"><button type="button" aria-label={`Sửa mẫu chào ${template.name}`} onClick={() => openEditTemplate(template)}><InboxIcon name="edit" size={13} /></button><button type="button" aria-label={`Xóa mẫu chào ${template.name}`} onClick={() => void deleteTemplate(template)}><InboxIcon name="trash" size={13} /></button></div></div></div>)}{templates.length === 0 && <p className="text-xs text-gray-400">Chưa có mẫu chào</p>}</div>}<p className="mt-5 text-xs text-gray-400">Kiến thức được quản lý trong mục Kiến thức.</p></section>
       <section className="flex min-h-[420px] flex-col overflow-hidden bg-gray-50/40" aria-label="Khung Chat"><header className="border-b border-gray-100 px-4 py-3 text-center"><span className="text-sm font-bold text-gray-900" aria-label="Tên trợ lý hiện tại">{selected?.name ?? "Chưa có trợ lý"}</span></header><div className="flex-1 overflow-y-auto p-6">{isLoading ? <p className="text-center text-sm text-gray-500">Đang tải trợ lý...</p> : !selected ? <div className="grid h-full place-items-center text-center"><p className="text-sm text-gray-500">Chưa có trợ lý. Hãy bấm “Chat mới” để tạo.</p></div> : messages.length === 0 ? <div className="grid h-full place-items-center text-center"><div><span className="mx-auto grid size-16 place-items-center rounded-full bg-sky-500 text-white shadow-sm"><InboxIcon name="robot" size={30} /></span><h3 className="mt-4 font-bold text-gray-900">{selected.name}</h3><p className="mt-1 text-sm text-gray-500">Tư vấn khách hàng</p></div></div> : <div className="grid gap-3">{messages.map((message, index) => <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-6 ${message.role === "customer" ? "ml-auto bg-blue-600 text-white" : "bg-white text-gray-700 shadow-sm"}`} key={`${message.role}-${index}`}>{message.content}</div>)}{isSending && <p className="text-xs text-gray-400">Đang trả lời...</p>}</div>}</div><form className="flex items-center gap-2 border-t border-gray-100 bg-white p-3" onSubmit={(event) => void sendPreview(event)}><input className="min-w-0 flex-1 rounded-full border border-gray-200 px-4 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" placeholder="Gửi tin nhắn" value={draft} onChange={(event) => setDraft(event.target.value)} disabled={!selected || isSending} /><button className="grid size-9 shrink-0 place-items-center rounded-lg text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50" type="submit" aria-label="Gửi tin nhắn" disabled={!draft.trim() || !selected || isSending}><InboxIcon name="send" size={19} /></button></form></section>
     </div>
+    <div className="mt-3 flex justify-end">
+      <button className="rounded-md border border-sky-200 px-3 py-2 text-xs font-semibold text-sky-700 hover:bg-sky-50 disabled:opacity-50" type="button" onClick={() => setIsImportModalOpen(true)} disabled={!selected}>Import kịch bản</button>
+    </div>
     {isCreateOpen && <AssistantNameModal name={newAssistantName} onNameChange={setNewAssistantName} onClose={() => setIsCreateOpen(false)} onSubmit={() => void createAssistant()} />}
     {isTemplateModalOpen && <GreetingTemplateModal template={editingTemplate} isSaving={isSavingTemplate} onClose={() => { setIsTemplateModalOpen(false); setEditingTemplate(null); }} onSave={saveTemplate} />}
+    {isImportModalOpen && <AutomationTemplateImportModal isSaving={isSavingTemplate} onClose={() => setIsImportModalOpen(false)} onImport={importTemplates} />}
     {isKnowledgeModalOpen && <KnowledgeDocumentModal token={token} refresh={refresh} onClose={() => setIsKnowledgeModalOpen(false)} />}
   </div>;
 }

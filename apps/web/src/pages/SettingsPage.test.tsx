@@ -188,6 +188,9 @@ describe("Settings page", () => {
     expect(source).toContain("deleteTemplate");
     expect(source).toContain("Mẫu chào");
     expect(source).toContain("Thêm mẫu chào");
+    expect(source).toContain("Import kịch bản");
+    expect(source).toContain("/templates/import");
+    expect(source).toContain("AutomationTemplateImportModal");
     expect(source).toContain("Sửa mẫu chào");
     expect(source).toContain("Xóa mẫu chào");
     expect(source).toContain("Cho phép Gemini viết lại");

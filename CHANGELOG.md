@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm import kịch bản trả lời tự động từ Excel `.xlsx` hoặc CSV theo từng trợ lý, hỗ trợ xem trước, báo lỗi theo dòng và xác nhận trước khi lưu.
 - Thêm độ trễ 2 giây trước khi gửi mẫu chào tự động để phản hồi tự nhiên hơn.
 - Sửa layout danh sách mẫu chào trong Trợ lý AI: nội dung dài không còn đẩy mất nút Sửa/Xóa.
 - Chỉ pause chatbot khi nhân viên gửi tin, nhân viên tiếp quản hội thoại hoặc khách chọn “Gặp nhân viên”; fallback và lỗi xử lý bot không còn tự pause.
