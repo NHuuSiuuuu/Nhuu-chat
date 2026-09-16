@@ -13,6 +13,15 @@ describe("dashboard connected accounts", () => {
     ]);
   });
 
+  it("keeps a persisted Zalo account visible when its listener needs reconnecting", () => {
+    expect(buildDashboardAccounts(
+      { connected: false, displayName: null, username: null },
+      { id: "zalo-session-1", status: "error", displayName: "Nguyễn Ngọc Hưng", username: "t_m7deefacm6" }
+    )).toEqual([
+      { id: "zalo_personal", platform: "zalo", name: "Nguyễn Ngọc Hưng", username: "t_m7deefacm6", status: "error" }
+    ]);
+  });
+
   it("opens the selected platform or all platforms only for merge view", () => {
     expect(conversationPathForPlatform("zalo_personal")).toBe("/inbox?platform=zalo_personal");
     expect(conversationPathForPlatform("telegram_personal")).toBe("/inbox?platform=telegram_personal");

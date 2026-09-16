@@ -181,6 +181,48 @@ describe("Zalo personal QR session lifecycle", () => {
     expect(JSON.stringify(dependencies.findOneAndUpdate.mock.calls)).not.toContain("credential-secret");
   });
 
+  it("does not turn a transient native listener error into a permanent session error", async () => {
+    const { getActiveZaloPersonalClient, getZaloPersonalSessionStatus, startZaloPersonalQr } = await import("./zalo-personal.service.js");
+
+    await startZaloPersonalQr("owner-transient-listener-error");
+    await flushLifecycleQueue();
+
+    const onError = api.onError.mock.calls[0]?.[0] as ((error: unknown) => void) | undefined;
+    expect(onError).toBeTypeOf("function");
+    onError?.(new Error("temporary websocket failure"));
+    await flushLifecycleQueue();
+
+    expect(await getZaloPersonalSessionStatus("owner-transient-listener-error")).toMatchObject({ status: "connected" });
+    expect(await getActiveZaloPersonalClient("owner-transient-listener-error")).toBe(api);
+    expect(dependencies.updateOne).not.toHaveBeenCalledWith(
+      { ownerId: "owner-transient-listener-error" },
+      { $set: { status: "error", lastErrorCode: "ZALO_PERSONAL_LISTENER_ERROR" } }
+    );
+  });
+
+  it("allows a fresh QR after a persisted listener error blocks the old session", async () => {
+    dependencies.findOne.mockReturnValue({
+      lean: async () => ({
+        _id: "session-listener-error",
+        status: "error",
+        lastErrorCode: "ZALO_PERSONAL_LISTENER_ERROR",
+        encryptedCredentials: "ciphertext:expired"
+      }),
+      select: () => ({ lean: async () => ({
+        _id: "session-listener-error",
+        status: "error",
+        lastErrorCode: "ZALO_PERSONAL_LISTENER_ERROR",
+        encryptedCredentials: "ciphertext:expired"
+      }) })
+    });
+
+    const { startZaloPersonalQr } = await import("./zalo-personal.service.js");
+    const qr = await startZaloPersonalQr("owner-retry-after-listener-error");
+
+    expect(qr.status).toBe("waiting_qr");
+    expect(dependencies.createClient).toHaveBeenCalledOnce();
+  });
+
   it("rejects a QR status read by a different owner", async () => {
     const { getZaloPersonalQrStatus, startZaloPersonalQr } = await import("./zalo-personal.service.js");
 

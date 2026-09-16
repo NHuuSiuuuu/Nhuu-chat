@@ -94,7 +94,13 @@ export async function startZaloPersonalQr(userId: string): Promise<ZaloPersonalQ
     } catch {
       throw new AppError(503, "ZALO_PERSONAL_SESSION_LOOKUP_FAILED", "Zalo personal session is temporarily unavailable");
     }
-    if (persisted && persisted.status !== "expired" && persisted.status !== "disconnected") return persisted;
+    // Lỗi socket cũ không được khóa vĩnh viễn luồng QR; cookie có thể đã hết hạn nên cho phép quét lại.
+    if (
+      persisted &&
+      persisted.status !== "expired" &&
+      persisted.status !== "disconnected" &&
+      !(persisted.status === "error" && persisted.errorCode === "ZALO_PERSONAL_LISTENER_ERROR")
+    ) return persisted;
 
     const pending: PendingZaloPersonalSession = {
       id: randomUUID(),
@@ -421,10 +427,8 @@ async function restoreZaloPersonalClient(userId: string, encryptedCredentials: s
 
 // Listener chỉ chuyển event đã chuẩn hóa vào cùng luồng lưu trữ, không để payload native rò sang service.
 function attachZaloPersonalMessageSync(userId: string, api: ZaloPersonalApi): void {
-  // Native socket errors phải được chuyển thành trạng thái an toàn, không được thoát process.
-  api.onError(() => {
-    void handleZaloPersonalListenerError(userId, api).catch(() => undefined);
-  });
+  // Lỗi WebSocket tạm thời để zca-js tự retry; chỉ closed sau khi retry thất bại mới đánh dấu session lỗi.
+  api.onError(() => undefined);
   api.onClosed(() => {
     void handleZaloPersonalListenerError(userId, api).catch(() => undefined);
   });
