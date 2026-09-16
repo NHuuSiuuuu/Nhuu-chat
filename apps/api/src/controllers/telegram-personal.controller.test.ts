@@ -4,6 +4,7 @@ import { errorHandler } from "../common/errors.js";
 const serviceMocks = vi.hoisted(() => ({
   getPersonalQrLoginStatus: vi.fn(),
   getPersonalSessionStatus: vi.fn(),
+  logoutPersonalSession: vi.fn(),
   startPersonalQrLogin: vi.fn(),
   submitPersonalQrPassword: vi.fn()
 }));
@@ -13,6 +14,7 @@ vi.mock("../services/telegram-personal.service.js", () => serviceMocks);
 import {
   getQrLoginStatus,
   getSessionStatus,
+  logoutPersonalSession,
   startQrLogin,
   submitQrPassword
 } from "./telegram-personal.controller.js";
@@ -26,6 +28,9 @@ function responseRecorder() {
     },
     status(statusCode: number) {
       state.statusCode = statusCode;
+      return response;
+    },
+    send() {
       return response;
     }
   };
@@ -63,6 +68,18 @@ describe("Telegram personal controller", () => {
     expect(serviceMocks.startPersonalQrLogin).toHaveBeenCalledWith("user-1");
     expect(state.statusCode).toBe(201);
     expect(state.body).toEqual(status);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("logs out only the authenticated user's Telegram personal session", async () => {
+    serviceMocks.logoutPersonalSession.mockResolvedValue(undefined);
+    const { response, state } = responseRecorder();
+    const next = vi.fn();
+
+    await logoutPersonalSession({ auth, body: { userId: "other-user" } } as never, response as never, next);
+
+    expect(serviceMocks.logoutPersonalSession).toHaveBeenCalledWith("user-1");
+    expect(state.statusCode).toBe(204);
     expect(next).not.toHaveBeenCalled();
   });
 

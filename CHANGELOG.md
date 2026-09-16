@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm API `POST /api/v1/channels/telegram-personal/logout` để hủy kết nối Telegram cá nhân, dừng client/QR và xóa session nhưng giữ nguyên dữ liệu Inbox.
 - Thêm nút tùy chọn trên tài khoản Zalo đã kết nối và modal xác nhận hủy kích hoạt; dữ liệu hội thoại/tin nhắn vẫn được giữ nguyên.
 - Nối màn hình `Kết nối → Zalo` với API QR cá nhân: tự tạo mã khi chọn Zalo, hiển thị QR thật, polling trạng thái và báo lỗi/hết hạn/kết nối thành công.
 - Cho phép môi trường development dùng lease Zalo trong bộ nhớ khi Redis chưa chạy, giữ production fail-closed; giới hạn cleanup QR native để logout không bị treo vô hạn.
