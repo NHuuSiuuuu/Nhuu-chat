@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useState } from "react";
 
 import type { AutomationTemplateImportRow } from "../../lib/automation-template-import.js";
