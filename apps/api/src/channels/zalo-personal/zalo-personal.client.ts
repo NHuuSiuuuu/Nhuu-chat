@@ -95,7 +95,12 @@ class ZaloPersonalClientAdapter implements ZaloPersonalClient {
       getContext: () => ({ credentials: extractCredentials(zcaApi.getContext()) }),
       getAccountInfo: async () => {
         const profile = (await zcaApi.fetchAccountInfo()).profile ?? {};
-        return { id: profile.uid, displayName: profile.dName, username: profile.userName };
+        // zca-js 2.2 đổi tên field profile; giữ fallback cho payload của các bản cũ.
+        return {
+          id: profile.userId ?? profile.uid,
+          displayName: profile.displayName ?? profile.dName,
+          username: profile.username ?? profile.userName
+        };
       },
       // Bắt rejection của callback async để lỗi một event không làm chết tiến trình API.
       onMessage: (listener) => zcaApi.listener.on("message", (event) => {

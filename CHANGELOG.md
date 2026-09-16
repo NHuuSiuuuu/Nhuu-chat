@@ -8,6 +8,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Nối màn hình `Kết nối → Zalo` với API QR cá nhân: tự tạo mã khi chọn Zalo, hiển thị QR thật, polling trạng thái và báo lỗi/hết hạn/kết nối thành công.
 - Cho phép môi trường development dùng lease Zalo trong bộ nhớ khi Redis chưa chạy, giữ production fail-closed; giới hạn cleanup QR native để logout không bị treo vô hạn.
 - Sửa polling QR Zalo không tạo nhiều interval và hiển thị đúng ảnh PNG base64 do `zca-js` trả về.
+- Sửa lỗi sau khi quét QR Zalo: tương thích field tài khoản của `zca-js` 2.2 (`userId`, `displayName`, `username`) và giữ fallback cho bản cũ, tránh báo sai `ZALO_QR_CREATE_FAILED`.
 - Thêm backend thử nghiệm cho Zalo cá nhân: quản lý phiên QR, lưu credentials đã mã hóa, cô lập dữ liệu theo owner và chuẩn hóa tin nhắn inbound/outbound; đây là API không chính thức nên tài khoản có nguy cơ bị Zalo hạn chế hoặc khóa.
 - Bổ sung migration thủ công, idempotent cho unique index conversation Zalo cá nhân: trong maintenance window, sao lưu database rồi chạy `MONGODB_URI=... pnpm --filter api run migrate:zalo-personal-conversation-index` trước khi rollout connector; helper tạo `{ platform, channelId, ownerId }` trước khi xóa legacy `{ platform, channelId }` và không chạy khi server khởi động.
 - Sửa Zalo cá nhân đọc caption/media từ attachment object thật của `zca-js`, dừng migration an toàn khi owner index có option không tương thích và chuẩn hóa lỗi tạo QR thành `ZALO_QR_CREATE_FAILED`; đồng bộ hướng dẫn vận hành trong README/Wiki.

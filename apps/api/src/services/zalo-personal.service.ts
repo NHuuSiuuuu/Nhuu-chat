@@ -724,7 +724,7 @@ async function disposePendingQr(pending: PendingZaloPersonalSession, status: Pub
 }
 
 // Cho phép logout/replacement hoàn tất dù zca-js không resolve promise sau khi QR bị hủy.
-async function waitForNativeLoginCleanup(loginTask: Promise<void> | undefined): Promise<void> {
+async function waitForNativeLoginCleanup(loginTask: Promise<unknown> | undefined): Promise<void> {
   if (!loginTask) return;
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {

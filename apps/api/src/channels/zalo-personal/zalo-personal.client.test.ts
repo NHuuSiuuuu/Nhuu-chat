@@ -60,6 +60,26 @@ describe("Zalo personal client adapter", () => {
     vi.useRealTimers();
   });
 
+  it("normalizes the zca-js 2.2 account profile fields after QR login", async () => {
+    const zcaApi = {
+      getContext: vi.fn(() => ({ imei: "imei", cookie: [], userAgent: "ua" })),
+      fetchAccountInfo: vi.fn(async () => ({ profile: { userId: "account-2", displayName: "Demo Zalo", username: "demo-zalo" } })),
+      listener: { on: vi.fn(), start: vi.fn(), stop: vi.fn() },
+      sendMessage: vi.fn(async () => ({ message: { msgId: 1 } }))
+    };
+    const client = createZaloPersonalClient({
+      zcaFactory: () => ({ loginQR: async () => zcaApi, login: async () => zcaApi })
+    });
+
+    const api = await client.loginQR(vi.fn());
+
+    await expect(api.getAccountInfo()).resolves.toEqual({
+      id: "account-2",
+      displayName: "Demo Zalo",
+      username: "demo-zalo"
+    });
+  });
+
   it("enables native self-message delivery by default", async () => {
     await createZaloPersonalClient().loginQR(vi.fn());
     expect(nativeConstruction.options.at(-1)).toEqual({ selfListen: true });
