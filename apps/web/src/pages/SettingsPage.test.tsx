@@ -393,4 +393,15 @@ describe("Settings page", () => {
     expect(source).toContain("props as React.ComponentProps<typeof DashboardTopbar>");
     expect(source).toContain("<SettingsDashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}");
   });
+
+  it("places instruction save and template import actions beside their section headings", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const normalized = source.replace(/\s+/g, " ");
+
+    expect(normalized).toContain('<div className="flex items-center justify-between border-b border-gray-100 pb-3"><h3 className="text-sm font-bold text-gray-900">Hướng dẫn</h3>');
+    expect(normalized).toContain('type="button" onClick={() => void saveAssistant()}');
+    expect(normalized).toContain('<div className="mt-5 flex items-center justify-between border-b border-gray-100 pb-3"><h3 className="text-sm font-bold text-gray-800">Mẫu chào</h3>');
+    expect(normalized).toContain('type="button" onClick={() => setIsImportModalOpen(true)}');
+    expect(source).not.toContain('<div className="mt-3 flex justify-end">');
+  });
 });

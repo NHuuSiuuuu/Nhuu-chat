@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Đưa nút `Lưu hướng dẫn` và `Import kịch bản` lên cùng dòng tiêu đề khu vực tương ứng trong Trợ lý AI, giúp người dùng dễ nhận biết.
 - Thêm nút lưu nội dung Hướng dẫn cho từng trợ lý AI, tránh mất thay đổi khi đổi trợ lý hoặc tải lại trang.
 - Thêm vùng cuộn ẩn thanh scrollbar cho danh sách mẫu chào trong Trợ lý AI.
 - Thêm import kịch bản trả lời tự động từ Excel `.xlsx` hoặc CSV theo từng trợ lý, hỗ trợ xem trước, báo lỗi theo dòng và xác nhận trước khi lưu.
