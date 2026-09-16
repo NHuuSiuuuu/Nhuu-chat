@@ -6,6 +6,7 @@ const dependencyMocks = vi.hoisted(() => ({
   botClientConstructedWith: vi.fn(),
   botSendText: vi.fn(),
   createMessage: vi.fn(),
+  findMessage: vi.fn(),
   findConversationById: vi.fn(),
   pauseConversation: vi.fn(),
   acquireSendLease: vi.fn(),
@@ -22,7 +23,7 @@ vi.mock("../models/conversation.model.js", () => ({
 }));
 
 vi.mock("../models/message.model.js", () => ({
-  MessageModel: { create: dependencyMocks.createMessage }
+  MessageModel: { create: dependencyMocks.createMessage, findOne: dependencyMocks.findMessage }
 }));
 
 vi.mock("./telegram-personal.service.js", () => ({
@@ -278,6 +279,51 @@ describe("sendOutboundMessage", () => {
       platform: "zalo_personal",
       content: "Hello from Zalo support",
       deliveryStatus: "sent"
+    });
+  });
+
+  it("returns the persisted Zalo message when its listener wins the persistence race", async () => {
+    arrangeConversation(conversation({
+      platform: "zalo_personal",
+      assignedAgentId: null
+    }));
+    dependencyMocks.getActiveZaloPersonalClient.mockResolvedValue({
+      getAccountInfo: vi.fn().mockResolvedValue({ id: "zalo-account-1" }),
+      sendMessage: dependencyMocks.zaloPersonalSendMessage
+    });
+    dependencyMocks.zaloPersonalSendMessage.mockResolvedValue({ id: "zalo-9003" });
+    const duplicate = Object.assign(new Error("duplicate external message"), { code: 11000 });
+    dependencyMocks.createMessage.mockRejectedValue(duplicate);
+    dependencyMocks.findMessage.mockReturnValue({
+      lean: vi.fn().mockResolvedValue({
+        _id: "message-from-listener",
+        conversationId: "conversation-1",
+        platform: "zalo_personal",
+        senderType: "customer",
+        senderId: "customer-1",
+        type: "text",
+        content: "Hello from Zalo support",
+        deliveryStatus: "delivered",
+        createdAt: "2026-09-10T04:30:01.000Z"
+      })
+    });
+
+    const result = await sendOutboundMessage(
+      { conversationId: "conversation-1", content: "Hello from Zalo support" },
+      { id: "customer-1", email: "owner@example.com", role: "customer" }
+    );
+
+    expect(dependencyMocks.findMessage).toHaveBeenCalledWith({
+      platform: "zalo_personal",
+      externalMessageId: "zalo_personal:zalo-account-1:zalo-9003"
+    });
+    expect(result.message).toMatchObject({
+      id: "message-from-listener",
+      platform: "zalo_personal",
+      deliveryStatus: "delivered"
+    });
+    expect(dependencyMocks.pauseConversation).toHaveBeenCalledWith("conversation-1", {
+      $set: { lastMessageAt: now, lastMessageSnippet: "Hello from Zalo support" }
     });
   });
 

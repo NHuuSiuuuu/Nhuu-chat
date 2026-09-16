@@ -12,6 +12,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Hiển thị tài khoản Zalo cá nhân đã kết nối trên Dashboard; click từng tài khoản mở Hội thoại theo đúng kênh, còn `Gộp trang` mới mở chế độ xem chung nhiều kênh.
 - Sửa listener Zalo coi lỗi WebSocket tạm thời là lỗi vĩnh viễn; cho phép `zca-js` tự retry và cho phép tạo QR mới khi session cũ cần kết nối lại.
 - Sửa gửi tin Zalo cá nhân trả `502` sau khi người nhận đã nhận được tin: chuẩn hóa message id native dạng số hoặc chuỗi để lưu outbound thành công.
+- Sửa gửi tin Zalo cá nhân trả `409` dù người nhận đã nhận được tin: nhận lại bản ghi đã được listener lưu trong race chống trùng message id.
 - Hiển thị thông báo `Chức năng đang được phát triển` cho các tab Settings chưa triển khai: Cài đặt chung, Hỗ trợ trả lời, Giao diện, Cuộc gọi, Chế độ xoay vòng, Đồng bộ, Công cụ, Phân quyền và Lịch sử.
 - Hiển thị trang `Chức năng đang được phát triển` khi chọn các tab header Đơn hàng, Bài viết hoặc Thống kê; mỗi tab có route riêng để giữ đúng trạng thái khi tải lại.
 - Vô hiệu hóa các tab Settings chưa phát triển, hiển thị con trỏ không cho phép click và giữ nguyên các tab Thẻ hội thoại, Trợ lý AI đang hoạt động.

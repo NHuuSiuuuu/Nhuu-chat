@@ -63,6 +63,21 @@ export async function createOutboundMessage(input: { conversationId: string; pla
   return MessageModel.create({ ...input, senderType: "agent", type: "text" });
 }
 
+// Listener Zalo có thể lưu event tự phản hồi trước outbound flow; duplicate khi đó vẫn chứng minh tin đã được lưu.
+async function persistZaloOutboundMessage(input: { conversationId: string; platform: string; senderId: string; content: string; externalMessageId?: string; deliveryStatus: "pending" | "sent" | "failed" }) {
+  try {
+    return await createOutboundMessage(input);
+  } catch (error) {
+    if (!isDuplicateKey(error) || !input.externalMessageId) throw error;
+    const existing = await MessageModel.findOne({
+      platform: input.platform,
+      externalMessageId: input.externalMessageId
+    }).lean();
+    if (!existing) throw error;
+    return { toObject: () => existing };
+  }
+}
+
 // Kiểm tra quyền, gửi qua đúng connector và luôn lưu trạng thái truy vết của lần gửi Zalo cá nhân.
 export async function sendOutboundMessage(
   input: { conversationId: string; content: string },
@@ -145,14 +160,23 @@ export async function sendOutboundMessage(
     deliveryStatus = "pending";
   }
 
-  const message = await createOutboundMessage({
-    conversationId,
-    platform: conversation.platform,
-    senderId: "agent",
-    content,
-    externalMessageId,
-    deliveryStatus
-  });
+  const message = conversation.platform === "zalo_personal"
+    ? await persistZaloOutboundMessage({
+      conversationId,
+      platform: conversation.platform,
+      senderId: "agent",
+      content,
+      externalMessageId,
+      deliveryStatus
+    })
+    : await createOutboundMessage({
+      conversationId,
+      platform: conversation.platform,
+      senderId: "agent",
+      content,
+      externalMessageId,
+      deliveryStatus
+    });
   const lastMessageAt = new Date();
   await ConversationModel.findByIdAndUpdate(conversationId, {
     $set: { lastMessageAt, lastMessageSnippet: content }
@@ -170,4 +194,8 @@ export async function sendOutboundMessage(
       conversation.assignedAgentId ? String(conversation.assignedAgentId) : ""
     ]
   };
+}
+
+function isDuplicateKey(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === 11000;
 }
