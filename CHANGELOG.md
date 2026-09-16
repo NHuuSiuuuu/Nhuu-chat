@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm độ trễ 2 giây trước khi gửi mẫu chào tự động để phản hồi tự nhiên hơn.
+- Sửa layout danh sách mẫu chào trong Trợ lý AI: nội dung dài không còn đẩy mất nút Sửa/Xóa.
 - Chỉ pause chatbot khi nhân viên gửi tin, nhân viên tiếp quản hội thoại hoặc khách chọn “Gặp nhân viên”; fallback và lỗi xử lý bot không còn tự pause.
 
 - Sửa chatbot không tự pause sau fallback thiếu thông tin; khách có thể tiếp tục nhắn và bot vẫn xử lý.

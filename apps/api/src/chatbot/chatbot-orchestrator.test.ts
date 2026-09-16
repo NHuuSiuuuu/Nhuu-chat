@@ -22,7 +22,7 @@ afterAll(stopTestDatabase);
 beforeEach(resetBotDatabase);
 afterEach(() => vi.restoreAllMocks());
 
-function harness() {
+function harness(options: { greetingDelayMs?: number; waitForGreetingDelay?: (delayMs: number) => Promise<void> } = {}) {
   const sendText = vi.fn().mockResolvedValue({ externalMessageId: "remote-1" });
   const reply = vi
     .fn()
@@ -32,7 +32,9 @@ function harness() {
     delivery,
     provider: { reply },
     now: () => now,
-    timeoutMs: 1_000
+    timeoutMs: 1_000,
+    greetingDelayMs: options.greetingDelayMs ?? 0,
+    waitForGreetingDelay: options.waitForGreetingDelay
   });
   return { sendText, reply, orchestrator };
 }
@@ -133,6 +135,24 @@ describe("chatbot orchestration", () => {
       status: "sent",
       botMessageId: bot!._id
     });
+  });
+
+  it("waits before delivering an automatic greeting template", async () => {
+    const { input, assistant } = await seedBotConversation();
+    await seedTemplate(input.ownerId, String(assistant._id));
+    let releaseDelay!: () => void;
+    const waitForGreetingDelay = vi.fn(
+      () => new Promise<void>((resolve) => { releaseDelay = resolve; })
+    );
+    const { orchestrator, sendText } = harness({ greetingDelayMs: 2_000, waitForGreetingDelay });
+
+    const processing = orchestrator.process(input);
+    await vi.waitFor(() => expect(waitForGreetingDelay).toHaveBeenCalledWith(2_000));
+    expect(sendText).not.toHaveBeenCalled();
+
+    releaseDelay();
+    await expect(processing).resolves.toEqual({ status: "sent" });
+    expect(sendText).toHaveBeenCalledOnce();
   });
 
   it("resolves direct assistant before default and supplies its rewrite template", async () => {

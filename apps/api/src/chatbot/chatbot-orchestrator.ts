@@ -17,6 +17,7 @@ import {
   type NormalizedCustomerMessage
 } from "./channel-bot-adapter.js";
 import { matchAutomationTemplate } from "./template-matcher.js";
+import { DEFAULT_GREETING_DELAY_MS, waitForGreetingDelay } from "./greeting-delay.js";
 
 export type { NormalizedCustomerMessage } from "./channel-bot-adapter.js";
 
@@ -44,6 +45,8 @@ export class ChatbotOrchestrator {
       provider?: BotReplyProvider;
       now?: () => Date;
       timeoutMs?: number;
+      greetingDelayMs?: number;
+      waitForGreetingDelay?: (delayMs: number) => Promise<void>;
     }
   ) {}
 
@@ -102,6 +105,7 @@ export class ChatbotOrchestrator {
       }
 
       let result: BotReplyResult;
+      let matchedTemplate = false;
       try {
         // Cả truy xuất và provider dùng chung hạn chờ, không để claim treo vì dịch vụ bên ngoài.
         result = await withBotTimeout(async (signal) => {
@@ -119,6 +123,7 @@ export class ChatbotOrchestrator {
             channelIdentifier,
             templates
           });
+          matchedTemplate = template !== null;
           if (template && !template.allowAiRewrite)
             return {
               answer: template.responseTemplate,
@@ -164,6 +169,11 @@ export class ChatbotOrchestrator {
         result = { answer: assistant.fallbackMessage, handoff: true, sources: [] };
       }
 
+      if (matchedTemplate) {
+        const delayMs = this.options.greetingDelayMs ?? DEFAULT_GREETING_DELAY_MS;
+        if (delayMs > 0)
+          await (this.options.waitForGreetingDelay ?? waitForGreetingDelay)(delayMs);
+      }
       const handoff = customerRequestedAgent(input.content);
       return await this.options.delivery.deliver({
         ...input,
