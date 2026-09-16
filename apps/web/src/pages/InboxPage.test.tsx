@@ -208,6 +208,26 @@ describe("Inbox Tailwind migration", () => {
     expect(chat).toContain("quickReplies={quickReplies}");
   });
 
+  it("lets the active agent take over a conversation and pauses bot handling", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+    const chat = readFileSync(new URL("../components/conversations/ChatWindow.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("/assignment");
+    expect(source).toContain('assignedAgentId: user.id');
+    expect(source).toContain("onTakeOver");
+    expect(chat).toContain("Tiếp quản hội thoại");
+    expect(chat).toContain("onTakeOver");
+  });
+
+  it("renders the conversation platform as an icon in the chat header", () => {
+    const chat = readFileSync(new URL("../components/conversations/ChatWindow.tsx", import.meta.url), "utf8");
+
+    expect(chat).toContain("PlatformIcon");
+    expect(chat).toContain('aria-label={conversationPlatformLabel(conversation.platform)}');
+    expect(chat).toContain("platformIconProvider");
+    expect(chat).not.toContain('className="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">{conversationPlatformLabel(conversation.platform)}');
+  });
+
   it("creates incoming-message toasts without notifying for agent messages", () => {
     const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
 

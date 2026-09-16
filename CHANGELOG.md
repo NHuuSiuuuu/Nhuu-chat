@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm nút `Tiếp quản hội thoại` trong Inbox để gán hội thoại cho nhân viên hiện tại và hiển thị icon nền tảng thay cho badge chữ Zalo.
 - Sửa chatbot giữ chủ đề khóa học khi khách gửi SĐT/Zalo, tránh dùng chuỗi liên hệ làm truy vấn knowledge độc lập rồi trả fallback thiếu thông tin.
 - Bảo vệ quy tắc thu thập liên hệ: chatbot chỉ được cảm ơn và thông báo nhân viên liên hệ sau khi tin khách có SĐT hoặc định danh Zalo xác thực; không còn tin vào lời tự nhận của Gemini.
 - Sửa chatbot giữ ngữ cảnh khi khách trả lời xác nhận ngắn như “có” hoặc “được”, giúp tiếp tục tư vấn theo câu hỏi ngay trước đó thay vì trả fallback thiếu thông tin.
