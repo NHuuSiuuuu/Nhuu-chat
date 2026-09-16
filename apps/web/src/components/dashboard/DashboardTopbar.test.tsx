@@ -21,7 +21,9 @@ describe("DashboardTopbar", () => {
     expect(source).toContain("onLogoClick");
     expect(source).toContain("onNavigate");
     expect(source).toContain("onNavigate?.(item)");
-    expect(source).toContain('item === "Hội thoại" ? "/inbox" : "#"');
+    expect(source).toContain('"Đơn hàng": "/orders"');
+    expect(source).toContain('"Bài viết": "/posts"');
+    expect(source).toContain('"Thống kê": "/analytics"');
   });
 
   it("renders an avatar-triggered account dropdown", () => {
