@@ -8,6 +8,7 @@ const assistants = vi.hoisted(() => ({
 const templates = vi.hoisted(() => ({
   listAutomationTemplates: vi.fn(),
   createAutomationTemplate: vi.fn(),
+  importAutomationTemplates: vi.fn(),
   updateAutomationTemplate: vi.fn(),
   deleteAutomationTemplate: vi.fn()
 }));
@@ -77,6 +78,30 @@ describe("automation template controller and routes", () => {
     expect(mismatch.status).toBe(400);
     expect(injectedOwner.status).toBe(400);
     expect(templates.createAutomationTemplate).toHaveBeenCalledOnce();
+  });
+
+  it("imports validated templates under the authenticated assistant", async () => {
+    templates.importAutomationTemplates.mockResolvedValue({ imported: 2, templates: [] });
+    const body = {
+      templates: [
+        { name: "Chào", keywords: ["hi"], responseTemplate: "Xin chào", enabled: true },
+        { name: "Giá", keywords: ["giá"], responseTemplate: "Báo giá", enabled: false }
+      ]
+    };
+
+    const imported = await request(createTestApp())
+      .post(`/api/v1/assistants/${assistantId}/templates/import`)
+      .set("Authorization", "Bearer agent-token")
+      .send(body);
+    const invalid = await request(createTestApp())
+      .post(`/api/v1/assistants/${assistantId}/templates/import`)
+      .set("Authorization", "Bearer agent-token")
+      .send({ templates: [{ ...body.templates[0], enabled: "yes" }] });
+
+    expect(imported.status).toBe(200);
+    expect(templates.importAutomationTemplates).toHaveBeenCalledWith("owner-1", assistantId, body.templates);
+    expect(invalid.status).toBe(400);
+    expect(templates.importAutomationTemplates).toHaveBeenCalledOnce();
   });
 
   it("validates, updates, and deletes a template under its route assistant", async () => {

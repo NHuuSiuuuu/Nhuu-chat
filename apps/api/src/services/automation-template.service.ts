@@ -9,6 +9,7 @@ export type AutomationTemplateInput = Omit<
   "id" | "ownerId" | "createdAt" | "updatedAt"
 >;
 export type AutomationTemplatePatch = Partial<AutomationTemplateInput>;
+export type AutomationTemplateImportInput = Omit<AutomationTemplateInput, "assistantId" | "allowAiRewrite" | "priority" | "channelScope">;
 
 interface AutomationTemplateRow extends Omit<AutomationTemplateInput, "assistantId"> {
   _id: unknown;
@@ -98,6 +99,27 @@ export async function createAutomationTemplate(
   await requireOwnedAssistant(ownerId, input.assistantId);
   const row = await AutomationTemplateModel.create({ ownerId, ...input });
   return toAutomationTemplate(row as unknown as AutomationTemplateRow);
+}
+
+// Lưu hàng loạt mẫu đã được frontend xem trước; owner và trợ lý luôn lấy từ route đã xác thực.
+export async function importAutomationTemplates(
+  ownerId: string,
+  assistantId: string,
+  inputs: AutomationTemplateImportInput[]
+): Promise<{ imported: number; templates: AutomationTemplateContract[] }> {
+  await requireOwnedAssistant(ownerId, assistantId);
+  const rows = await AutomationTemplateModel.insertMany(inputs.map((input) => ({
+    ownerId,
+    assistantId,
+    ...input,
+    allowAiRewrite: false,
+    priority: 0,
+    channelScope: { mode: "all" as const, identifiers: [] }
+  })));
+  return {
+    imported: rows.length,
+    templates: rows.map((row) => toAutomationTemplate(row as unknown as AutomationTemplateRow))
+  };
 }
 
 export async function updateAutomationTemplate(

@@ -4,11 +4,13 @@ import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
 import { AppError } from "../common/errors.js";
 import {
   automationTemplateCreateSchema,
+  automationTemplateImportSchema,
   automationTemplatePatchSchema
 } from "../schemas/automation-template.schemas.js";
 import {
   createAutomationTemplate as createTemplateRecord,
   deleteAutomationTemplate as deleteTemplateRecord,
+  importAutomationTemplates as importTemplateRecords,
   listAutomationTemplates as listTemplateRecords,
   updateAutomationTemplate as updateTemplateRecord
 } from "../services/automation-template.service.js";
@@ -50,6 +52,20 @@ export const createAutomationTemplate: RequestHandler = async (request, response
       throw new AppError(400, "INVALID_REQUEST", "Automation template data is invalid");
     }
     response.status(201).json(await createTemplateRecord(authenticatedOwnerId(request), body.data));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const importAutomationTemplates: RequestHandler = async (request, response, next) => {
+  try {
+    const body = automationTemplateImportSchema.safeParse(request.body);
+    if (!body.success) throw new AppError(400, "INVALID_REQUEST", "Automation template import data is invalid");
+    response.json(await importTemplateRecords(
+      authenticatedOwnerId(request),
+      assistantId(request),
+      body.data.templates
+    ));
   } catch (error) {
     next(error);
   }

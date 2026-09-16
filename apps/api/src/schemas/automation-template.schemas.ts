@@ -36,3 +36,14 @@ export const automationTemplateCreateSchema = z.object({
 }).strict();
 
 export const automationTemplatePatchSchema = z.object(automationTemplateFields).partial().strict();
+
+const automationTemplateImportRowSchema = z.object({
+  name: automationTemplateFields.name,
+  keywords: automationTemplateFields.keywords,
+  responseTemplate: automationTemplateFields.responseTemplate,
+  enabled: automationTemplateFields.enabled
+}).strict();
+
+export const automationTemplateImportSchema = z.object({
+  templates: z.array(automationTemplateImportRowSchema).min(1).max(500)
+}).strict();

@@ -11,6 +11,7 @@ import { previewAssistant } from "../controllers/assistant-preview.controller.js
 import {
   createAutomationTemplate,
   deleteAutomationTemplate,
+  importAutomationTemplates,
   listAutomationTemplates,
   updateAutomationTemplate
 } from "../controllers/automation-template.controller.js";
@@ -24,6 +25,7 @@ assistantRouter.post("/:assistantId/preview", previewAssistant);
 assistantRouter.patch("/:assistantId", updateAssistant);
 assistantRouter.delete("/:assistantId", deleteAssistant);
 assistantRouter.get("/:assistantId/templates", listAutomationTemplates);
+assistantRouter.post("/:assistantId/templates/import", importAutomationTemplates);
 assistantRouter.post("/:assistantId/templates", createAutomationTemplate);
 assistantRouter.patch("/:assistantId/templates/:templateId", updateAutomationTemplate);
 assistantRouter.delete("/:assistantId/templates/:templateId", deleteAutomationTemplate);
