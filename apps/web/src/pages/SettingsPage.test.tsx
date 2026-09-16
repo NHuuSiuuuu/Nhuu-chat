@@ -404,4 +404,12 @@ describe("Settings page", () => {
     expect(normalized).toContain('type="button" onClick={() => setIsImportModalOpen(true)}');
     expect(source).not.toContain('<div className="mt-3 flex justify-end">');
   });
+
+  it("keeps both individual template creation and file import actions", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const templateHeader = source.split('<h3 className="text-sm font-bold text-gray-800">Mẫu chào</h3>')[1]?.split("</div>")[0] ?? "";
+
+    expect(templateHeader).toContain("+ Thêm mẫu chào");
+    expect(templateHeader).toContain("Import kịch bản");
+  });
 });
