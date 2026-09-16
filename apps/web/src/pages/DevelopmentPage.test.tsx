@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { developmentPathForSection, developmentSectionFromPath } from "./DevelopmentPage.js";
 
 describe("DevelopmentPage", () => {
@@ -13,5 +14,11 @@ describe("DevelopmentPage", () => {
 
   it("shows the development message for the selected header tab", () => {
     expect(developmentSectionFromPath("/unknown")).toBe("Đơn hàng");
+  });
+
+  it("imports React for the configured JSX runtime", () => {
+    const source = readFileSync(new URL("./DevelopmentPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('import * as React from "react";');
   });
 });
