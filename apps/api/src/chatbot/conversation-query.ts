@@ -1,4 +1,5 @@
 import type { BotConversationTurn } from "./bot-reply.provider.js";
+import { customerContactCaptured } from "./contact-capture.js";
 
 const CONTINUATION_REPLIES = new Set([
   "co",
@@ -28,7 +29,8 @@ function isContinuationReply(message: string): boolean {
 
 // Giữ câu trả lời ngay trước đó khi khách xác nhận để truy xuất tiếp đúng chủ đề đang tư vấn.
 export function buildKnowledgeQuery(message: string, history: BotConversationTurn[] | undefined): string {
-  if (!isContinuationReply(message)) return message;
+  const isContactMessage = customerContactCaptured([{ role: "customer", content: message }]);
+  if (!isContinuationReply(message) && !isContactMessage) return message;
   const previousAnswer = [...(history ?? [])]
     .reverse()
     .find((turn) => turn.role === "bot" || turn.role === "agent")?.content.trim();

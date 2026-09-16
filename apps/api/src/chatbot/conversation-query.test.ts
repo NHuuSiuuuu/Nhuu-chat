@@ -15,4 +15,10 @@ describe("conversation knowledge query", () => {
       { role: "bot", content: "Bạn muốn hỏi thêm thông tin gì ạ?" }
     ])).toBe("địa chỉ ở đâu");
   });
+
+  it("keeps the previous bot answer when the customer sends a phone number", () => {
+    expect(buildKnowledgeQuery("0344497636", [
+      { role: "bot", content: "Cho em xin số điện thoại để xếp lịch test đầu vào khóa cho người mất gốc nhé ạ!" }
+    ])).toBe("Cho em xin số điện thoại để xếp lịch test đầu vào khóa cho người mất gốc nhé ạ!\n0344497636");
+  });
 });
