@@ -125,4 +125,28 @@ describe("production server bootstrap", () => {
     expect(restoreZaloPersonalClients).not.toHaveBeenCalled();
     expect(listen).not.toHaveBeenCalled();
   });
+
+  it("opens the API when a personal-session restore exceeds the startup deadline", async () => {
+    vi.useFakeTimers();
+    const listen = vi.fn(async () => undefined);
+    const restorePersonalClients = vi.fn(() => new Promise<void>(() => undefined));
+    const handlePromise = startServer({
+      connectDatabase: async () => undefined,
+      hydrateKnowledge: async () => undefined,
+      setupZaloPersonalRedisLock: async () => async () => undefined,
+      restorePersonalClients,
+      restoreZaloPersonalClients: async () => undefined,
+      shutdownZaloPersonalClients: async () => undefined,
+      disconnectDatabase: async () => undefined,
+      listen
+    });
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    const handle = await handlePromise;
+
+    expect(restorePersonalClients).toHaveBeenCalledOnce();
+    expect(listen).toHaveBeenCalledOnce();
+    await handle.shutdown();
+    vi.useRealTimers();
+  });
 });

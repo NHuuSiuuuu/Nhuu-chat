@@ -20,6 +20,8 @@ import {
 
 import type { Server as HttpServer } from "node:http";
 
+const STARTUP_RESTORE_TIMEOUT_MS = 5_000;
+
 export interface ServerDependencies {
   connectDatabase?: (uri: string) => Promise<void>;
   hydrateKnowledge?: () => Promise<void>;
@@ -108,6 +110,30 @@ async function setupZaloPersonalRedisLock(): Promise<() => Promise<void>> {
   };
 }
 
+// Giới hạn thời gian restore để một connector chậm không chặn health check và toàn bộ API.
+async function restoreWithStartupDeadline(restore: () => Promise<void>, label: string): Promise<void> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  const restoreTask = restore().catch((error: unknown) => {
+    console.error(`${label} restore failed`, error instanceof Error ? error.message : "unknown error");
+  });
+  try {
+    await Promise.race([
+      restoreTask,
+      new Promise<void>((resolve) => {
+        timeout = setTimeout(() => {
+          timedOut = true;
+          resolve();
+        }, STARTUP_RESTORE_TIMEOUT_MS);
+        timeout.unref?.();
+      })
+    ]);
+    if (timedOut) console.error(`${label} restore timed out; API will continue starting`);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export async function startServer(dependencies: ServerDependencies = {}): Promise<ServerHandle> {
   const connect = dependencies.connectDatabase ?? connectDatabase;
   const hydrateKnowledge = dependencies.hydrateKnowledge ?? hydrateKnowledgeVectorStore;
@@ -121,8 +147,8 @@ export async function startServer(dependencies: ServerDependencies = {}): Promis
   try {
     await hydrateKnowledge();
     closeRedisLock = await setupRedisLock();
-    await restore();
-    await restoreZalo();
+    await restoreWithStartupDeadline(restore, "Telegram personal");
+    await restoreWithStartupDeadline(restoreZalo, "Zalo personal");
   } catch (error) {
     // Restore có thể đã tạo connector trước khi owner khác lỗi; dọn connector trước hạ tầng chung.
     await shutdownZalo().catch(() => undefined);
