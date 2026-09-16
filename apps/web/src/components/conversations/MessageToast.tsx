@@ -20,7 +20,7 @@ export function appendMessageToast(toasts: MessageToastData[], toast: MessageToa
 }
 
 function platformIconProvider(platform: ChatPlatform): ConnectionProviderId {
-  return platform === "telegram_personal" ? "telegram" : platform;
+  return platform === "telegram_personal" ? "telegram" : platform === "zalo_personal" ? "zalo" : platform;
 }
 
 export function MessageToast({ toast, onOpen, onClose }: { toast: MessageToastData; onOpen: (conversationId: string) => void; onClose: (id: string) => void }) {

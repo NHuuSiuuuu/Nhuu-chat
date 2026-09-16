@@ -1,10 +1,16 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { createAiSuggestionsRequestGuard, getConversationDraft, setConversationDraft, shouldAutoRefreshAiSuggestions } from "./InboxPage.js";
+import { buildConversationListRequestPath, createAiSuggestionsRequestGuard, getConversationDraft, setConversationDraft, shouldAutoRefreshAiSuggestions } from "./InboxPage.js";
 import * as inboxModule from "./InboxPage.js";
 import { getVisibleConversationTagCount } from "../components/conversations/ConversationList.js";
 
 describe("Inbox Tailwind migration", () => {
+  it("filters conversations by the dashboard account without filtering merge view", () => {
+    expect(buildConversationListRequestPath("zalo_personal")).toBe("/api/v1/conversations?platform=zalo_personal");
+    expect(buildConversationListRequestPath("telegram_personal")).toBe("/api/v1/conversations?platform=telegram_personal");
+    expect(buildConversationListRequestPath()).toBe("/api/v1/conversations");
+  });
+
   it("keeps message drafts isolated by conversation", () => {
     const drafts = setConversationDraft({}, "conversation-a", "helo");
 
@@ -73,7 +79,7 @@ describe("Inbox Tailwind migration", () => {
     expect(source).toContain("readState.revision");
     expect(source).not.toContain("setActiveId((current) => current ?? result.conversations[0]?.id ?? null)");
     expect(source).not.toContain("setActiveId((current) => current ?? conversation.id)");
-    expect(chat).toContain("Xin chọn 1 hội thoại từ danh sách bên trái");
+    expect(chat).toContain("Chọn một hội thoại từ danh sách bên trái");
     expect(chat).toContain("Mở danh sách hội thoại");
     expect(chat).toContain("hasConversation={Boolean(conversation)}");
     const avatar = readFileSync(new URL("../components/conversations/ConversationAvatar.tsx", import.meta.url), "utf8");
