@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { buildDashboardAccounts, conversationPathForPlatform } from "./DashboardPage.js";
@@ -26,5 +28,14 @@ describe("dashboard connected accounts", () => {
     expect(conversationPathForPlatform("zalo_personal")).toBe("/inbox?platform=zalo_personal");
     expect(conversationPathForPlatform("telegram_personal")).toBe("/inbox?platform=telegram_personal");
     expect(conversationPathForPlatform()).toBe("/inbox");
+  });
+
+  it("offers a confirmation action to deactivate a connected account", () => {
+    const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("aria-label=\"Tùy chọn tài khoản\"");
+    expect(source).toContain("Hủy kích hoạt");
+    expect(source).toContain("Xác nhận hủy kích hoạt");
+    expect(source).toContain("/api/v1/channels/zalo-personal/logout");
   });
 });
