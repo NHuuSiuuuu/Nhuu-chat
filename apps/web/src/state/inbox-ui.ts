@@ -33,7 +33,7 @@ export function formatConversationTime(value: string): string {
 }
 
 export function conversationPlatformLabel(platform: string): string {
-  const labels: Record<string, string> = { telegram_personal: "Telegram", telegram: "Telegram", zalo: "Zalo", facebook: "Facebook", instagram: "Instagram" };
+  const labels: Record<string, string> = { telegram_personal: "Telegram", telegram: "Telegram", zalo_personal: "Zalo", zalo: "Zalo", facebook: "Facebook", instagram: "Instagram" };
   return labels[platform] ?? platform;
 }
 

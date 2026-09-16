@@ -34,6 +34,7 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
 - Telegram webhook có secret validation và idempotency.
 - Chatbot tự động trên hai connector Telegram dùng chung orchestrator, delivery, automation template và RAG theo owner.
 - Telegram cá nhân hỗ trợ QR login, xác minh 2FA, hủy phiên QR cũ và khôi phục session sau khi API restart.
+- Backend Zalo cá nhân thử nghiệm hỗ trợ QR, lưu credentials mã hóa, nhận direct/group media metadata và gửi text.
 - Socket.IO room authentication và event realtime cho message/conversation.
 - API đọc/ghi hội thoại, message, customer và knowledge.
 - API CRUD danh mục thẻ hội thoại dùng chung cho admin/agent tại `/api/v1/conversation-tags`.
@@ -215,7 +216,28 @@ Telegram Bot lấy token mã hóa từ đăng ký `POST /api/v1/channels/telegra
 
 Hai connector nhận text, ảnh, document/file, sticker, audio/voice, video/video note, animation/GIF; lưu loại/tham chiếu media và caption. Caption đi vào template/RAG; thiếu caption thì bot yêu cầu mô tả bằng văn bản. File Bot API dùng field `document`. Chưa đọc/tải nội dung media, chưa tải/render attachment đầy đủ; outbound bot chỉ gửi text. Fallback hoặc lỗi gửi chuyển hội thoại sang `pending`, pause 30 phút; mặc định khi tạo trợ lý là chính xác `Em chưa có đủ thông tin, nhân viên sẽ hỗ trợ.`. Fallback riêng đã lưu giữ nguyên. Bot chỉ thử gửi một lần, kể cả timeout không biết Telegram đã nhận hay chưa. Gửi thủ công từ web và tin gửi thật từ Telegram cá nhân kích hoạt cùng pause; echo/ID chatbot không được tính là agent takeover. Tin đến khi pause vẫn lưu nhưng không tự phát lại sau đó.
 
-Owner Telegram cá nhân lấy từ session. Đăng ký Telegram Bot qua `POST /api/v1/channels/telegram` lưu owner admin đã xác thực cùng token mã hóa; hội thoại mới kế thừa owner này, không lấy owner từ body/webhook. Adapter không dùng đăng ký có owner để gửi cho hội thoại của người khác. Hội thoại cũ không bị đổi owner; token legacy chưa có owner không được tự cấp owner cho hội thoại mới. Chỉ cấp owner legacy sau xác minh nguồn bằng quy trình vận hành có kiểm chứng. Một token chung vẫn là giới hạn hiện tại và đăng ký thứ hai không ghi đè bản ghi hiện có. Các unique index cũ `(platform, channelId)` và `(platform, externalMessageId)` vẫn có thể xung đột giữa nhiều chat/tài khoản; cần migration riêng cho triển khai nhiều tài khoản. Facebook/Instagram/Zalo vẫn chưa có connector tự gửi.
+Owner Telegram cá nhân lấy từ session. Đăng ký Telegram Bot qua `POST /api/v1/channels/telegram` lưu owner admin đã xác thực cùng token mã hóa; hội thoại mới kế thừa owner này, không lấy owner từ body/webhook. Adapter không dùng đăng ký có owner để gửi cho hội thoại của người khác. Hội thoại cũ không bị đổi owner; token legacy chưa có owner không được tự cấp owner cho hội thoại mới. Chỉ cấp owner legacy sau xác minh nguồn bằng quy trình vận hành có kiểm chứng. Một token chung vẫn là giới hạn hiện tại và đăng ký thứ hai không ghi đè bản ghi hiện có. Model hội thoại mới dùng unique index `(platform, channelId, ownerId)`; database đã tồn tại phải chạy migration Zalo thủ công trước rollout. Index message `(platform, externalMessageId)` vẫn cần đánh giá collision cho các connector nhiều tài khoản khác. Facebook/Instagram chưa có connector tự gửi; Zalo cá nhân mới ở trạng thái thử nghiệm.
+
+### Zalo cá nhân thử nghiệm
+
+Connector backend dùng `zca-js`, API không chính thức mô phỏng Zalo Web, nên chỉ dùng tài khoản thử nghiệm vì tài khoản có thể bị hạn chế hoặc khóa. Chưa hoàn tất smoke test tài khoản thật, reconnect WebSocket đầy đủ và UI quản lý production.
+
+Để bật connector, mọi API process phải dùng chung `MONGODB_URI`, `REDIS_URL` và `ENCRYPTION_KEY` tối thiểu 32 ký tự. Credentials được mã hóa AES-256-GCM trong MongoDB; QR chỉ lưu tạm trong memory. Các route đều yêu cầu JWT role `admin`, lấy owner từ JWT và không nhận owner tùy ý:
+
+- `POST /api/v1/channels/zalo-personal/qr`: tạo phiên QR.
+- `GET /api/v1/channels/zalo-personal/qr/:id`: đọc trạng thái QR đúng owner.
+- `GET /api/v1/channels/zalo-personal/status`: đọc trạng thái kết nối.
+- `POST /api/v1/channels/zalo-personal/logout`: dừng listener và xóa session.
+
+QR không tạo được trả trạng thái `error` với `ZALO_QR_CREATE_FAILED`. Inbound direct/group giữ caption, URL/thumbnail và metadata attachment đã lọc trường nhạy cảm; outbound hiện chỉ hỗ trợ text.
+
+Trước rollout trên database cũ: sao lưu, mở maintenance window, chạy lệnh sau thành công rồi mới deploy/restart API:
+
+```bash
+MONGODB_URI='mongodb+srv://...' pnpm --filter api run migrate:zalo-personal-conversation-index
+```
+
+Migration tạo unique index `(platform, channelId, ownerId)` trước khi xóa legacy `(platform, channelId)`, không tự chạy ở startup và có thể chạy lại. Nếu owner-scoped index hiện có dùng `partialFilterExpression`, `sparse` hoặc `collation`, migration dừng an toàn trước khi tạo/xóa index; cần kiểm tra và sửa index đó rồi mới chạy lại.
 
 Phối hợp gửi: `sendLeaseId`/`sendLeaseAt` trên hội thoại làm khóa atomic dùng chung giữa các API process. Bot giữ khóa cho lần kiểm tra pause cuối và thao tác gửi; pause của nhân viên lấy cùng khóa trước khi commit. Không khởi tạo gửi bot sau takeover đã commit, vẫn không retry khi kết quả mạng mơ hồ. Chờ khóa tối đa 15 giây; khóa không tự hết hạn để tránh hai process cùng gửi. Nếu process chết/nhả khóa thất bại, người vận hành xác minh process/lượt gửi cũ đã dừng, kiểm tra đúng hội thoại và lease ID rồi mới xóa khóa có điều kiện theo ID, giữ pause và không xóa claim hay tự gửi lại. Tin đã khởi tạo trước takeover vẫn có thể được Telegram giao muộn.
 
@@ -254,7 +276,7 @@ Các test quan trọng của Inbox kiểm tra tự cuộn, unread state, metadat
 - Thanh toán trong phần Trợ lý AI hiện mới là UI cố định; tích hợp ví và tính phí thực tế chưa triển khai.
 - Nút `+ Tạo đơn`, ghi chú và một số toolbar hiện mới là UI placeholder; chưa có luồng persistence/order backend hoàn chỉnh.
 - Ảnh Cloudinary hiện chỉ dùng cho mẫu trả lời nhanh; gửi media trong message và upload video chưa được triển khai.
-- Meta/Instagram OAuth, Zalo connector, WebRTC và load test thực tế chưa thuộc MVP hiện tại.
+- Meta/Instagram OAuth, Zalo cá nhân production UI/live smoke/reconnect đầy đủ, WebRTC và load test thực tế chưa thuộc MVP hiện tại.
 
 ## 8. Kế hoạch tiếp theo
 
@@ -264,7 +286,7 @@ Các test quan trọng của Inbox kiểm tra tự cuộn, unread state, metadat
 - Chuẩn hóa Mongo integration trong CI bằng Mongo replica set test.
 - Đánh giá MongoDB Atlas Vector Search cho RAG production.
 - Hoàn thiện tích hợp thanh toán và ví cho các tính năng AI.
-- Tích hợp thêm Zalo, Facebook và Instagram sau khi có spec và connector được phê duyệt.
+- Hoàn thiện UI, live smoke và reconnect production cho Zalo cá nhân; tích hợp Facebook và Instagram sau khi có spec được phê duyệt.
 
 ## 9. Tài liệu liên quan
 

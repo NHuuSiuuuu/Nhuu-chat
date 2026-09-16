@@ -17,6 +17,7 @@ describe("inbox presentation", () => {
     expect(conversationDisplayName({ channelId: "8863142234", platform: "telegram_personal", conversationType: "group" })).toBe("Nhóm hội thoại");
     expect(conversationPlatformLabel("telegram_personal")).toBe("Telegram");
     expect(conversationPlatformLabel("zalo")).toBe("Zalo");
+    expect(conversationPlatformLabel("zalo_personal")).toBe("Zalo");
   });
 
   it("uses the connected social account name for the assignee row", () => {

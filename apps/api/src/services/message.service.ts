@@ -8,6 +8,16 @@ import type { AuthUser } from "./auth.service.js";
 import { toConversation } from "./conversation.service.js";
 import { readProviderSecretByName } from "./provider-secret.service.js";
 
+type ZaloConversationType = "private" | "group";
+type ZaloOutboundClient = {
+  getAccountInfo: () => Promise<{ id?: unknown }>;
+  sendMessage: (
+    threadId: string,
+    content: string,
+    conversationType: ZaloConversationType
+  ) => Promise<{ id: string }>;
+};
+
 async function resolveTelegramPersonalRecipient(client: {
   getEntity: (channelId: string) => Promise<unknown>;
   getDialogs: (options: { limit: number }) => Promise<Array<{ id?: unknown; entity?: unknown }>>;
@@ -53,6 +63,22 @@ export async function createOutboundMessage(input: { conversationId: string; pla
   return MessageModel.create({ ...input, senderType: "agent", type: "text" });
 }
 
+// Listener Zalo có thể lưu event tự phản hồi trước outbound flow; duplicate khi đó vẫn chứng minh tin đã được lưu.
+async function persistZaloOutboundMessage(input: { conversationId: string; platform: string; senderId: string; content: string; externalMessageId?: string; deliveryStatus: "pending" | "sent" | "failed" }) {
+  try {
+    return await createOutboundMessage(input);
+  } catch (error) {
+    if (!isDuplicateKey(error) || !input.externalMessageId) throw error;
+    const existing = await MessageModel.findOne({
+      platform: input.platform,
+      externalMessageId: input.externalMessageId
+    }).lean();
+    if (!existing) throw error;
+    return { toObject: () => existing };
+  }
+}
+
+// Kiểm tra quyền, gửi qua đúng connector và luôn lưu trạng thái truy vết của lần gửi Zalo cá nhân.
 export async function sendOutboundMessage(
   input: { conversationId: string; content: string },
   auth?: AuthUser
@@ -64,12 +90,20 @@ export async function sendOutboundMessage(
   if (!conversation) {
     throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
   }
-  if (!auth || !canJoinConversation(auth, conversation)) {
+  if (!auth) {
     throw new AppError(403, "FORBIDDEN", "You do not have access to this conversation");
   }
 
-  if (conversation.platform === "telegram_personal" && String(conversation.ownerId) !== auth.id) {
-    throw new AppError(403, "FORBIDDEN", "You do not own this Telegram connection");
+  // Kết nối cá nhân chỉ owner mới được gửi để không dùng chéo session giữa các tài khoản.
+  if ((conversation.platform === "telegram_personal" || conversation.platform === "zalo_personal") && String(conversation.ownerId) !== auth.id) {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      conversation.platform === "telegram_personal" ? "You do not own this Telegram connection" : "You do not own this Zalo connection"
+    );
+  }
+  if (!canJoinConversation(auth, conversation)) {
+    throw new AppError(403, "FORBIDDEN", "You do not have access to this conversation");
   }
   // Tạm dừng bot sau kiểm tra quyền và trước connector để nhân viên tiếp quản cả khi gửi bị lỗi.
   await pauseBot(conversationId, new Date());
@@ -86,6 +120,38 @@ export async function sendOutboundMessage(
     const recipient = await resolveTelegramPersonalRecipient(client, conversation.channelId);
     const sent = await client.sendMessage(recipient, { message: content });
     externalMessageId = String(sent.id);
+  } else if (conversation.platform === "zalo_personal") {
+    // Chỉ gọi API Zalo qua session manager để credentials runtime không đi vào outbound flow.
+    const { getActiveZaloPersonalClient } = await import("./zalo-personal.service.js");
+    try {
+      const client = await getActiveZaloPersonalClient(auth.id);
+      if (!client) {
+        throw new AppError(409, "ZALO_PERSONAL_DISCONNECTED", "Zalo personal session is not active");
+      }
+      const account = await client.getAccountInfo();
+      const zaloAccountId = String(account.id ?? "").trim();
+      if (!zaloAccountId) throw new Error("Zalo personal account id is unavailable");
+      const conversationType: ZaloConversationType = conversation.conversationType === "group" ? "group" : "private";
+      // Truyền loại hội thoại đến adapter để group không bị gửi nhầm qua endpoint direct.
+      const sent = await (client as unknown as ZaloOutboundClient).sendMessage(
+        conversation.channelId,
+        content,
+        conversationType
+      );
+      externalMessageId = `zalo_personal:${zaloAccountId}:${sent.id}`;
+    } catch (error) {
+      await createOutboundMessage({
+        conversationId,
+        platform: conversation.platform,
+        senderId: "agent",
+        content,
+        externalMessageId: undefined,
+        // AppError xảy ra trước khi gửi; lỗi connector thường không xác định được phía Zalo đã nhận hay chưa.
+        deliveryStatus: error instanceof AppError ? "failed" : "pending"
+      });
+      if (error instanceof AppError) throw error;
+      throw new AppError(502, "ZALO_PERSONAL_DELIVERY_FAILED", "Zalo personal message delivery failed");
+    }
   } else if (conversation.platform === "telegram") {
     const botToken = await readProviderSecretByName("telegram", "bot-token");
     const delivery = await new TelegramClient(botToken).sendText(conversation.channelId, content);
@@ -94,14 +160,23 @@ export async function sendOutboundMessage(
     deliveryStatus = "pending";
   }
 
-  const message = await createOutboundMessage({
-    conversationId,
-    platform: conversation.platform,
-    senderId: "agent",
-    content,
-    externalMessageId,
-    deliveryStatus
-  });
+  const message = conversation.platform === "zalo_personal"
+    ? await persistZaloOutboundMessage({
+      conversationId,
+      platform: conversation.platform,
+      senderId: "agent",
+      content,
+      externalMessageId,
+      deliveryStatus
+    })
+    : await createOutboundMessage({
+      conversationId,
+      platform: conversation.platform,
+      senderId: "agent",
+      content,
+      externalMessageId,
+      deliveryStatus
+    });
   const lastMessageAt = new Date();
   await ConversationModel.findByIdAndUpdate(conversationId, {
     $set: { lastMessageAt, lastMessageSnippet: content }
@@ -119,4 +194,8 @@ export async function sendOutboundMessage(
       conversation.assignedAgentId ? String(conversation.assignedAgentId) : ""
     ]
   };
+}
+
+function isDuplicateKey(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === 11000;
 }

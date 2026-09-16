@@ -22,4 +22,10 @@ describe("API route registration", () => {
 
     expect(response.status).toBe(401);
   });
+
+  it("marks Zalo QR endpoints as non-cacheable", async () => {
+    const response = await request(createApp()).get("/api/v1/channels/zalo-personal/status");
+
+    expect(response.headers["cache-control"]).toBe("no-store");
+  });
 });

@@ -20,6 +20,13 @@ interface DashboardTopbarProps {
 }
 
 const fallbackAccount: DashboardAccount = { email: "", role: "OWNER", username: "nhuusiuu", displayName: "nhuusiuu" };
+const dashboardPathByNavItem: Record<typeof dashboardNavItems[number], string> = {
+  "Hội thoại": "/inbox",
+  "Đơn hàng": "/orders",
+  "Bài viết": "/posts",
+  "Thống kê": "/analytics",
+  "Cài đặt": "/settings"
+};
 
 export function DashboardTopbar({ onLogoClick, onNavigate, user, onLogout, onProfile }: DashboardTopbarProps = {}) {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
@@ -45,7 +52,7 @@ export function DashboardTopbar({ onLogoClick, onNavigate, user, onLogout, onPro
 
   return <div className="min-h-16 max-[700px]:min-h-28"><header className="fixed top-0 left-0 right-0 z-50 flex min-h-16 items-center bg-blue-600 px-7 text-white max-[700px]:flex-wrap max-[700px]:items-start max-[700px]:gap-[14px] max-[700px]:p-[14px]">
     <a className="flex min-w-[220px] items-center gap-2.5 text-left text-lg text-white no-underline max-[900px]:min-w-[150px] max-[700px]:min-w-0" href="/dashboard" onClick={(event) => { if (onLogoClick) { event.preventDefault(); onLogoClick(); } }} aria-label="Về Dashboard"><span className="grid h-8 w-8 place-items-center rounded-[10px] border-2 border-white/80 text-[17px] font-extrabold">NH</span><strong>NhuuChat</strong></a>
-    <nav className="flex flex-1 items-center justify-center gap-[30px] max-[900px]:gap-4 max-[700px]:order-3 max-[700px]:w-full max-[700px]:justify-start max-[700px]:gap-5 max-[700px]:overflow-auto max-[700px]:pt-0.5" aria-label="Điều hướng chính">{dashboardNavItems.map((item) => <a className="whitespace-nowrap text-[15px] font-semibold text-white/90 no-underline" href={item === "Hội thoại" ? "/inbox" : "#"} key={item} onClick={(event) => { event.preventDefault(); onNavigate?.(item); }}>{item}</a>)}</nav>
+    <nav className="flex flex-1 items-center justify-center gap-[30px] max-[900px]:gap-4 max-[700px]:order-3 max-[700px]:w-full max-[700px]:justify-start max-[700px]:gap-5 max-[700px]:overflow-auto max-[700px]:pt-0.5" aria-label="Điều hướng chính">{dashboardNavItems.map((item) => <a className="whitespace-nowrap text-[15px] font-semibold text-white/90 no-underline" href={dashboardPathByNavItem[item]} key={item} onClick={(event) => { event.preventDefault(); onNavigate?.(item); }}>{item}</a>)}</nav>
     <div className="relative flex min-w-[190px] items-center justify-end gap-2.5 max-[700px]:ml-auto">
       <div className="grid text-right text-sm"><span>{accountName}</span><small className="mt-[3px] text-[9px] tracking-[.08em] text-white/60">{role}</small></div>
       <button className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-full border border-white/70 bg-white/20 text-sm font-bold text-white transition hover:bg-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" type="button" aria-label="Mở menu tài khoản" aria-expanded={isAccountMenuOpen} onClick={toggleAccountMenu}>{account.avatarUrl ? <img className="size-full object-cover" src={account.avatarUrl} alt={`Avatar ${accountName}`} /> : accountInitial}</button>

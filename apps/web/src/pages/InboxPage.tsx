@@ -64,6 +64,10 @@ export function setConversationDraft(drafts: Record<string, string>, conversatio
   return { ...drafts, [conversationId]: content };
 }
 
+export function buildConversationListRequestPath(platform?: string): string {
+  return platform ? `/api/v1/conversations?platform=${encodeURIComponent(platform)}` : "/api/v1/conversations";
+}
+
 // Chỉ áp dụng kết quả của lần tải mẫu còn hiệu lực để auth context cũ không ghi đè state mới.
 export async function loadInboxQuickReplies(request: () => Promise<{ quickReplies: QuickReplyContract[] }>, apply: (quickReplies: QuickReplyContract[]) => void, isCurrent: () => boolean): Promise<void> {
   try {
@@ -74,7 +78,7 @@ export async function loadInboxQuickReplies(request: () => Promise<{ quickReplie
   }
 }
 
-export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate, user, onLogout, onProfile }: { token: string; refresh?: () => Promise<string | null>; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hội thoại" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void; user?: DashboardAccount | null; onLogout?: () => void; onProfile?: () => void }) {
+export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNavigate, user, onLogout, onProfile }: { token: string; refresh?: () => Promise<string | null>; platform?: string; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hội thoại" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void; user?: DashboardAccount | null; onLogout?: () => void; onProfile?: () => void }) {
   const [conversations, setConversations] = useState<ConversationContract[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageContract[]>([]);
@@ -167,7 +171,7 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate, use
   useEffect(() => {
     let cancelled = false;
     setIsConversationListLoading(true);
-    void apiRequest<{ conversations: ConversationContract[] }>(API_URL, "/api/v1/conversations", token, {}, refresh).then((result) => {
+    void apiRequest<{ conversations: ConversationContract[] }>(API_URL, buildConversationListRequestPath(platform), token, {}, refresh).then((result) => {
       if (cancelled) return;
       setConversations((current) => {
         const currentById = new Map(current.map((item) => [item.id, item]));
@@ -187,7 +191,7 @@ export function InboxPage({ token, refresh, onBack, onLogoClick, onNavigate, use
       if (!cancelled) setIsConversationListLoading(false);
     });
     return () => { cancelled = true; };
-  }, [token, refresh]);
+  }, [platform, token, refresh]);
   useEffect(() => {
     let cancelled = false;
     void apiRequest<{ tags: ConversationTagContract[] }>(API_URL, CONVERSATION_TAGS_API_URL, token, {}, refresh)

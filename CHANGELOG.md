@@ -5,6 +5,25 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm API `POST /api/v1/channels/telegram-personal/logout` để hủy kết nối Telegram cá nhân, dừng client/QR và xóa session nhưng giữ nguyên dữ liệu Inbox.
+- Thêm nút tùy chọn trên tài khoản Zalo đã kết nối và modal xác nhận hủy kích hoạt; dữ liệu hội thoại/tin nhắn vẫn được giữ nguyên.
+- Nối màn hình `Kết nối → Zalo` với API QR cá nhân: tự tạo mã khi chọn Zalo, hiển thị QR thật, polling trạng thái và báo lỗi/hết hạn/kết nối thành công.
+- Cho phép môi trường development dùng lease Zalo trong bộ nhớ khi Redis chưa chạy, giữ production fail-closed; giới hạn cleanup QR native để logout không bị treo vô hạn.
+- Sửa polling QR Zalo không tạo nhiều interval và hiển thị đúng ảnh PNG base64 do `zca-js` trả về.
+- Sửa lỗi sau khi quét QR Zalo: tương thích field tài khoản của `zca-js` 2.2 (`userId`, `displayName`, `username`) và giữ fallback cho bản cũ, tránh báo sai `ZALO_QR_CREATE_FAILED`.
+- Hiển thị tài khoản Zalo cá nhân đã kết nối trên Dashboard; click từng tài khoản mở Hội thoại theo đúng kênh, còn `Gộp trang` mới mở chế độ xem chung nhiều kênh.
+- Sửa listener Zalo coi lỗi WebSocket tạm thời là lỗi vĩnh viễn; cho phép `zca-js` tự retry và cho phép tạo QR mới khi session cũ cần kết nối lại.
+- Sửa gửi tin Zalo cá nhân trả `502` sau khi người nhận đã nhận được tin: chuẩn hóa message id native dạng số hoặc chuỗi để lưu outbound thành công.
+- Sửa gửi tin Zalo cá nhân trả `409` dù người nhận đã nhận được tin: nhận lại bản ghi đã được listener lưu trong race chống trùng message id.
+- Hiển thị thông báo `Chức năng đang được phát triển` cho các tab Settings chưa triển khai: Cài đặt chung, Hỗ trợ trả lời, Giao diện, Cuộc gọi, Chế độ xoay vòng, Đồng bộ, Công cụ, Phân quyền và Lịch sử.
+- Hiển thị trang `Chức năng đang được phát triển` khi chọn các tab header Đơn hàng, Bài viết hoặc Thống kê; mỗi tab có route riêng để giữ đúng trạng thái khi tải lại.
+- Vô hiệu hóa các tab Settings chưa phát triển, hiển thị con trỏ không cho phép click và giữ nguyên các tab Thẻ hội thoại, Trợ lý AI đang hoạt động.
+- Hiển thị custom toast khi người dùng click vào tab Settings chưa phát triển; tab không chuyển nội dung và thông báo tự đóng sau 5 giây.
+- Sửa lỗi tiến trình API khởi động trùng mở listener Zalo trước khi kiểm tra port HTTP, gây `ZALO_PERSONAL_LISTENER_ERROR`; server chỉ restore listener sau khi bind HTTP thành công.
+- Gắn URL thật cho các mục điều hướng header để truy cập trực tiếp Đơn hàng, Bài viết và Thống kê không bị rơi vào liên kết rỗng.
+- Thêm backend thử nghiệm cho Zalo cá nhân: quản lý phiên QR, lưu credentials đã mã hóa, cô lập dữ liệu theo owner và chuẩn hóa tin nhắn inbound/outbound; đây là API không chính thức nên tài khoản có nguy cơ bị Zalo hạn chế hoặc khóa.
+- Bổ sung migration thủ công, idempotent cho unique index conversation Zalo cá nhân: trong maintenance window, sao lưu database rồi chạy `MONGODB_URI=... pnpm --filter api run migrate:zalo-personal-conversation-index` trước khi rollout connector; helper tạo `{ platform, channelId, ownerId }` trước khi xóa legacy `{ platform, channelId }` và không chạy khi server khởi động.
+- Sửa Zalo cá nhân đọc caption/media từ attachment object thật của `zca-js`, dừng migration an toàn khi owner index có option không tương thích và chuẩn hóa lỗi tạo QR thành `ZALO_QR_CREATE_FAILED`; đồng bộ hướng dẫn vận hành trong README/Wiki.
 - Sửa drawer danh sách hội thoại trên mobile bắt đầu dưới header cố định và chỉ chiếm phần chiều cao còn lại.
 - Sửa lỗi ô nhập tin nhắn bị xóa liên tục khi gõ sau khi thêm cơ chế draft theo từng conversation.
 - Thêm skeleton loading cho danh sách hội thoại khi tải lại Inbox, tránh nháy trạng thái empty state.

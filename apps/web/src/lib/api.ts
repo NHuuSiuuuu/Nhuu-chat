@@ -1,6 +1,7 @@
 export async function apiRequest<T>(baseUrl: string, path: string, token: string, init: RequestInit = {}, refresh?: () => Promise<string | null>): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
+    cache: init.cache ?? "no-store",
     headers: { ...(init.body instanceof FormData ? {} : { "content-type": "application/json" }), ...(token ? { authorization: `Bearer ${token}` } : {}), ...init.headers }
   });
   if (response.status === 401 && refresh) {

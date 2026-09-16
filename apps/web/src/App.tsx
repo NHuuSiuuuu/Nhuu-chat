@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { InboxPage } from "./pages/InboxPage.js";
-import { DashboardPage } from "./pages/DashboardPage.js";
+import { conversationPathForPlatform, DashboardPage } from "./pages/DashboardPage.js";
 import { TelegramPersonalPage } from "./pages/TelegramPersonalPage.js";
 import { clearAuth, loadAuth, saveAuth, type AuthRole } from "./state/auth.store.js";
 import { ProtectedRoute } from "./components/common/ProtectedRoute.js";
@@ -9,6 +9,7 @@ import { resolveApiBaseUrl } from "./lib/api-url.js";
 import { canAccessInbox } from "./state/inbox-access.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { ProfilePage } from "./pages/ProfilePage.js";
+import { DevelopmentPage, developmentPathForSection, developmentSectionFromPath, type DevelopmentSection } from "./pages/DevelopmentPage.js";
 import { NetflixIntro } from "./components/NetflixIntro.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
@@ -19,22 +20,35 @@ interface AuthResponse {
   user: { id: string; email: string; role: AuthRole };
 }
 
-type AppPage = "dashboard" | "telegram" | "inbox" | "settings" | "profile";
+type AppPage = "dashboard" | "telegram" | "inbox" | "settings" | "profile" | "development";
+type InboxPlatform = "telegram_personal" | "zalo_personal" | undefined;
+type HeaderNavItem = "Hội thoại" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt";
 
 function pageFromPath(pathname: string): AppPage {
   if (pathname === "/inbox") return "inbox";
   if (pathname === "/telegram") return "telegram";
   if (pathname === "/settings" || pathname.startsWith("/settings/")) return "settings";
   if (pathname === "/profile") return "profile";
+  if (pathname === "/orders" || pathname === "/posts" || pathname === "/analytics") return "development";
   return "dashboard";
 }
 
-function pathForPage(page: AppPage): string {
+function pathForPage(page: AppPage, developmentSection?: DevelopmentSection): string {
   if (page === "inbox") return "/inbox";
   if (page === "telegram") return "/telegram";
   if (page === "settings") return "/settings";
   if (page === "profile") return "/profile";
+  if (page === "development" && developmentSection) return developmentPathForSection(developmentSection);
   return "/dashboard";
+}
+
+function inboxPlatformFromLocation(): InboxPlatform {
+  const value = new URLSearchParams(window.location.search).get("platform");
+  return value === "telegram_personal" || value === "zalo_personal" ? value : undefined;
+}
+
+function pathForInbox(platform?: InboxPlatform): string {
+  return conversationPathForPlatform(platform);
 }
 
 export function preloadIntroDependencies(): Promise<void> {
@@ -49,14 +63,19 @@ function PageSkeleton() {
 export function App() {
   const [auth, setAuth] = useState(loadAuth());
   const [page, setPage] = useState<AppPage>(() => pageFromPath(window.location.pathname));
+  const [inboxPlatform, setInboxPlatform] = useState<InboxPlatform>(() => inboxPlatformFromLocation());
+  const [developmentSection, setDevelopmentSection] = useState<DevelopmentSection>(() => developmentSectionFromPath(window.location.pathname));
   const [showIntro, setShowIntro] = useState(true);
   const [introReady, setIntroReady] = useState(false);
-  const navigate = useCallback((nextPage: AppPage) => {
+  const navigate = useCallback((nextPage: AppPage, platform?: InboxPlatform, nextDevelopmentSection?: DevelopmentSection) => {
     setPage(nextPage);
-    if (window.location.pathname !== pathForPage(nextPage)) window.history.pushState({}, "", pathForPage(nextPage));
+    setInboxPlatform(nextPage === "inbox" ? platform : undefined);
+    if (nextDevelopmentSection) setDevelopmentSection(nextDevelopmentSection);
+    const nextPath = nextPage === "inbox" ? pathForInbox(platform) : pathForPage(nextPage, nextDevelopmentSection);
+    if (`${window.location.pathname}${window.location.search}` !== nextPath) window.history.pushState({}, "", nextPath);
   }, []);
   useEffect(() => {
-    const handlePopState = () => setPage(pageFromPath(window.location.pathname));
+    const handlePopState = () => { setPage(pageFromPath(window.location.pathname)); setInboxPlatform(inboxPlatformFromLocation()); setDevelopmentSection(developmentSectionFromPath(window.location.pathname)); };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
@@ -85,8 +104,13 @@ export function App() {
   } else {
     const logout = () => { clearAuth(); setAuth(null); };
     const openProfile = () => navigate("profile");
+    const navigateFromHeader = (item: HeaderNavItem) => {
+      if (item === "Hội thoại") return navigate("inbox");
+      if (item === "Cài đặt") return navigate("settings");
+      return navigate("development", undefined, item);
+    };
     const topbarProps = { user: auth.user, onLogout: logout, onProfile: openProfile };
-    appContent = <ProtectedRoute token={auth.accessToken}>{page === "dashboard" ? <DashboardPage {...topbarProps} token={auth.accessToken} refresh={refresh} onOpenInbox={() => navigate("inbox")} onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : item === "Cài đặt" ? "settings" : "dashboard")} /> : page === "telegram" ? <TelegramPersonalPage token={auth.accessToken} refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage {...topbarProps} token={auth.accessToken} refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : item === "Cài đặt" ? "settings" : "dashboard")} /> : page === "profile" ? <ProfilePage {...topbarProps} token={auth.accessToken} refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : item === "Cài đặt" ? "settings" : "dashboard")} /> : <InboxPage {...topbarProps} token={auth.accessToken} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={(item) => navigate(item === "Hội thoại" ? "inbox" : item === "Cài đặt" ? "settings" : "dashboard")} />}</ProtectedRoute>;
+    appContent = <ProtectedRoute token={auth.accessToken}>{page === "dashboard" ? <DashboardPage {...topbarProps} token={auth.accessToken} refresh={refresh} onOpenInbox={(platform) => navigate("inbox", platform)} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "telegram" ? <TelegramPersonalPage token={auth.accessToken} refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage {...topbarProps} token={auth.accessToken} refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "profile" ? <ProfilePage {...topbarProps} token={auth.accessToken} refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "development" ? <DevelopmentPage {...topbarProps} section={developmentSection} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : <InboxPage {...topbarProps} token={auth.accessToken} platform={inboxPlatform} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} />}</ProtectedRoute>;
   }
   return <><Suspense fallback={<PageSkeleton />}>{appContent}</Suspense>{showIntro && <NetflixIntro ready={introReady} onComplete={() => setShowIntro(false)} />}</>;
 }

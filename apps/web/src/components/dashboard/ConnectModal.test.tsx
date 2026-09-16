@@ -27,4 +27,20 @@ describe("ConnectModal Tailwind migration", () => {
     expect(source).toContain("!dialogRef.current?.contains(document.activeElement)");
     expect(source).toContain("openerRef.current?.focus()");
   });
+
+  it("connects Zalo through the personal QR API and polls its status", () => {
+    const source = readFileSync(new URL("./ConnectModal.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('"/api/v1/channels/zalo-personal/qr"');
+    expect(source).toContain("/api/v1/channels/zalo-personal/qr/${zaloQr.id}");
+    expect(source).toContain('if (item.id === "zalo") void startZalo()');
+    expect(source).toContain('zaloQr.status !== "waiting_qr"');
+    expect(source).toContain("zaloQr?.id, zaloQr?.status");
+    expect(source).toContain("qr?.id, qr?.status");
+    expect(source).toContain("data:image/png;base64,");
+    expect(source).toContain('qr?.status === "connected"');
+    expect(source).toContain('qr?.status === "expired"');
+    expect(source).toContain('qr?.status === "error"');
+    expect(source).toContain("Mã QR đăng nhập Zalo");
+  });
 });

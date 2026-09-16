@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import * as toastModule from "./MessageToast.js";
 
 describe("incoming message toast", () => {
+  it("provides a reusable development notice toast", () => {
+    expect(typeof toastModule.DevelopmentToast).toBe("function");
+  });
+
   it("keeps only the latest three unique notifications", () => {
     expect(typeof toastModule.appendMessageToast).toBe("function");
 

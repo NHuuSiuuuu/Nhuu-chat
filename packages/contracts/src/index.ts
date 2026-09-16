@@ -61,7 +61,7 @@ export interface AiSettingsContract {
   sentimentWindow: AiSentimentWindow;
 }
 
-export type ChatPlatform = "facebook" | "instagram" | "zalo" | "telegram" | "telegram_personal";
+export type ChatPlatform = "facebook" | "instagram" | "zalo" | "zalo_personal" | "telegram" | "telegram_personal";
 export type ConversationStatus = "open" | "pending" | "closed";
 
 export interface ConversationTagContract {

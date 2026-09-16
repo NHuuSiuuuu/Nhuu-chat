@@ -9,6 +9,7 @@ import {
 import {
   getPersonalQrLoginStatus,
   getPersonalSessionStatus,
+  logoutPersonalSession as logoutPersonalSessionService,
   startPersonalQrLogin,
   submitPersonalQrPassword
 } from "../services/telegram-personal.service.js";
@@ -30,6 +31,16 @@ function qrLoginId(params: unknown): string {
 export const getSessionStatus: RequestHandler = async (request, response, next) => {
   try {
     response.json(await getPersonalSessionStatus(authenticatedUserId(request)));
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Chỉ dùng owner trong JWT, không cho request body điều khiển session Telegram của tài khoản khác.
+export const logoutPersonalSession: RequestHandler = async (request, response, next) => {
+  try {
+    await logoutPersonalSessionService(authenticatedUserId(request));
+    response.status(204).send();
   } catch (error) {
     next(error);
   }

@@ -3,6 +3,7 @@ import type { Request, RequestHandler } from "express";
 import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
 import { AppError } from "../common/errors.js";
 import { ConversationModel } from "../models/conversation.model.js";
+import { conversationAccessFilter } from "../realtime/access.js";
 import { emitChatEvent, emitInboxEventToRecipients } from "../realtime/socket.js";
 import { conversationIdSchema } from "../schemas/conversation.schemas.js";
 import { messageListQuerySchema, outboundMessageSchema } from "../schemas/message.schemas.js";
@@ -28,11 +29,7 @@ export const listMessages: RequestHandler = async (request, response, next) => {
   try {
     const id = conversationId(request.params);
     const auth = authenticatedRequest(request);
-    const accessFilter = auth.role === "admin"
-      ? {}
-      : auth.role === "agent"
-        ? { assignedAgentId: auth.id }
-        : { ownerId: auth.id };
+    const accessFilter = conversationAccessFilter(auth);
     if (!(await ConversationModel.exists({ _id: id, ...accessFilter }))) {
       throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
     }

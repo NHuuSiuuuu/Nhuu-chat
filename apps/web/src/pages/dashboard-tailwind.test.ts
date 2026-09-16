@@ -11,10 +11,10 @@ describe("Dashboard Tailwind migration", () => {
     expect(page).not.toMatch(/Dashboard(Page|Header)\.css/);
     expect(topbar).not.toMatch(/DashboardHeader\.css/);
     expect(page).toContain("min-h-screen");
-    expect(page).toContain('${filter === "all" ? "bg-[#159fe0] text-white" : "bg-[#e7edf4] text-[#7f8b9b]"}');
+    expect(page).toContain('${active ? "bg-[#159fe0] text-white" : "bg-[#e7edf4] text-[#7f8b9b]"}');
     expect(topbar).not.toContain("-mx-7");
     expect(topbar).not.toContain("mb-[26px]");
-    expect(page).toContain("pt-[26px]");
+    expect(page).toContain("pt-16");
     expect(icon).toContain(">?</span>");
     expect(icon).not.toContain("provider.slice");
     expect(app).toContain("bg-slate-100");

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const findOne = vi.fn();
 const findOneAndUpdate = vi.fn(async () => undefined);
+const deleteOne = vi.fn(async () => undefined);
 const find = vi.fn();
 const decryptSecret = vi.fn(() => "restored-session");
 const fakeClient = {
@@ -25,7 +26,7 @@ vi.mock("telegram", () => ({
 vi.mock("telegram/events/index.js", () => ({ NewMessage: class {} }));
 vi.mock("telegram/sessions/index.js", () => ({ StringSession: class { constructor(public readonly value: string) {} } }));
 vi.mock("../../common/crypto.js", () => ({ decryptSecret, encryptSecret: vi.fn() }));
-vi.mock("./telegram-personal.model.js", () => ({ TelegramPersonalSessionModel: { findOne, find, findOneAndUpdate } }));
+vi.mock("./telegram-personal.model.js", () => ({ TelegramPersonalSessionModel: { findOne, find, findOneAndUpdate, deleteOne, updateOne: findOneAndUpdate } }));
 
 describe("Telegram personal session restore", () => {
   beforeEach(() => {
@@ -69,5 +70,15 @@ describe("Telegram personal session restore", () => {
     expect(find).toHaveBeenCalledWith({ status: "active" });
     expect(decryptSecret).toHaveBeenCalledWith("encrypted-session");
     expect(fakeClient.connect).toHaveBeenCalledOnce();
+  });
+
+  it("disconnects the runtime client and deletes the owner's Telegram session", async () => {
+    const { getActivePersonalClient, logoutPersonalSession } = await import("../../services/telegram-personal.service.js");
+
+    await expect(getActivePersonalClient("user-logout")).resolves.toBeDefined();
+    await logoutPersonalSession("user-logout");
+
+    expect(fakeClient.disconnect).toHaveBeenCalledOnce();
+    expect(deleteOne).toHaveBeenCalledWith({ userId: "user-logout" });
   });
 });

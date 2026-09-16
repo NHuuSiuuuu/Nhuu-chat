@@ -190,6 +190,32 @@ describe("conversation controller", () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it("scopes an admin's message lookup away from another owner's Zalo personal conversation", async () => {
+    conversationModelMocks.exists.mockResolvedValue(false);
+    const { response } = responseRecorder();
+    const next = vi.fn();
+
+    await listMessages({
+      auth: adminAuth,
+      params: { id: "conversation-1" },
+      query: {}
+    } as never, response as never, next);
+
+    expect(conversationModelMocks.exists).toHaveBeenCalledWith({
+      _id: "conversation-1",
+      $or: [
+        { platform: { $ne: "zalo_personal" } },
+        { ownerId: "admin-1" },
+        { assignedAgentId: "admin-1" }
+      ]
+    });
+    expect(next.mock.calls[0]?.[0]).toMatchObject({
+      statusCode: 404,
+      code: "CONVERSATION_NOT_FOUND"
+    });
+    expect(serviceMocks.listMessages).not.toHaveBeenCalled();
+  });
+
   it("rejects invalid message pagination before listing messages", async () => {
     conversationModelMocks.exists.mockResolvedValue(true);
     const { response } = responseRecorder();

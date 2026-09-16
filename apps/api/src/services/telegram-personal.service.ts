@@ -138,10 +138,18 @@ export async function startPersonalQrLogin(userId: string) {
       return true;
     }
   }).then(async (telegramUser) => {
+    if (pendingQrLogins.get(login.id) !== login) {
+      await client.disconnect().catch(() => undefined);
+      return;
+    }
     const user = telegramUser as Api.User;
     const displayName = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.username || "Telegram user";
     const avatar = await client.downloadProfilePhoto("me", { isBig: false }).catch(() => undefined);
     const avatarUrl = Buffer.isBuffer(avatar) ? toAvatarDataUrl(avatar) : undefined;
+    if (pendingQrLogins.get(login.id) !== login) {
+      await client.disconnect().catch(() => undefined);
+      return;
+    }
     await TelegramPersonalSessionModel.findOneAndUpdate(
       { userId },
       {
@@ -190,6 +198,37 @@ export async function getPersonalSessionStatus(userId: string) {
   return session
     ? { connected: session.status === "active", displayName: session.displayName, username: session.username, avatarUrl: session.avatarUrl ?? null }
     : { connected: false, displayName: null, username: null, avatarUrl: null };
+}
+
+// Dừng mọi login/client của owner trước khi xóa session để Telegram không tự restore lại sau logout.
+export async function logoutPersonalSession(userId: string): Promise<void> {
+  const pending = [...pendingQrLogins.values()].filter((login) => login.userId === userId);
+  const active = activePersonalClients.get(userId);
+  const clients = [...new Set([...pending.map((login) => login.client), ...(active ? [active] : [])])];
+
+  pending.forEach((login) => {
+    login.status = "failed";
+    login.error = "TELEGRAM_QR_CANCELLED";
+    pendingQrLogins.delete(login.id);
+  });
+
+  try {
+    await Promise.all(clients.map((client) => client.disconnect()));
+  } catch {
+    throw new AppError(503, "TELEGRAM_PERSONAL_LOGOUT_FAILED", "Telegram personal logout is temporarily unavailable");
+  }
+
+  activePersonalClients.delete(userId);
+  try {
+    await TelegramPersonalSessionModel.deleteOne({ userId });
+  } catch {
+    // Không để session còn active trong DB khiến startup restore lại kết nối sau logout lỗi.
+    await TelegramPersonalSessionModel.updateOne(
+      { userId },
+      { $set: { status: "disconnected" } }
+    ).catch(() => undefined);
+    throw new AppError(503, "TELEGRAM_PERSONAL_LOGOUT_FAILED", "Telegram personal logout is temporarily unavailable");
+  }
 }
 
 export async function getActivePersonalClient(userId: string): Promise<TelegramClient | undefined> {

@@ -3,12 +3,13 @@ import { describe, expect, it } from "vitest";
 import { preloadIntroDependencies } from "./App.js";
 
 describe("App navigation", () => {
-  it("routes the shared logo to Dashboard and the header conversation link to Inbox", () => {
+  it("routes shared header navigation to its destination", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("onLogoClick={() => navigate(\"dashboard\")}");
-    expect(source).toContain('item === "Hội thoại" ? "inbox"');
-    expect(source).toContain('item === "Cài đặt" ? "settings"');
+    expect(source).toContain('if (item === "Hội thoại") return navigate("inbox")');
+    expect(source).toContain('if (item === "Cài đặt") return navigate("settings")');
+    expect(source).toContain('return navigate("development", undefined, item)');
     expect(source).toContain("window.history.pushState");
     expect(source).toContain("window.addEventListener(\"popstate\"");
     expect(source).toContain("/inbox");
@@ -18,10 +19,11 @@ describe("App navigation", () => {
   it("routes the settings header item to /settings and renders it below the shared header", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain('type AppPage = "dashboard" | "telegram" | "inbox" | "settings"');
+    expect(source).toContain('type AppPage = "dashboard" | "telegram" | "inbox" | "settings" | "profile" | "development"');
     expect(source).toContain('if (pathname === "/settings" || pathname.startsWith("/settings/")) return "settings"');
     expect(source).toContain('if (page === "settings") return "/settings"');
-    expect(source).toContain('item === "Cài đặt" ? "settings"');
+    expect(source).toContain('if (pathname === "/orders" || pathname === "/posts" || pathname === "/analytics") return "development"');
+    expect(source).toContain('page === "development" ? <DevelopmentPage');
     expect(source).toContain("<SettingsPage");
     expect(source).toContain('pathname.startsWith("/settings/")');
   });

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
+    "migrate:zalo-personal-conversation-index": "tsx src/db/migrate-conversation-owner-index.ts",
     "test": "vitest run"
   },
   "dependencies": {
@@ -24,6 +25,7 @@
     "redis": "^6.2.1",
     "socket.io": "^4.8.1",
     "telegram": "^2.26.22",
+    "zca-js": "^2.2.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {

@@ -1,0 +1,48 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const socketMocks = vi.hoisted(() => ({
+  emit: vi.fn(),
+  to: vi.fn(),
+  use: vi.fn(),
+  on: vi.fn()
+}));
+
+vi.mock("socket.io", () => ({
+  Server: class {
+    constructor() {
+      socketMocks.to.mockReturnValue({ emit: socketMocks.emit });
+      return socketMocks;
+    }
+  }
+}));
+
+vi.mock("../services/auth.service.js", () => ({ verifyAccessToken: vi.fn() }));
+vi.mock("../models/conversation.model.js", () => ({ ConversationModel: {} }));
+
+import { createRealtimeServer, emitInboxEventToRecipients } from "./socket.js";
+
+describe("inbox realtime recipients", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    socketMocks.to.mockReturnValue({ emit: socketMocks.emit });
+    createRealtimeServer({} as never, undefined);
+  });
+
+  it("broadcasts Zalo personal updates only to the owner and assigned recipient rooms", () => {
+    const payload = { id: "conversation-1", platform: "zalo_personal" };
+
+    emitInboxEventToRecipients("chat:conversation_updated", ["owner-1", "agent-1"], payload);
+
+    expect(socketMocks.to).toHaveBeenCalledWith(["inbox:owner-1", "inbox:agent-1"]);
+    expect(socketMocks.emit).toHaveBeenCalledWith("chat:conversation_updated", payload);
+  });
+
+  it("keeps the shared admin broadcast for existing platforms", () => {
+    const payload = { id: "conversation-1", platform: "telegram" };
+
+    emitInboxEventToRecipients("chat:conversation_updated", ["owner-1"], payload);
+
+    expect(socketMocks.to).toHaveBeenCalledWith(["inbox:admins", "inbox:owner-1"]);
+    expect(socketMocks.emit).toHaveBeenCalledWith("chat:conversation_updated", payload);
+  });
+});

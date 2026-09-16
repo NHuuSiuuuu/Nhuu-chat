@@ -21,4 +21,12 @@ describe("authenticated API requests", () => {
 
     await expect(apiRequest<void>("", "/conversation-tags/tag-1", "access-token", { method: "DELETE" })).resolves.toBeUndefined();
   });
+
+  it("disables browser caching for API responses that may change during polling", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+    await apiRequest<{ ok: boolean }>("", "/channels/zalo-personal/qr/qr-1", "access-token");
+
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ cache: "no-store" }));
+  });
 });

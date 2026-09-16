@@ -58,6 +58,26 @@ describe("Settings page", () => {
     }
   });
 
+  it("marks unfinished settings tabs as development placeholders", () => {
+    expect(typeof settingsModule.isSettingsPlaceholderTab).toBe("function");
+
+    if (typeof settingsModule.isSettingsPlaceholderTab === "function") {
+      expect([
+        "Cài đặt chung",
+        "Hỗ trợ trả lời",
+        "Giao diện",
+        "Cuộc gọi",
+        "Chế độ xoay vòng",
+        "Đồng bộ",
+        "Công cụ",
+        "Phân quyền",
+        "Lịch sử"
+      ].every((item) => settingsModule.isSettingsPlaceholderTab(item as never))).toBe(true);
+      expect(settingsModule.isSettingsPlaceholderTab("Thẻ hội thoại" as never)).toBe(false);
+      expect(settingsModule.isSettingsPlaceholderTab("Trợ lý AI" as never)).toBe(false);
+    }
+  });
+
   it("maps each settings option to its corresponding icon", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
@@ -280,17 +300,15 @@ describe("Settings page", () => {
     expect(source).toContain("onSettingsChange");
   });
 
-  it("renders the quick replies settings page and add modal", () => {
+  it("shows the development placeholder for quick replies", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain('activeTab === "Hỗ trợ trả lời"');
-    expect(source).toContain("isAddQuickReplyModalOpen");
-    expect(source).toContain("Trả lời nhanh");
-    expect(source).toContain("Thêm mẫu");
-    expect(source).toContain("Tìm kiếm tin nhắn");
-    expect(source).toContain("Ký tự tắt");
-    expect(source).toContain("Nội dung sẽ được chèn khi gõ ký tự tắt ở trên");
-    expect(source).toContain("Chưa có mẫu trả lời nhanh");
+    expect(source).toContain("isSettingsPlaceholderTab(activeTab)");
+    expect(source).toContain("Chức năng đang được phát triển");
+    expect(source).toContain("aria-disabled={isSettingsPlaceholderTab(item)}");
+    expect(source).toContain("handleTabChange(item)");
+    expect(source).toContain("cursor-not-allowed");
+    expect(source).toContain("<DevelopmentToast");
   });
 
   it("supports selecting an attached image in the quick reply modal", () => {

@@ -16,7 +16,7 @@ interface ConversationListProps {
   onResizeStart?: (event: React.PointerEvent<HTMLDivElement>) => void;
 }
 function platformIconProvider(platform: ConversationContract["platform"]) {
-  return platform === "telegram_personal" ? "telegram" : platform;
+  return platform === "telegram_personal" ? "telegram" : platform === "zalo_personal" ? "zalo" : platform;
 }
 
 export function getVisibleConversationTagCount(width: number, tagsOrCount: number | Array<{ name: string }>): number {

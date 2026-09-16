@@ -36,12 +36,13 @@
 - Modify `apps/api/src/server.ts`: restore valid Zalo sessions during startup and stop them during shutdown.
 - Modify `apps/api/src/services/message.service.ts`, `apps/api/src/services/message.service.test.ts`: route agent text to Zalo personal session.
 - Modify `apps/api/package.json` and `pnpm-lock.yaml`: add `zca-js`.
+- Modify `pnpm-workspace.yaml`: allow the existing `@google/genai` and `protobufjs` install build scripts required by the API dependency graph.
 - Modify `CHANGELOG.md`: record the experimental backend connector.
 
 ### Task 1: Add dependency, session model, schemas and safe serialization
 
 **Files:**
-- Modify: `apps/api/package.json`, `pnpm-lock.yaml`
+- Modify: `apps/api/package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`
 - Create: `apps/api/src/channels/zalo-personal/zalo-personal.model.ts`
 - Create: `apps/api/src/channels/zalo-personal/zalo-personal.schemas.ts`
 - Test: `apps/api/src/channels/zalo-personal/zalo-personal.model.test.ts`, `apps/api/src/channels/zalo-personal/zalo-personal.schemas.test.ts`
@@ -85,7 +86,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/api/package.json pnpm-lock.yaml apps/api/src/channels/zalo-personal
+git add apps/api/package.json pnpm-lock.yaml pnpm-workspace.yaml apps/api/src/channels/zalo-personal
 git commit -m "feat: add zalo personal session contract"
 ```
 
