@@ -18,6 +18,7 @@ import {
 } from "./channel-bot-adapter.js";
 import { matchAutomationTemplate } from "./template-matcher.js";
 import { DEFAULT_GREETING_DELAY_MS, waitForGreetingDelay } from "./greeting-delay.js";
+import { buildKnowledgeQuery } from "./conversation-query.js";
 
 export type { NormalizedCustomerMessage } from "./channel-bot-adapter.js";
 
@@ -130,13 +131,6 @@ export class ChatbotOrchestrator {
               handoff: false,
               sources: []
             };
-          const context = template
-            ? []
-            : await knowledgeVectorStore.search(await knowledgeEmbedding.embed(content), 5, {
-                ownerId: input.ownerId,
-                query: content
-              });
-          signal.throwIfAborted();
           const history = await MessageModel.find({
             conversationId: input.conversationId,
             $or: [
@@ -148,16 +142,25 @@ export class ChatbotOrchestrator {
             .limit(8)
             .lean();
           signal.throwIfAborted();
+          const normalizedHistory = history.reverse().map(
+            (turn): BotConversationTurn => ({
+              role: turn.senderType,
+              content: turn.content.slice(0, 500)
+            })
+          );
+          const knowledgeQuery = buildKnowledgeQuery(content, normalizedHistory);
+          const context = template
+            ? []
+            : await knowledgeVectorStore.search(await knowledgeEmbedding.embed(knowledgeQuery), 5, {
+                ownerId: input.ownerId,
+                query: knowledgeQuery
+              });
+          signal.throwIfAborted();
           return (this.options.provider ?? defaultProvider).reply({
             assistant,
             message: content,
             context,
-            history: history.reverse().map(
-              (turn): BotConversationTurn => ({
-                role: turn.senderType,
-                content: turn.content.slice(0, 500)
-              })
-            ),
+            history: normalizedHistory,
             template: template
               ? {
                   responseTemplate: template.responseTemplate,

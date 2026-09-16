@@ -2,6 +2,7 @@ import type { AutomationTemplateContract, BotPreviewResponse } from "@nhuu-chat/
 
 import { knowledgeEmbedding, knowledgeVectorStore } from "../ai/knowledge-runtime.js";
 import type { BotConversationTurn, BotReplyContext } from "./bot-reply.provider.js";
+import { buildKnowledgeQuery } from "./conversation-query.js";
 import { matchAutomationTemplate } from "./template-matcher.js";
 import { AppError } from "../common/errors.js";
 import { AssistantModel } from "../models/assistant.model.js";
@@ -23,11 +24,16 @@ interface AssistantRow {
 }
 
 // Tìm trên toàn bộ index đúng owner rồi chỉ lấy năm chunk xếp hạng cao nhất.
-async function retrieveContext(ownerId: string, message: string): Promise<BotReplyContext[]> {
+async function retrieveContext(
+  ownerId: string,
+  message: string,
+  history: BotConversationTurn[] | undefined
+): Promise<BotReplyContext[]> {
+  const query = buildKnowledgeQuery(message, history);
   return knowledgeVectorStore.search(
-    await knowledgeEmbedding.embed(message),
+    await knowledgeEmbedding.embed(query),
     MAX_CONTEXT_CHUNKS,
-    { ownerId, query: message }
+    { ownerId, query }
   );
 }
 
@@ -53,7 +59,7 @@ export async function previewAssistantReply(
     channelIdentifier,
     templates: templates as unknown as AutomationTemplateContract[]
   });
-  const context = template ? [] : await retrieveContext(ownerId, input.message);
+  const context = template ? [] : await retrieveContext(ownerId, input.message, input.history);
   const assistantInput = assistant as unknown as AssistantRow;
 
   try {

@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa chatbot giữ ngữ cảnh khi khách trả lời xác nhận ngắn như “có” hoặc “được”, giúp tiếp tục tư vấn theo câu hỏi ngay trước đó thay vì trả fallback thiếu thông tin.
 - Sửa RAG ưu tiên từ khóa/cụm từ tiếng Việt trong câu hỏi khi xếp hạng knowledge, tránh lấy nhầm tài liệu khiến chatbot trả fallback dù tài liệu đúng đã được tải lên.
 - Khôi phục nút `+ Thêm mẫu chào` bên cạnh `Import kịch bản` để người dùng vẫn có thể tạo mẫu riêng lẻ.
 - Đưa nút `Lưu hướng dẫn` và `Import kịch bản` lên cùng dòng tiêu đề khu vực tương ứng trong Trợ lý AI, giúp người dùng dễ nhận biết.

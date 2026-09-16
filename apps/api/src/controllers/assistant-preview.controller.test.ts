@@ -186,7 +186,10 @@ describe("assistant preview controller and service", () => {
       source: "ai",
       handoff: false
     });
-    expect(dependencies.vectorSearch).toHaveBeenCalledWith([1, 0], 5, { ownerId });
+    expect(dependencies.vectorSearch).toHaveBeenCalledWith([1, 0], 5, {
+      ownerId,
+      query: "Tôi được đổi hàng trong bao lâu?"
+    });
     expect(dependencies.knowledgeFind).not.toHaveBeenCalled();
     expect(dependencies.reply).toHaveBeenCalledWith(expect.objectContaining({
       context: [expect.objectContaining({
@@ -196,6 +199,34 @@ describe("assistant preview controller and service", () => {
         score: 1
       })]
     }));
+  });
+
+  it("uses the previous bot answer when a customer confirms a follow-up in preview", async () => {
+    dependencies.vectorSearch.mockResolvedValue([{
+      ownerId,
+      documentId: "course",
+      chunkIndex: 0,
+      content: "Học phí và lịch học khóa giao tiếp.",
+      embedding: [1, 0],
+      score: 1
+    }]);
+
+    const response = await request(createTestApp())
+      .post(`/api/v1/assistants/${assistantId}/preview`)
+      .set("Authorization", "Bearer agent-token")
+      .send({
+        message: "có",
+        history: [
+          { role: "customer", content: "mất gốc" },
+          { role: "bot", content: "Bạn có muốn em tư vấn học phí và lịch học không ạ?" }
+        ]
+      });
+
+    expect(response.status).toBe(200);
+    expect(dependencies.vectorSearch).toHaveBeenCalledWith([1, 0], 5, {
+      ownerId,
+      query: "Bạn có muốn em tư vấn học phí và lịch học không ạ?\ncó"
+    });
   });
 
   it("uses an existing greeting template without provisioning during preview", async () => {
