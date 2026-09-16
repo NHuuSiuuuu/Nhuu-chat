@@ -305,8 +305,10 @@ describe("Settings page", () => {
 
     expect(source).toContain("isSettingsPlaceholderTab(activeTab)");
     expect(source).toContain("Chức năng đang được phát triển");
-    expect(source).toContain("disabled={isSettingsPlaceholderTab(item)}");
+    expect(source).toContain("aria-disabled={isSettingsPlaceholderTab(item)}");
+    expect(source).toContain("handleTabChange(item)");
     expect(source).toContain("cursor-not-allowed");
+    expect(source).toContain("<DevelopmentToast");
   });
 
   it("supports selecting an attached image in the quick reply modal", () => {

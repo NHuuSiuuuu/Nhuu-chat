@@ -38,3 +38,14 @@ export function MessageToast({ toast, onOpen, onClose }: { toast: MessageToastDa
     <span className="block h-1 origin-left animate-[toast-progress_5s_linear_forwards] bg-sky-400" aria-hidden="true" />
   </article>;
 }
+
+export function DevelopmentToast({ message, onClose }: { message: string | null; onClose: () => void }) {
+  React.useEffect(() => {
+    if (!message) return undefined;
+    const timeoutId = window.setTimeout(onClose, 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [message, onClose]);
+
+  if (!message) return null;
+  return <article className="relative w-[min(380px,calc(100vw-2rem))] overflow-hidden rounded-xl bg-slate-800 p-4 text-white shadow-2xl ring-1 ring-white/10" role="status" aria-live="polite"><div className="flex items-start gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-full bg-sky-500/20 text-sky-300"><InboxIcon name="sparkles" size={18} /></span><div className="min-w-0 flex-1"><strong className="block text-sm">Chức năng đang được phát triển</strong><span className="mt-1 block text-xs text-slate-300">{message} hiện chưa sử dụng được.</span></div><button className="grid size-6 shrink-0 place-items-center rounded-md text-slate-300 transition hover:bg-slate-600 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300" type="button" onClick={onClose} aria-label="Đóng thông báo"><InboxIcon name="close" size={14} /></button></div><span className="mt-3 block h-1 origin-left animate-[toast-progress_5s_linear_forwards] bg-sky-400" aria-hidden="true" /></article>;
+}
