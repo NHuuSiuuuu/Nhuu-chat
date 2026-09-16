@@ -2,6 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { env } from "@nhuu-chat/config";
 
 import { modelTierToGeminiModel } from "../ai/ai-settings.js";
+import { enforceContactCapturePolicy } from "./contact-capture.js";
 import type {
   BotConversationTurn,
   BotReplyContext,
@@ -33,7 +34,8 @@ function fallback(input: BotReplyInput, handoff = false): BotReplyResult {
 }
 
 function exactTemplate(input: BotReplyInput): BotReplyResult {
-  return { answer: input.template?.responseTemplate ?? input.assistant.fallbackMessage, handoff: false, sources: [] };
+  const answer = input.template?.responseTemplate ?? input.assistant.fallbackMessage;
+  return { answer: enforceContactCapturePolicy(answer, input.contactCaptured === true), handoff: false, sources: [] };
 }
 
 function clipped(value: string, limit: number): string {
@@ -70,6 +72,7 @@ function buildPrompt(input: BotReplyInput, context: BotReplyContext[]): string {
   return [
     task,
     `Hướng dẫn trợ lý:\n${clipped(input.assistant.instructions, MAX_INSTRUCTION_LENGTH)}`,
+    `Trạng thái thông tin liên hệ: ${input.contactCaptured === true ? "đã xác thực từ tin khách" : "chưa được xác thực; không được nói đã nhận SĐT/Zalo hoặc cảm ơn vì khách đã để lại liên hệ"}`,
     `Tin nhắn hiện tại:\n${clipped(input.message, MAX_MESSAGE_LENGTH)}`,
     `Lịch sử gần nhất (cũ đến mới):\n${history}`,
     `Ngữ cảnh kiến thức:\n${knowledge}`,
@@ -153,7 +156,7 @@ export class GeminiBotProvider implements BotReplyProvider {
       }
 
       return {
-        answer,
+        answer: enforceContactCapturePolicy(answer, input.contactCaptured === true),
         handoff: false,
         sources: input.template
           ? []

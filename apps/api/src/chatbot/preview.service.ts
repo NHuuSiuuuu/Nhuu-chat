@@ -2,6 +2,7 @@ import type { AutomationTemplateContract, BotPreviewResponse } from "@nhuu-chat/
 
 import { knowledgeEmbedding, knowledgeVectorStore } from "../ai/knowledge-runtime.js";
 import type { BotConversationTurn, BotReplyContext } from "./bot-reply.provider.js";
+import { customerContactCaptured } from "./contact-capture.js";
 import { buildKnowledgeQuery } from "./conversation-query.js";
 import { matchAutomationTemplate } from "./template-matcher.js";
 import { AppError } from "../common/errors.js";
@@ -71,6 +72,10 @@ export async function previewAssistantReply(
         fallbackMessage: assistantInput.fallbackMessage
       },
       message: input.message,
+      contactCaptured: customerContactCaptured([
+        ...(input.history ?? []),
+        { role: "customer", content: input.message }
+      ]),
       history: input.history,
       context,
       template: template ? {

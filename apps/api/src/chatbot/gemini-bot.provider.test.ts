@@ -208,6 +208,29 @@ describe("Gemini bot reply provider", () => {
     });
   });
 
+  it("does not allow a contact-confirmation claim before customer contact is captured", async () => {
+    generateContent.mockResolvedValue({
+      text: JSON.stringify({
+        answer: "Dạ em cảm ơn Anh/Chị đã để lại thông tin liên hệ ạ! Nhân viên sẽ gọi lại.",
+        grounded: true,
+        handoff: false
+      })
+    });
+    const { GeminiBotProvider } = await importProvider();
+    const provider = new GeminiBotProvider();
+
+    await expect(provider.reply({
+      assistant,
+      message: "ok tôi đăng ký khóa này",
+      contactCaptured: false,
+      context: [{ documentId: "course", chunkIndex: 0, content: "Khóa học giao tiếp", score: 0.9 }]
+    })).resolves.toMatchObject({
+      answer: "Dạ Anh/Chị vui lòng chia sẻ số điện thoại hoặc Zalo để em hỗ trợ tiếp ạ.",
+      handoff: false
+    });
+    expect(generateContent.mock.calls[0][0].contents).toContain("chưa được xác thực");
+  });
+
   it("preserves an explicit handoff request from Gemini", async () => {
     generateContent.mockResolvedValue({
       text: JSON.stringify({ answer: "Cần nhân viên", grounded: true, handoff: true })

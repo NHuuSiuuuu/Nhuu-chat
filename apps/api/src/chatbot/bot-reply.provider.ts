@@ -22,6 +22,7 @@ export interface BotReplyInput {
     fallbackMessage: string;
   };
   message: string;
+  contactCaptured?: boolean;
   history?: BotConversationTurn[];
   context?: BotReplyContext[];
   template?: {

@@ -19,6 +19,7 @@ import {
 import { matchAutomationTemplate } from "./template-matcher.js";
 import { DEFAULT_GREETING_DELAY_MS, waitForGreetingDelay } from "./greeting-delay.js";
 import { buildKnowledgeQuery } from "./conversation-query.js";
+import { customerContactCaptured } from "./contact-capture.js";
 
 export type { NormalizedCustomerMessage } from "./channel-bot-adapter.js";
 
@@ -159,6 +160,10 @@ export class ChatbotOrchestrator {
           return (this.options.provider ?? defaultProvider).reply({
             assistant,
             message: content,
+            contactCaptured: customerContactCaptured([
+              ...normalizedHistory,
+              { role: "customer", content }
+            ]),
             context,
             history: normalizedHistory,
             template: template
