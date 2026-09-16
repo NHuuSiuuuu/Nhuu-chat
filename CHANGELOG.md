@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thay logo chữ trong header bằng logo NhuuChat chính thức, giữ liên kết về Dashboard và hiển thị rõ trên màn hình nhỏ.
 - Thêm công tắc `Bot tự động` trong Inbox; tắt công tắc tương đương tiếp quản hội thoại và được lưu bền theo từng hội thoại, không tự bật lại sau 30 phút.
 - Thêm nút `Tiếp quản hội thoại` trong Inbox để gán hội thoại cho nhân viên hiện tại và hiển thị icon nền tảng thay cho badge chữ Zalo.
 - Sửa chatbot giữ chủ đề khóa học khi khách gửi SĐT/Zalo, tránh dùng chuỗi liên hệ làm truy vấn knowledge độc lập rồi trả fallback thiếu thông tin.

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 289 161" role="img" aria-labelledby="title">
+  <title id="title">NhuuChat</title>
+  <rect width="289" height="161" rx="8" fill="#1264e8"/>
+  <g fill="none" stroke="#fff" stroke-linecap="round" stroke-width="6">
+    <path d="M55 48 44 24M77 46l11-22"/>
+    <circle cx="43" cy="21" r="4" fill="#fff" stroke="none"/>
+    <circle cx="90" cy="20" r="4" fill="#fff" stroke="none"/>
+  </g>
+  <path fill="#fff" d="M60 43c-20 0-36 15-36 34 0 18 16 33 36 33h25l13 13V94c5-5 8-11 8-18 0-18-16-33-36-33H60Z"/>
+  <circle cx="61" cy="76" r="21" fill="#1264e8"/>
+  <circle cx="53" cy="72" r="3.5" fill="#fff"/><circle cx="69" cy="72" r="3.5" fill="#fff"/>
+  <path d="M53 82c5 5 11 5 16 0" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="3"/>
+  <text x="108" y="96" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="66" font-weight="700" letter-spacing="-3">nhuu</text>
+</svg>

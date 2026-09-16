@@ -9,7 +9,8 @@ describe("DashboardTopbar", () => {
     expect(source).toContain("min-h-16");
     expect(source).not.toContain("-mx-");
     expect(source).not.toContain("mb-");
-    expect(source).toContain("NhuuChat");
+    expect(source).toContain('src="/nhuu-logo.svg"');
+    expect(source).toContain('alt="NhuuChat"');
     expect(source).toContain("nhuusiuu");
     expect(source).toContain("OWNER");
     expect(source).toContain("Hội thoại");
