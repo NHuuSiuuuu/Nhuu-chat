@@ -80,6 +80,22 @@ describe("Zalo personal client adapter", () => {
     });
   });
 
+  it("keeps a string message id returned by the native send response", async () => {
+    const zcaApi = {
+      getContext: vi.fn(() => ({ imei: "imei", cookie: [], userAgent: "ua" })),
+      fetchAccountInfo: vi.fn(async () => ({ profile: {} })),
+      listener: { on: vi.fn(), start: vi.fn(), stop: vi.fn() },
+      sendMessage: vi.fn(async () => ({ message: { msgId: "8268519386496" } }))
+    };
+    const client = createZaloPersonalClient({
+      zcaFactory: () => ({ loginQR: async () => zcaApi, login: async () => zcaApi })
+    });
+
+    const api = await client.loginQR(vi.fn());
+
+    await expect(api.sendMessage("thread-1", "hello")).resolves.toEqual({ id: "8268519386496" });
+  });
+
   it("enables native self-message delivery by default", async () => {
     await createZaloPersonalClient().loginQR(vi.fn());
     expect(nativeConstruction.options.at(-1)).toEqual({ selfListen: true });

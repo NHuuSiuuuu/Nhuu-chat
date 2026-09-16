@@ -43,7 +43,7 @@ interface ZcaApi {
     start(options?: { retryOnClose?: boolean }): void;
     stop(): void;
   };
-  sendMessage(message: string, threadId: string, type: ZcaThreadType): Promise<{ message?: { msgId?: number } | null }>;
+  sendMessage(message: string, threadId: string, type: ZcaThreadType): Promise<{ message?: { msgId?: number | string } | null }>;
 }
 
 interface ZcaClientOptions {
@@ -120,7 +120,9 @@ class ZaloPersonalClientAdapter implements ZaloPersonalClient {
         const threadType: ZcaThreadType = conversationType === "group" ? 1 : 0;
         const result = await zcaApi.sendMessage(content, threadId, threadType);
         const id = result.message?.msgId;
-        if (typeof id !== "number") throw new Error("Zalo API returned an invalid message response");
+        if ((typeof id !== "number" && typeof id !== "string") || String(id).trim() === "") {
+          throw new Error("Zalo API returned an invalid message response");
+        }
         return { id: String(id) };
       }
     };
