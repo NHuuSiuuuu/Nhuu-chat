@@ -14,6 +14,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Sửa gửi tin Zalo cá nhân trả `502` sau khi người nhận đã nhận được tin: chuẩn hóa message id native dạng số hoặc chuỗi để lưu outbound thành công.
 - Hiển thị thông báo `Chức năng đang được phát triển` cho các tab Settings chưa triển khai: Cài đặt chung, Hỗ trợ trả lời, Giao diện, Cuộc gọi, Chế độ xoay vòng, Đồng bộ, Công cụ, Phân quyền và Lịch sử.
 - Hiển thị trang `Chức năng đang được phát triển` khi chọn các tab header Đơn hàng, Bài viết hoặc Thống kê; mỗi tab có route riêng để giữ đúng trạng thái khi tải lại.
+- Vô hiệu hóa các tab Settings chưa phát triển, hiển thị con trỏ không cho phép click và giữ nguyên các tab Thẻ hội thoại, Trợ lý AI đang hoạt động.
 - Gắn URL thật cho các mục điều hướng header để truy cập trực tiếp Đơn hàng, Bài viết và Thống kê không bị rơi vào liên kết rỗng.
 - Thêm backend thử nghiệm cho Zalo cá nhân: quản lý phiên QR, lưu credentials đã mã hóa, cô lập dữ liệu theo owner và chuẩn hóa tin nhắn inbound/outbound; đây là API không chính thức nên tài khoản có nguy cơ bị Zalo hạn chế hoặc khóa.
 - Bổ sung migration thủ công, idempotent cho unique index conversation Zalo cá nhân: trong maintenance window, sao lưu database rồi chạy `MONGODB_URI=... pnpm --filter api run migrate:zalo-personal-conversation-index` trước khi rollout connector; helper tạo `{ platform, channelId, ownerId }` trước khi xóa legacy `{ platform, channelId }` và không chạy khi server khởi động.
