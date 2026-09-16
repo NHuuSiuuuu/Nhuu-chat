@@ -88,7 +88,7 @@ export function ConnectModal({ token, refresh, onClose, onConnected }: { token: 
         .catch(() => undefined);
     }, 2000);
     return () => window.clearInterval(timer);
-  }, [onConnected, qr, refresh, token]);
+  }, [onConnected, qr?.id, qr?.status, refresh, token]);
 
   useEffect(() => {
     if (!zaloQr || zaloQr.status !== "waiting_qr") return;
@@ -101,7 +101,7 @@ export function ConnectModal({ token, refresh, onClose, onConnected }: { token: 
         .catch(() => undefined);
     }, 2000);
     return () => window.clearInterval(timer);
-  }, [onConnected, refresh, token, zaloQr]);
+  }, [onConnected, refresh, token, zaloQr?.id, zaloQr?.status]);
 
   useEffect(() => {
     if (!qr?.qrUrl) { setImage(null); return; }
@@ -114,7 +114,8 @@ export function ConnectModal({ token, refresh, onClose, onConnected }: { token: 
       setZaloImage(zaloQr.qrData);
       return;
     }
-    void QRCode.toDataURL(zaloQr.qrData, { width: 260, margin: 2 }).then(setZaloImage).catch(() => setError("Không thể tạo mã QR Zalo"));
+    // zca-js trả PNG base64 thô; bổ sung data URI để trình duyệt hiển thị đúng ảnh QR.
+    setZaloImage(`data:image/png;base64,${zaloQr.qrData}`);
   }, [zaloQr?.qrData]);
 
   async function startTelegram() {
