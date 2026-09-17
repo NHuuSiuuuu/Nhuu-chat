@@ -40,5 +40,7 @@ describe("ConversationInfoSidebar", () => {
     expect(source).toContain('aria-label="Xóa ghi chú"');
     expect(source).toContain('aria-label="Ghim ghi chú"');
     expect(source).toContain("Đã ghim");
+    expect(source).toContain("min-w-0 rounded-lg");
+    expect(source).toContain("grid min-w-0 gap-2");
   });
 });
