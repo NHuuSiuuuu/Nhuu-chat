@@ -3,6 +3,16 @@ import { describe, expect, it } from "vitest";
 import * as settingsModule from "./SettingsPage";
 
 describe("Settings page", () => {
+  it("restores a persisted assistant before falling back to the default assistant", () => {
+    const assistants = [
+      { id: "default", isDefault: true },
+      { id: "assistant-1", isDefault: false }
+    ];
+
+    expect(settingsModule.resolveInitialAssistantId(assistants, "assistant-1")).toBe("assistant-1");
+    expect(settingsModule.resolveInitialAssistantId(assistants, "deleted-assistant")).toBe("default");
+  });
+
   it("exposes publish and unpublish states for automatic chatbot replies", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 

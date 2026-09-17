@@ -87,6 +87,39 @@ type AiAssistantTab = "Gợi ý trả lời" | "Chatbot tự động";
 
 type ChatbotAssistant = Pick<AssistantContract, "id" | "name" | "instructions" | "modelTier" | "enabled" | "fallbackMessage" | "channelScope" | "isDefault">;
 type GreetingTemplateDraft = Pick<AutomationTemplateContract, "name" | "keywords" | "responseTemplate" | "allowAiRewrite" | "priority" | "enabled" | "channelScope">;
+
+const ASSISTANT_SELECTION_STORAGE_PREFIX = "nhuu-chat:selected-assistant:";
+
+export function assistantSelectionStorageKey(ownerKey: string): string {
+  return `${ASSISTANT_SELECTION_STORAGE_PREFIX}${ownerKey}`;
+}
+
+export function readPersistedAssistantId(ownerKey?: string): string | null {
+  if (!ownerKey || typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(assistantSelectionStorageKey(ownerKey));
+  } catch {
+    return null;
+  }
+}
+
+export function readAssistantOwnerKey(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const auth = JSON.parse(window.localStorage.getItem("nhuu-chat-auth") ?? "null") as { user?: { email?: string } } | null;
+    return auth?.user?.email;
+  } catch {
+    return undefined;
+  }
+}
+
+export function resolveInitialAssistantId(assistants: Array<Pick<ChatbotAssistant, "id" | "isDefault">>, persistedId: string | null): string | null {
+  return assistants.find((assistant) => assistant.id === persistedId)?.id
+    ?? assistants.find((assistant) => assistant.isDefault)?.id
+    ?? assistants[0]?.id
+    ?? null;
+}
+
 type KnowledgeDocument = { id: string; title: string; sourceType: "text" | "file" | "url"; status: "pending" | "processing" | "ready" | "failed"; createdAt?: string };
 type KnowledgeListResponse = { documents: Array<{ _id: string; title: string; sourceType: KnowledgeDocument["sourceType"]; status: KnowledgeDocument["status"]; createdAt?: string }> };
 
@@ -304,6 +337,7 @@ function ChatbotAutomationSettings({ token, refresh }: { token: string; refresh?
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newAssistantName, setNewAssistantName] = useState("");
   const selected = assistants.find((assistant) => assistant.id === selectedAssistantId) ?? assistants[0];
+  const ownerKey = readAssistantOwnerKey();
 
   useEffect(() => {
     let active = true;
@@ -325,15 +359,25 @@ function ChatbotAutomationSettings({ token, refresh }: { token: string; refresh?
         }
         if (!active) return;
         setAssistants(nextAssistants);
-        setSelectedAssistantId(nextAssistants.find((assistant) => assistant.isDefault)?.id ?? nextAssistants[0]?.id ?? null);
-        const defaultAssistant = nextAssistants.find((assistant) => assistant.isDefault) ?? nextAssistants[0];
-        setInstructions(defaultAssistant?.instructions ?? "");
-        setModelTier(defaultAssistant?.modelTier ?? "smart");
+        const initialAssistantId = resolveInitialAssistantId(nextAssistants, readPersistedAssistantId(ownerKey));
+        const initialAssistant = nextAssistants.find((assistant) => assistant.id === initialAssistantId) ?? nextAssistants[0];
+        setSelectedAssistantId(initialAssistantId);
+        setInstructions(initialAssistant?.instructions ?? "");
+        setModelTier(initialAssistant?.modelTier ?? "smart");
       })
       .catch(() => { if (active) setError("Không thể tải danh sách trợ lý"); })
       .finally(() => { if (active) setIsLoading(false); });
     return () => { active = false; };
-  }, [refresh, token]);
+  }, [ownerKey, refresh, token]);
+
+  useEffect(() => {
+    if (!ownerKey || !selectedAssistantId) return;
+    try {
+      window.localStorage.setItem(assistantSelectionStorageKey(ownerKey), selectedAssistantId);
+    } catch {
+      // Không làm hỏng màn hình trợ lý nếu trình duyệt chặn localStorage.
+    }
+  }, [ownerKey, selectedAssistantId]);
 
   async function loadTemplates(assistantId: string) {
     setIsTemplatesLoading(true);
