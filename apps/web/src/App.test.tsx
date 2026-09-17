@@ -15,7 +15,8 @@ describe("App navigation", () => {
     expect(source).toContain("window.addEventListener(\"popstate\"");
     expect(source).toContain("/inbox");
     expect(source).toContain("/dashboard");
-    expect(source).toContain('if (nextPage === "inbox") setInboxPlatform(platform)');
+    expect(source).toContain('if (nextPage === "inbox") {');
+    expect(source).toContain("setInboxPlatform(platform);");
     expect(source).not.toContain('setInboxPlatform(nextPage === "inbox" ? platform : undefined)');
   });
 
@@ -49,7 +50,10 @@ describe("App navigation", () => {
     expect(source).toContain("Promise.all");
     expect(source).toContain("<Suspense");
     expect(source).toContain("PageSkeleton");
-    expect(source).not.toContain("sessionStorage");
+    expect(source).toContain("sessionStorage");
+    expect(source).toContain("nhuu-chat.inbox-platform");
+    expect(source).toContain("sessionStorage.setItem");
+    expect(source).toContain("sessionStorage.removeItem");
     expect(source).not.toContain("/api/config");
     await expect(preloadIntroDependencies()).resolves.toBeUndefined();
   });

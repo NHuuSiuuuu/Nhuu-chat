@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa giữ nguyên kênh Inbox sau khi tải lại trang bằng cách lưu lựa chọn kênh trong phiên làm việc; `Gộp trang` vẫn xóa bộ lọc kênh.
 - Thêm bộ lọc hội thoại theo các tag đã tạo và lựa chọn `Không gắn thẻ` trong sidebar Inbox.
 - Sửa điều hướng Hội thoại giữ nguyên kênh đang chọn khi quay lại từ Dashboard; URL luôn dùng `/inbox`, chỉ `Gộp trang` mới mở toàn bộ kênh.
 - Sửa Trợ lý AI ghi nhớ chatbot đang được chọn theo từng tài khoản; sau khi refresh vẫn mở đúng trợ lý đã chọn, chỉ fallback về mặc định nếu trợ lý đó đã bị xóa.

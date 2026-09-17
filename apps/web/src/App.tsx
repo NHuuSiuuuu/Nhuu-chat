@@ -23,6 +23,7 @@ interface AuthResponse {
 type AppPage = "dashboard" | "telegram" | "inbox" | "settings" | "profile" | "development";
 type InboxPlatform = "telegram_personal" | "zalo_personal" | undefined;
 type HeaderNavItem = "Hội thoại" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt";
+const INBOX_PLATFORM_STORAGE_KEY = "nhuu-chat.inbox-platform";
 
 function pageFromPath(pathname: string): AppPage {
   if (pathname === "/inbox") return "inbox";
@@ -44,7 +45,22 @@ function pathForPage(page: AppPage, developmentSection?: DevelopmentSection): st
 
 function inboxPlatformFromLocation(): InboxPlatform {
   const value = new URLSearchParams(window.location.search).get("platform");
-  return value === "telegram_personal" || value === "zalo_personal" ? value : undefined;
+  if (value === "telegram_personal" || value === "zalo_personal") return value;
+  try {
+    const stored = window.sessionStorage.getItem(INBOX_PLATFORM_STORAGE_KEY);
+    return stored === "telegram_personal" || stored === "zalo_personal" ? stored : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function persistInboxPlatform(platform: InboxPlatform): void {
+  try {
+    if (platform) window.sessionStorage.setItem(INBOX_PLATFORM_STORAGE_KEY, platform);
+    else window.sessionStorage.removeItem(INBOX_PLATFORM_STORAGE_KEY);
+  } catch {
+    // Storage may be unavailable in privacy-restricted browsers; the in-memory state still works.
+  }
 }
 
 function pathForInbox(platform?: InboxPlatform): string {
@@ -69,7 +85,10 @@ export function App() {
   const [introReady, setIntroReady] = useState(false);
   const navigate = useCallback((nextPage: AppPage, platform?: InboxPlatform, nextDevelopmentSection?: DevelopmentSection) => {
     setPage(nextPage);
-    if (nextPage === "inbox") setInboxPlatform(platform);
+    if (nextPage === "inbox") {
+      setInboxPlatform(platform);
+      persistInboxPlatform(platform);
+    }
     if (nextDevelopmentSection) setDevelopmentSection(nextDevelopmentSection);
     const nextPath = nextPage === "inbox" ? pathForInbox(platform) : pathForPage(nextPage, nextDevelopmentSection);
     if (`${window.location.pathname}${window.location.search}` !== nextPath) window.history.pushState({}, "", nextPath);
@@ -107,7 +126,7 @@ export function App() {
   } else if (!canAccessInbox(auth.user.role)) {
     appContent = <main><h1>Nhuu Chat</h1><p>Tài khoản của anh đã đăng nhập nhưng chưa có quyền mở inbox. Hãy nhờ admin cấp role agent.</p><button onClick={() => { clearAuth(); setAuth(null); }}>Đăng xuất</button></main>;
   } else {
-    const logout = () => { clearAuth(); setAuth(null); };
+    const logout = () => { persistInboxPlatform(undefined); clearAuth(); setAuth(null); };
     const openProfile = () => navigate("profile");
     const navigateFromHeader = (item: HeaderNavItem) => {
       if (item === "Hội thoại") return navigate("inbox", inboxPlatform);
