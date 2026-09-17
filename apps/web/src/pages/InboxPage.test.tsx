@@ -150,6 +150,10 @@ describe("Inbox Tailwind migration", () => {
     expect(list).not.toContain('name="tag"');
     expect(list).toContain("availableTags");
     expect(list).toContain("Không gắn thẻ");
+    expect(list).toContain("Lọc theo");
+    expect(list).toContain('aria-label="Lọc theo thẻ"');
+    expect(list).toContain("whitespace-nowrap");
+    expect(list).toContain("min-w-max");
     expect(list).not.toContain("onTagsChange");
     expect(list).not.toContain("openTagId");
     expect(list).not.toContain("Gắn thẻ cho ${name}");
