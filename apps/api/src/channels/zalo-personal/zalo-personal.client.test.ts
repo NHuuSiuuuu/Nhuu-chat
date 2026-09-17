@@ -118,6 +118,23 @@ describe("Zalo personal client adapter", () => {
     }, "thread-1", 0);
   });
 
+  it("uses the attachment message id when zca-js returns no text message id", async () => {
+    const zcaApi = {
+      getContext: vi.fn(() => ({ imei: "imei", cookie: [], userAgent: "ua" })),
+      fetchAccountInfo: vi.fn(async () => ({ profile: {} })),
+      listener: { on: vi.fn(), start: vi.fn(), stop: vi.fn() },
+      sendMessage: vi.fn(async () => ({ message: null, attachment: [{ msgId: "image-1" }] }))
+    };
+    const client = createZaloPersonalClient({
+      zcaFactory: () => ({ loginQR: async () => zcaApi, login: async () => zcaApi })
+    });
+    const api = await client.loginQR(vi.fn());
+
+    await expect(api.sendMessage("thread-1", "ảnh", "private", {
+      buffer: Buffer.from("image"), filename: "photo.png", mimeType: "image/png", size: 5
+    })).resolves.toEqual({ id: "image-1" });
+  });
+
   it("enables native self-message delivery by default", async () => {
     await createZaloPersonalClient().loginQR(vi.fn());
     expect(nativeConstruction.options.at(-1)).toEqual({ selfListen: true });

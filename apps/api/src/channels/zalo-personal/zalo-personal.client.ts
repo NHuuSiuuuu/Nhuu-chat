@@ -11,6 +11,7 @@ type ZcaQrEvent = {
   data: { image: string } | null;
   actions?: { abort?: () => unknown } | null;
 };
+type ZcaSendMessageResult = { msgId?: number | string };
 type ZcaThreadType = 0 | 1;
 type ZaloAttachment = { buffer: Buffer; filename: string; mimeType: string; size: number };
 export type ZaloConversationType = "private" | "group";
@@ -44,7 +45,7 @@ interface ZcaApi {
     start(options?: { retryOnClose?: boolean }): void;
     stop(): void;
   };
-  sendMessage(message: string | { msg: string; attachments?: { data: Buffer; filename: string; metadata: { totalSize: number } } | { data: Buffer; filename: string; metadata: { totalSize: number } }[] }, threadId: string, type: ZcaThreadType): Promise<{ message?: { msgId?: number | string } | null }>;
+  sendMessage(message: string | { msg: string; attachments?: { data: Buffer; filename: string; metadata: { totalSize: number } } | { data: Buffer; filename: string; metadata: { totalSize: number } }[] }, threadId: string, type: ZcaThreadType): Promise<{ message?: ZcaSendMessageResult | null; attachment?: ZcaSendMessageResult[] }>;
 }
 
 interface ZcaClientOptions {
@@ -126,7 +127,8 @@ class ZaloPersonalClientAdapter implements ZaloPersonalClient {
           threadId,
           threadType
         );
-        const id = result.message?.msgId;
+        // Ảnh có chú thích có thể chỉ trả ID trong mảng attachment dù đã gửi thành công.
+        const id = result.message?.msgId ?? result.attachment?.[0]?.msgId;
         if ((typeof id !== "number" && typeof id !== "string") || String(id).trim() === "") {
           throw new Error("Zalo API returned an invalid message response");
         }
