@@ -1,13 +1,23 @@
 import type { ChatMessageContract, ConversationContract } from "@nhuu-chat/contracts";
 
+function sameMessage(left: ChatMessageContract, right: ChatMessageContract): boolean {
+  return left.id === right.id || Boolean(left.clientMessageId && right.clientMessageId && left.clientMessageId === right.clientMessageId);
+}
+
 export function appendUniqueMessage(messages: ChatMessageContract[], message: ChatMessageContract): ChatMessageContract[] {
-  return messages.some((item) => item.id === message.id) ? messages : [...messages, message];
+  const existingIndex = messages.findIndex((item) => sameMessage(item, message));
+  if (existingIndex < 0) return [...messages, message];
+  return messages.map((item, index) => index === existingIndex ? message : item);
+}
+
+export function setMessageDeliveryStatus(messages: ChatMessageContract[], messageId: string, deliveryStatus: ChatMessageContract["deliveryStatus"]): ChatMessageContract[] {
+  return messages.map((message) => message.id === messageId ? { ...message, deliveryStatus } : message);
 }
 
 export function mergeMessages(current: ChatMessageContract[], incoming: ChatMessageContract[]): ChatMessageContract[] {
-  const byId = new Map(current.map((message) => [message.id, message]));
-  for (const message of incoming) byId.set(message.id, message);
-  return [...byId.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
+  let merged = current;
+  for (const message of incoming) merged = appendUniqueMessage(merged, message);
+  return [...merged].sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
 }
 
 export function upsertConversation(conversations: ConversationContract[], conversation: ConversationContract): ConversationContract[] {

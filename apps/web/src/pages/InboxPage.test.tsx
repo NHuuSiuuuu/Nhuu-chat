@@ -1,10 +1,63 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { buildConversationListRequestPath, createAiSuggestionsRequestGuard, getConversationDraft, setConversationDraft, shouldAutoRefreshAiSuggestions } from "./InboxPage.js";
+import { buildConversationListRequestPath, createAiSuggestionsRequestGuard, createOptimisticMessage, getConversationDraft, setConversationDraft, setMessageDeliveryStatus, shouldAutoRefreshAiSuggestions } from "./InboxPage.js";
 import * as inboxModule from "./InboxPage.js";
 import { filterConversationsByTag, getVisibleConversationTagCount, UNTAGGED_CONVERSATION_FILTER } from "../components/conversations/ConversationList.js";
 
 describe("Inbox Tailwind migration", () => {
+  it("creates a pending optimistic agent message before delivery", () => {
+    const optimistic = createOptimisticMessage({
+      id: "conversation-1",
+      platform: "zalo_personal",
+      customerId: "customer-1",
+      channelId: "thread-1",
+      assignedAgentId: "agent-1",
+      unreadCount: 0,
+      status: "open",
+      lastMessageAt: "2026-09-17T07:00:00.000Z",
+      lastMessageSnippet: ""
+    }, "Xin chào", "client-1", "2026-09-17T07:01:00.000Z");
+
+    expect(optimistic).toMatchObject({
+      id: "optimistic:client-1",
+      clientMessageId: "client-1",
+      conversationId: "conversation-1",
+      senderType: "agent",
+      content: "Xin chào",
+      deliveryStatus: "pending"
+    });
+  });
+
+  it("marks only the matching optimistic message as failed while preserving its payload", () => {
+    const optimistic = createOptimisticMessage({
+      id: "conversation-1",
+      platform: "zalo_personal",
+      customerId: "customer-1",
+      channelId: "thread-1",
+      assignedAgentId: "agent-1",
+      unreadCount: 0,
+      status: "open",
+      lastMessageAt: "2026-09-17T07:00:00.000Z",
+      lastMessageSnippet: ""
+    }, "Xin chào", "client-1", "2026-09-17T07:01:00.000Z");
+
+    expect(setMessageDeliveryStatus([optimistic], optimistic.id, "failed")).toEqual([{ ...optimistic, deliveryStatus: "failed" }]);
+  });
+
+  it("wires retry handling and keeps the composer content when sending fails", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+    const chat = readFileSync(new URL("../components/conversations/ChatWindow.tsx", import.meta.url), "utf8");
+    const composer = readFileSync(new URL("../components/conversations/MessageComposer.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("retryPayloadsRef");
+    expect(source).toContain("clientMessageId");
+    expect(source).toContain("setMessageDeliveryStatus");
+    expect(chat).toContain("onRetryMessage");
+    expect(chat).toContain("deliveryStatus");
+    expect(composer).toContain("Promise<boolean>");
+    expect(composer).toContain("if (!sent) return");
+  });
+
   it("uses multipart form data for outbound attachments", () => {
     const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
 

@@ -84,7 +84,7 @@ export function processComposerKey(state: ComposerBehaviorState, event: { key: s
   return { state, preventDefault: false };
 }
 
-export function MessageComposer({ onSend, quickReplies, disabled = false, draft, onDraftChange, aiSuggestions, aiSuggestionsEnabled = true, isAiSuggestionsLoading = false, aiSuggestionsError, onRefreshAiSuggestions, availableTags = [], conversationTags = [], onTagsChange }: { onSend: (content: ComposerSendPayload) => Promise<void>; quickReplies: QuickReplyContract[]; disabled?: boolean; draft?: string; onDraftChange?: (content: string) => void; aiSuggestions?: string[] | null; aiSuggestionsEnabled?: boolean; isAiSuggestionsLoading?: boolean; aiSuggestionsError?: string | null; onRefreshAiSuggestions?: () => void; availableTags?: ConversationTagContract[]; conversationTags?: ConversationTagContract[]; onTagsChange?: (tags: ConversationTagContract[]) => Promise<void> }) {
+export function MessageComposer({ onSend, quickReplies, disabled = false, draft, onDraftChange, aiSuggestions, aiSuggestionsEnabled = true, isAiSuggestionsLoading = false, aiSuggestionsError, onRefreshAiSuggestions, availableTags = [], conversationTags = [], onTagsChange }: { onSend: (content: ComposerSendPayload) => Promise<boolean>; quickReplies: QuickReplyContract[]; disabled?: boolean; draft?: string; onDraftChange?: (content: string) => void; aiSuggestions?: string[] | null; aiSuggestionsEnabled?: boolean; isAiSuggestionsLoading?: boolean; aiSuggestionsError?: string | null; onRefreshAiSuggestions?: () => void; availableTags?: ConversationTagContract[]; conversationTags?: ConversationTagContract[]; onTagsChange?: (tags: ConversationTagContract[]) => Promise<void> }) {
   const [content, setContent] = useState("");
   const [selectedAttachmentUrl, setSelectedAttachmentUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -137,7 +137,8 @@ export function MessageComposer({ onSend, quickReplies, disabled = false, draft,
 
   async function submitMessage() {
     if (disabled || (!content.trim() && !selectedFile)) return;
-    await onSend(selectedFile ? { content: content.trim(), attachment: selectedFile } : content.trim());
+    const sent = await onSend(selectedFile ? { content: content.trim(), attachment: selectedFile } : content.trim());
+    if (!sent) return;
     if (draft === undefined) setContent("");
     setSelectedAttachmentUrl(null);
     setSelectedFile(null);

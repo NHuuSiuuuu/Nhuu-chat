@@ -13,5 +13,6 @@ export const messageListQuerySchema = z.object({
 export const outboundMessageSchema = z.object({
   conversationId: z.string(),
   type: z.enum(["text", "image", "file"]),
-  content: z.string().default("")
+  content: z.string().default(""),
+  clientMessageId: z.string().min(1).max(128).optional()
 });

@@ -14,4 +14,19 @@ describe("message pagination ordering", () => {
     expect(source).toContain("senderName");
     expect(source).toContain("metadata?.senderName");
   });
+
+  it("maps the outbound client correlation id from message metadata", () => {
+    expect(toMessage({
+      _id: "server-1",
+      conversationId: "conversation-1",
+      platform: "zalo_personal",
+      senderType: "agent",
+      senderId: "agent-1",
+      type: "text",
+      content: "Xin chào",
+      deliveryStatus: "sent",
+      createdAt: "2026-09-17T07:00:00.000Z",
+      metadata: { clientMessageId: "client-1" }
+    })).toMatchObject({ clientMessageId: "client-1" });
+  });
 });

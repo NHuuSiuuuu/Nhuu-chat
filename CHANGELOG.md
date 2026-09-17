@@ -10,6 +10,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Cho phép gửi một ảnh hoặc file kèm chú thích từ Inbox tới Zalo cá nhân và Telegram cá nhân; giới hạn 20 MB, chặn định dạng nguy hiểm và lưu media qua Cloudinary.
 - Sửa lỗi upload ảnh/file bị từ chối `400 INVALID_ATTACHMENT` do giới hạn multipart không đủ cho payload gửi từ trình duyệt.
 - Sửa lỗi Zalo gửi ảnh thành công nhưng API trả `502` vì ID tin media nằm trong `attachment` thay vì `message`.
+- Hiển thị tin nhắn gửi đi ngay trong Inbox, đồng bộ theo `clientMessageId` giữa HTTP/Socket.IO và cho phép gửi lại text/file khi delivery thất bại.
 
 ## 2026-09-17
 

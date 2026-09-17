@@ -26,13 +26,14 @@ describe("message upload route", () => {
     controller.sendMessage.mockImplementation(async (req, res) => res.status(201).json({ id: "message-1" }));
   });
 
-  it("accepts the three message fields and one image attachment", async () => {
+  it("accepts the correlation field and one image attachment", async () => {
     const response = await request(createTestApp())
       .post("/api/v1/messages/send")
       .set("Authorization", "Bearer agent-token")
       .field("conversationId", "507f1f77bcf86cd799439011")
       .field("type", "image")
       .field("content", "hi")
+      .field("clientMessageId", "client-1")
       .attach("attachment", Buffer.from("image"), {
         filename: "photo.png",
         contentType: "image/png"

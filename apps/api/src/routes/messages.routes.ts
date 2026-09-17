@@ -15,9 +15,9 @@ const attachmentUpload = multer({
   limits: {
     fileSize: MAX_ATTACHMENT_BYTES,
     files: 1,
-    fields: 3,
-    // Busboy cần dư một part cho payload gồm ba field và một file.
-    parts: 5,
+    fields: 4,
+    // Busboy cần dư một part cho payload gồm bốn field và một file.
+    parts: 6,
     fieldSize: 64 * 1024,
     fieldNameSize: 100
   },

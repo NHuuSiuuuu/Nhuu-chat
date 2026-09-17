@@ -84,17 +84,19 @@ export function toMessage(row: any) {
     id: String(row._id), conversationId: String(row.conversationId), platform: row.platform,
     senderType: row.senderType, senderId: row.senderId, ...(row.metadata?.senderName ? { senderName: row.metadata.senderName } : {}), type: row.type, content: row.content,
     ...(row.attachments?.length ? { attachments: row.attachments.map((attachment: PersistedAttachment) => ({ url: attachment.url, fileName: attachment.fileName, mimeType: attachment.fileType })) } : {}),
+    ...(row.metadata?.clientMessageId ? { clientMessageId: row.metadata.clientMessageId } : {}),
     deliveryStatus: row.deliveryStatus, createdAt: new Date(row.createdAt).toISOString()
   };
 }
 
-export async function createOutboundMessage(input: { conversationId: string; platform: string; senderId: string; content: string; externalMessageId?: string; deliveryStatus: "pending" | "sent" | "failed"; type?: "text" | "image" | "file"; attachments?: PersistedAttachment[] }) {
+export async function createOutboundMessage(input: { conversationId: string; platform: string; senderId: string; content: string; externalMessageId?: string; clientMessageId?: string; deliveryStatus: "pending" | "sent" | "failed"; type?: "text" | "image" | "file"; attachments?: PersistedAttachment[] }) {
   if (!input.content.trim() && !input.attachments?.length) throw new AppError(400, "INVALID_REQUEST", "content or attachment is required");
-  return MessageModel.create({ ...input, senderType: "agent", type: input.type ?? "text" });
+  const { clientMessageId, ...messageInput } = input;
+  return MessageModel.create({ ...messageInput, ...(clientMessageId ? { metadata: { clientMessageId } } : {}), senderType: "agent", type: input.type ?? "text" });
 }
 
 // Listener Zalo có thể lưu event tự phản hồi trước outbound flow; duplicate khi đó vẫn chứng minh tin đã được lưu.
-async function persistZaloOutboundMessage(input: { conversationId: string; platform: string; senderId: string; content: string; externalMessageId?: string; deliveryStatus: "pending" | "sent" | "failed"; type?: "text" | "image" | "file"; attachments?: PersistedAttachment[] }) {
+async function persistZaloOutboundMessage(input: { conversationId: string; platform: string; senderId: string; content: string; externalMessageId?: string; clientMessageId?: string; deliveryStatus: "pending" | "sent" | "failed"; type?: "text" | "image" | "file"; attachments?: PersistedAttachment[] }) {
   try {
     return await createOutboundMessage(input);
   } catch (error) {
@@ -110,7 +112,7 @@ async function persistZaloOutboundMessage(input: { conversationId: string; platf
 
 // Kiểm tra quyền, gửi qua đúng connector và luôn lưu trạng thái truy vết của lần gửi Zalo cá nhân.
 export async function sendOutboundMessage(
-  input: { conversationId: string; content: string; attachment?: UploadedOutboundFile },
+  input: { conversationId: string; content: string; clientMessageId?: string; attachment?: UploadedOutboundFile },
   auth?: AuthUser
 ) {
   const { conversationId, content } = input;
@@ -212,6 +214,7 @@ export async function sendOutboundMessage(
         platform: conversation.platform,
         senderId: "agent",
         content,
+        ...(input.clientMessageId ? { clientMessageId: input.clientMessageId } : {}),
         ...(persistedAttachments ? { attachments: persistedAttachments, type: messageType } : {}),
         externalMessageId: undefined,
         // AppError xảy ra trước khi gửi; lỗi connector thường không xác định được phía Zalo đã nhận hay chưa.
@@ -234,6 +237,7 @@ export async function sendOutboundMessage(
       platform: conversation.platform,
       senderId: "agent",
       content,
+      ...(input.clientMessageId ? { clientMessageId: input.clientMessageId } : {}),
       ...(persistedAttachments ? { attachments: persistedAttachments, type: messageType } : {}),
       externalMessageId,
       deliveryStatus
@@ -243,6 +247,7 @@ export async function sendOutboundMessage(
       platform: conversation.platform,
       senderId: "agent",
       content,
+      ...(input.clientMessageId ? { clientMessageId: input.clientMessageId } : {}),
       ...(persistedAttachments ? { attachments: persistedAttachments, type: messageType } : {}),
       externalMessageId,
       deliveryStatus

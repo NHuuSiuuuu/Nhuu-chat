@@ -49,7 +49,7 @@ export const sendMessage: RequestHandler = async (request, response, next) => {
     if (!body.success) {
       throw new AppError(400, "INVALID_REQUEST", "conversationId and type are required");
     }
-    const { conversationId, content } = body.data;
+    const { conversationId, content, clientMessageId } = body.data;
     const auth = (request as AuthenticatedRequest).auth;
     const file = request.file;
     const attachment: UploadedOutboundFile | undefined = file ? {
@@ -58,7 +58,7 @@ export const sendMessage: RequestHandler = async (request, response, next) => {
       mimetype: file.mimetype,
       size: file.size
     } : undefined;
-    const result = await sendOutboundMessage({ conversationId, content, ...(attachment ? { attachment } : {}) }, auth);
+    const result = await sendOutboundMessage({ conversationId, content, ...(clientMessageId ? { clientMessageId } : {}), ...(attachment ? { attachment } : {}) }, auth);
     emitChatEvent("chat:message_received", conversationId, result.message);
     emitChatEvent("chat:delivery_updated", conversationId, result.message);
     emitInboxEventToRecipients(

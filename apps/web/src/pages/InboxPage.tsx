@@ -69,6 +69,37 @@ export function buildConversationListRequestPath(platform?: string): string {
   return platform ? `/api/v1/conversations?platform=${encodeURIComponent(platform)}` : "/api/v1/conversations";
 }
 
+export function createOptimisticMessage(conversation: ConversationContract, payload: ComposerSendPayload, clientMessageId: string, createdAt = new Date().toISOString(), attachmentUrl?: string): ChatMessageContract {
+  const attachment = typeof payload === "string" ? undefined : {
+    url: attachmentUrl ?? "",
+    fileName: payload.attachment.name,
+    mimeType: payload.attachment.type || "application/octet-stream"
+  };
+  return {
+    id: `optimistic:${clientMessageId}`,
+    clientMessageId,
+    conversationId: conversation.id,
+    platform: conversation.platform,
+    senderType: "agent",
+    senderId: "agent",
+    type: typeof payload === "string" ? "text" : payload.attachment.type.startsWith("image/") ? "image" : "file",
+    content: typeof payload === "string" ? payload : payload.content,
+    ...(attachment ? { attachments: [attachment] } : {}),
+    deliveryStatus: "pending",
+    createdAt
+  };
+}
+
+export function createClientMessageId(): string {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `client-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+export function setMessageDeliveryStatus(messages: ChatMessageContract[], messageId: string, deliveryStatus: ChatMessageContract["deliveryStatus"]): ChatMessageContract[] {
+  return messages.map((message) => message.id === messageId ? { ...message, deliveryStatus } : message);
+}
+
 // Chỉ áp dụng kết quả của lần tải mẫu còn hiệu lực để auth context cũ không ghi đè state mới.
 export async function loadInboxQuickReplies(request: () => Promise<{ quickReplies: QuickReplyContract[] }>, apply: (quickReplies: QuickReplyContract[]) => void, isCurrent: () => boolean): Promise<void> {
   try {
@@ -80,6 +111,7 @@ export async function loadInboxQuickReplies(request: () => Promise<{ quickReplie
 }
 
 type InboxAccount = DashboardAccount & { id?: string };
+type RetryPayloadEntry = { conversationId: string; payload: ComposerSendPayload; previewUrl?: string };
 
 export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNavigate, user, onLogout, onProfile }: { token: string; refresh?: () => Promise<string | null>; platform?: string; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hội thoại" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void; user?: InboxAccount | null; onLogout?: () => void; onProfile?: () => void }) {
   const [conversations, setConversations] = useState<ConversationContract[]>([]);
@@ -107,11 +139,26 @@ export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNav
   const readStateRef = React.useRef(new Map<string, { generation: number; baseline: number; revision: number; confirmedGeneration?: number; confirmedRevision?: number }>());
   const aiSuggestionsGuardRef = React.useRef(createAiSuggestionsRequestGuard());
   const quickRepliesGuardRef = React.useRef(createQuickRepliesRequestGuard());
+  const retryPayloadsRef = React.useRef(new Map<string, RetryPayloadEntry>());
+  const optimisticMessageIdsRef = React.useRef(new Map<string, string>());
   aiSuggestionsGuardRef.current.setActiveConversation(activeId);
   const active = conversations.find((item) => item.id === activeId) ?? null;
   (globalThis as typeof globalThis & { __nhuuChatConversationContext?: { id: string | null; token: string; refresh?: () => Promise<string | null> } }).__nhuuChatConversationContext = { id: activeId, token, refresh };
   const aiSuggestionsEnabled = aiSettings.enabled && aiSettings.suggestionsEnabled;
   const [readRequestKey, setReadRequestKey] = useState(0);
+  function releaseRetryPayload(messageId: string) {
+    const entry = retryPayloadsRef.current.get(messageId);
+    if (entry?.previewUrl && typeof URL.revokeObjectURL === "function") URL.revokeObjectURL(entry.previewUrl);
+    retryPayloadsRef.current.delete(messageId);
+  }
+  function forgetOptimisticMessage(messageId: string) {
+    for (const [clientMessageId, optimisticId] of optimisticMessageIdsRef.current) {
+      if (optimisticId === messageId) optimisticMessageIdsRef.current.delete(clientMessageId);
+    }
+  }
+  useEffect(() => () => {
+    for (const messageId of retryPayloadsRef.current.keys()) releaseRetryPayload(messageId);
+  }, []);
   // Uses generation and revision guards so delayed read responses cannot undo newer realtime activity.
   async function markActiveRead(id: string) {
     const previousReadState = readStateRef.current.get(id);
@@ -241,7 +288,7 @@ export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNav
   useEffect(() => {
     const socket = createChatSocket(API_URL, token);
     const joinActiveRoom = () => { if (activeId) socket.emit(chatEvents.joinRoom, activeId); };
-    socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => { const revision = (conversationRevisionRef.current.get(message.conversationId) ?? 0) + 1; conversationRevisionRef.current.set(message.conversationId, revision); if (message.senderType === "customer") { const conversation = conversationsRef.current.find((item) => item.id === message.conversationId); setMessageToasts((current) => appendMessageToast(current, { id: message.id, conversationId: message.conversationId, senderName: message.senderName?.trim() || conversation?.customerName?.trim() || "Khách hàng", content: message.content, platform: message.platform, ...(conversation?.customerAvatarUrl ? { avatarUrl: conversation.customerAvatarUrl } : {}) })); } if (message.conversationId === activeId) { setIsCustomerTyping(false); setMessages((current) => appendUniqueMessage(current, message)); void markActiveRead(activeId); if (message.senderType === "customer" && aiSettingsLoaded && shouldAutoRefreshAiSuggestions(aiSettings.suggestionMode, "customer_message")) void refreshAiSuggestions(activeId, "customer_message"); } });
+    socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => { const revision = (conversationRevisionRef.current.get(message.conversationId) ?? 0) + 1; conversationRevisionRef.current.set(message.conversationId, revision); if (message.clientMessageId) { const optimisticId = optimisticMessageIdsRef.current.get(message.clientMessageId); if (optimisticId) { releaseRetryPayload(optimisticId); optimisticMessageIdsRef.current.delete(message.clientMessageId); } } if (message.senderType === "customer") { const conversation = conversationsRef.current.find((item) => item.id === message.conversationId); setMessageToasts((current) => appendMessageToast(current, { id: message.id, conversationId: message.conversationId, senderName: message.senderName?.trim() || conversation?.customerName?.trim() || "Khách hàng", content: message.content, platform: message.platform, ...(conversation?.customerAvatarUrl ? { avatarUrl: conversation.customerAvatarUrl } : {}) })); } if (message.conversationId === activeId) { setIsCustomerTyping(false); setMessages((current) => appendUniqueMessage(current, message)); void markActiveRead(activeId); if (message.senderType === "customer" && aiSettingsLoaded && shouldAutoRefreshAiSuggestions(aiSettings.suggestionMode, "customer_message")) void refreshAiSuggestions(activeId, "customer_message"); } });
     socket.on("connect", joinActiveRoom);
     socket.on(chatEvents.agentTyping, (payload: { conversationId?: unknown; isTyping?: unknown }) => {
       if (payload.conversationId !== activeId) return;
@@ -308,18 +355,46 @@ export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNav
       setIsTakingOver(false);
     }
   }
-  async function sendText(payload: ComposerSendPayload) {
-    if (!activeId) return;
+  async function sendText(initialPayload: ComposerSendPayload, retryMessageId?: string): Promise<boolean> {
+    if (!activeId || !active) return false;
     const conversationId = activeId;
+    const retryEntry = retryMessageId ? retryPayloadsRef.current.get(retryMessageId) : undefined;
+    const retryPayload = retryEntry?.payload ?? initialPayload;
+    const payload = retryPayload;
+    if (retryMessageId) {
+      retryPayloadsRef.current.delete(retryMessageId);
+      forgetOptimisticMessage(retryMessageId);
+    }
+    const clientMessageId = createClientMessageId();
+    const previewUrl = retryEntry?.previewUrl ?? (typeof retryPayload === "string" || typeof URL.createObjectURL !== "function" ? undefined : URL.createObjectURL(retryPayload.attachment));
+    const optimisticMessage = createOptimisticMessage(active, retryPayload, clientMessageId, retryEntry ? (messages.find((item) => item.id === retryMessageId)?.createdAt ?? new Date().toISOString()) : new Date().toISOString(), previewUrl);
+    retryPayloadsRef.current.set(optimisticMessage.id, { conversationId, payload: retryPayload, ...(previewUrl ? { previewUrl } : {}) });
+    optimisticMessageIdsRef.current.set(clientMessageId, optimisticMessage.id);
+    setMessages((current) => retryMessageId
+      ? current.map((message) => message.id === retryMessageId ? optimisticMessage : message)
+      : appendUniqueMessage(current, optimisticMessage));
     const content = typeof payload === "string" ? payload : payload.content;
     const formData = new FormData();
     formData.append("conversationId", conversationId);
     formData.append("type", typeof payload === "string" ? "text" : payload.attachment.type.startsWith("image/") ? "image" : "file");
     formData.append("content", content);
+    formData.append("clientMessageId", clientMessageId);
     if (typeof payload !== "string") formData.append("attachment", payload.attachment);
-    const message = await apiRequest<ChatMessageContract>(API_URL, "/api/v1/messages/send", token, { method: "POST", body: formData }, refresh);
-    setMessages((current) => appendUniqueMessage(current, message));
-    setDrafts((current) => setConversationDraft(current, conversationId, ""));
+    try {
+      const message = await apiRequest<ChatMessageContract>(API_URL, "/api/v1/messages/send", token, { method: "POST", body: formData }, refresh);
+      setMessages((current) => appendUniqueMessage(current, message));
+      releaseRetryPayload(optimisticMessage.id);
+      optimisticMessageIdsRef.current.delete(clientMessageId);
+      setDrafts((current) => setConversationDraft(current, conversationId, ""));
+      return true;
+    } catch {
+      setMessages((current) => setMessageDeliveryStatus(current, optimisticMessage.id, "failed"));
+      return false;
+    }
+  }
+  function retryMessage(messageId: string) {
+    const entry = retryPayloadsRef.current.get(messageId);
+    if (entry?.conversationId === activeId) void sendText(entry.payload, messageId);
   }
   function updateActiveDraft(content: string) { if (activeId) setDrafts((current) => setConversationDraft(current, activeId, content)); }
   function handleConversationListResizeStart(event: React.PointerEvent<HTMLDivElement>) {
@@ -334,5 +409,10 @@ export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNav
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp, { once: true });
   }
-  return <main className="inbox-shell"><div className="pointer-events-none fixed right-4 top-4 z-[70] grid gap-3" aria-live="polite">{messageToasts.map((toast) => <div className="pointer-events-auto" key={toast.id}><MessageToast toast={toast} onOpen={(conversationId) => { selectConversation(conversationId); setMessageToasts([]); }} onClose={(id) => setMessageToasts((current) => current.filter((item) => item.id !== id))} /></div>)}</div><div className="flex h-screen min-h-0 flex-col overflow-hidden bg-slate-100"><DashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} /><div className="inbox-page grid min-h-0 flex-1 grid-cols-[44px_var(--conversation-list-width)_minmax(0,1fr)] overflow-hidden bg-slate-100 text-gray-800 transition-[grid-template-columns] duration-200 max-[900px]:grid-cols-[44px_minmax(0,1fr)]" style={{ "--conversation-list-width": `${conversationListWidth}px` } as React.CSSProperties}><aside className="inbox-nav flex flex-col items-center gap-3 bg-blue-600 px-1 py-3" aria-label="Thanh điều hướng"><div className="inbox-nav-logo mb-2 grid size-[30px] place-items-center rounded-lg border border-white/70 text-[17px] font-bold text-white">H</div><button className="inbox-nav-item grid size-9 place-items-center rounded-lg bg-black/15 text-white transition-colors hover:bg-black/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hội thoại"><InboxIcon name="chat" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hộp thư"><InboxIcon name="inbox" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Khách hàng"><InboxIcon name="users" /></button><div className="inbox-nav-spacer flex-1" /><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Trợ giúp"><InboxIcon name="help" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Cài đặt"><InboxIcon name="settings" /></button>{onBack && <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-gray-100 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Về Dashboard" onClick={onBack}>←</button>}</aside><div className="min-h-0 max-[899px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} collapsed={isConversationListCollapsed} onResizeStart={handleConversationListResizeStart} /></div><ChatWindow conversation={active} messages={messages} onSend={sendText} quickReplies={quickReplies} draft={getConversationDraft(drafts, activeId)} onDraftChange={updateActiveDraft} onOpenConversationList={() => setIsConversationListOpen(true)} isCustomerTyping={isCustomerTyping} aiSuggestions={aiSuggestions} isAiSuggestionsLoading={isAiSuggestionsLoading} aiSuggestionsError={aiSuggestionsError} onRefreshAiSuggestions={refreshAiSuggestions} aiSuggestionsEnabled={aiSuggestionsEnabled} availableTags={availableTags} onTagsChange={updateActiveConversationTags} onToggleBot={toggleActiveBot} isTogglingBot={isTakingOver} toggleBotError={takeoverError} />{isConversationListOpen && <><button className="fixed inset-0 z-40 bg-slate-900/30 min-[900px]:hidden" type="button" onClick={() => setIsConversationListOpen(false)} aria-label="Đóng danh sách hội thoại" /><div className="fixed top-28 bottom-0 left-[44px] z-50 flex w-[calc(100vw-44px)] min-[900px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} /></div></>}</div></div></main>;
+  return <main className="inbox-shell"><div className="pointer-events-none fixed right-4 top-4 z-[70] grid gap-3" aria-live="polite">{messageToasts.map((toast) => <div className="pointer-events-auto" key={toast.id}><MessageToast toast={toast} onOpen={(conversationId) => { selectConversation(conversationId); setMessageToasts([]); }} onClose={(id) => setMessageToasts((current) => current.filter((item) => item.id !== id))} /></div>)}</div><div className="flex h-screen min-h-0 flex-col overflow-hidden bg-slate-100"><DashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} /><div className="inbox-page grid min-h-0 flex-1 grid-cols-[44px_var(--conversation-list-width)_minmax(0,1fr)] overflow-hidden bg-slate-100 text-gray-800 transition-[grid-template-columns] duration-200 max-[900px]:grid-cols-[44px_minmax(0,1fr)]" style={{ "--conversation-list-width": `${conversationListWidth}px` } as React.CSSProperties}><aside className="inbox-nav flex flex-col items-center gap-3 bg-blue-600 px-1 py-3" aria-label="Thanh điều hướng">
+    <button className="inbox-nav-item grid size-9 place-items-center rounded-lg bg-black/15 text-white transition-colors hover:bg-black/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hội thoại"><InboxIcon name="chat" /></button>
+    <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hộp thư"><InboxIcon name="inbox" /></button>
+    {/* <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Khách hàng"><InboxIcon name="users" /></button><div className="inbox-nav-spacer flex-1" /><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Trợ giúp"><InboxIcon name="help" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Cài đặt"><InboxIcon name="settings" /></button> */}
+    {/* {onBack && <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-gray-100 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Về Dashboard" onClick={onBack}>←</button>} */}
+    </aside><div className="min-h-0 max-[899px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} collapsed={isConversationListCollapsed} onResizeStart={handleConversationListResizeStart} /></div><ChatWindow conversation={active} messages={messages} onSend={sendText} onRetryMessage={retryMessage} quickReplies={quickReplies} draft={getConversationDraft(drafts, activeId)} onDraftChange={updateActiveDraft} onOpenConversationList={() => setIsConversationListOpen(true)} isCustomerTyping={isCustomerTyping} aiSuggestions={aiSuggestions} isAiSuggestionsLoading={isAiSuggestionsLoading} aiSuggestionsError={aiSuggestionsError} onRefreshAiSuggestions={refreshAiSuggestions} aiSuggestionsEnabled={aiSuggestionsEnabled} availableTags={availableTags} onTagsChange={updateActiveConversationTags} onToggleBot={toggleActiveBot} isTogglingBot={isTakingOver} toggleBotError={takeoverError} />{isConversationListOpen && <><button className="fixed inset-0 z-40 bg-slate-900/30 min-[900px]:hidden" type="button" onClick={() => setIsConversationListOpen(false)} aria-label="Đóng danh sách hội thoại" /><div className="fixed top-28 bottom-0 left-[44px] z-50 flex w-[calc(100vw-44px)] min-[900px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} /></div></>}</div></div></main>;
 }

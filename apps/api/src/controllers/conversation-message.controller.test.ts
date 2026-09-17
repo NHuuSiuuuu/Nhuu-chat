@@ -540,6 +540,36 @@ describe("message controller", () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it("forwards the client correlation id from multipart input", async () => {
+    const message = {
+      id: "message-1",
+      conversationId: "conversation-1",
+      platform: "zalo_personal",
+      senderType: "agent",
+      senderId: "agent",
+      type: "text",
+      content: "Hello",
+      clientMessageId: "client-1",
+      deliveryStatus: "sent",
+      createdAt: "2026-09-10T00:00:01.000Z"
+    };
+    serviceMocks.sendOutboundMessage.mockResolvedValue({ message, conversation: {}, recipients: [] });
+    const { response } = responseRecorder();
+    const next = vi.fn();
+    const auth = { id: "customer-1", email: "customer@example.com", role: "customer" } as const;
+
+    await sendMessage({
+      auth,
+      body: { conversationId: "conversation-1", type: "text", content: "Hello", clientMessageId: "client-1" }
+    } as never, response as never, next);
+
+    expect(serviceMocks.sendOutboundMessage).toHaveBeenCalledWith(
+      { conversationId: "conversation-1", content: "Hello", clientMessageId: "client-1" },
+      auth
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
+
   it.each([
     new AppError(403, "FORBIDDEN", "You do not have access to this conversation"),
     new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found"),

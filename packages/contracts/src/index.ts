@@ -84,6 +84,7 @@ export interface ConversationNoteContract {
 
 export interface ChatMessageContract {
   id: string;
+  clientMessageId?: string;
   conversationId: string;
   platform: ChatPlatform;
   senderType: "customer" | "agent" | "bot";
