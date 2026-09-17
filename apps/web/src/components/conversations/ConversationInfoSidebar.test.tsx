@@ -39,10 +39,14 @@ describe("ConversationInfoSidebar", () => {
     expect(source).toContain('aria-label="Sửa ghi chú"');
     expect(source).toContain('aria-label="Xóa ghi chú"');
     expect(source).toContain('aria-label="Ghim ghi chú"');
-    expect(source).toContain("Đã ghim");
+    expect(source).not.toContain("Đã ghim");
+    expect(source).toContain("whitespace-nowrap");
+    expect(source).toContain('hour: "2-digit"');
+    expect(source).toContain('minute: "2-digit"');
+    expect(source).toContain("text-yellow-500");
     expect(source).toContain("Đã sửa");
     expect(source).toContain("note.updatedAt !== note.createdAt");
-    expect(source).toContain('note.isPinned ? "visible" : "invisible"');
+    expect(source).toContain('note.isPinned ? "visible text-yellow-500" : "invisible"');
     expect(source).toContain("group-hover:visible");
     expect(source).toContain("group-focus-within:visible");
     expect(source).toContain("min-w-0 rounded-lg");
