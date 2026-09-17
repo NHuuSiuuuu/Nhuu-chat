@@ -96,6 +96,28 @@ describe("Zalo personal client adapter", () => {
     await expect(api.sendMessage("thread-1", "hello")).resolves.toEqual({ id: "8268519386496" });
   });
 
+  it("passes a buffer attachment to zca-js with filename and size metadata", async () => {
+    const zcaApi = {
+      getContext: vi.fn(() => ({ imei: "imei", cookie: [], userAgent: "ua" })),
+      fetchAccountInfo: vi.fn(async () => ({ profile: {} })),
+      listener: { on: vi.fn(), start: vi.fn(), stop: vi.fn() },
+      sendMessage: vi.fn(async () => ({ message: { msgId: "media-1" } }))
+    };
+    const client = createZaloPersonalClient({
+      zcaFactory: () => ({ loginQR: async () => zcaApi, login: async () => zcaApi })
+    });
+    const api = await client.loginQR(vi.fn());
+
+    await api.sendMessage("thread-1", "Bảng giá", "private", {
+      buffer: Buffer.from("pdf"), filename: "bang-gia.pdf", mimeType: "application/pdf", size: 3
+    });
+
+    expect(zcaApi.sendMessage).toHaveBeenCalledWith({
+      msg: "Bảng giá",
+      attachments: [{ data: Buffer.from("pdf"), filename: "bang-gia.pdf", metadata: { totalSize: 3 } }]
+    }, "thread-1", 0);
+  });
+
   it("enables native self-message delivery by default", async () => {
     await createZaloPersonalClient().loginQR(vi.fn());
     expect(nativeConstruction.options.at(-1)).toEqual({ selfListen: true });

@@ -15,6 +15,8 @@ const dependencyMocks = vi.hoisted(() => ({
   personalSendMessage: vi.fn(),
   getActiveZaloPersonalClient: vi.fn(),
   zaloPersonalSendMessage: vi.fn(),
+  personalSendFile: vi.fn(),
+  uploadFile: vi.fn(),
   readProviderSecretByName: vi.fn()
 }));
 
@@ -48,6 +50,14 @@ vi.mock("../channels/telegram/telegram.client.js", () => ({
 
 vi.mock("./provider-secret.service.js", () => ({
   readProviderSecretByName: dependencyMocks.readProviderSecretByName
+}));
+
+vi.mock("../media/cloudinary.service.js", () => ({
+  CloudinaryMediaService: class {
+    uploadFile(input: unknown) {
+      return dependencyMocks.uploadFile(input);
+    }
+  }
 }));
 
 import { sendOutboundMessage } from "./message.service.js";
@@ -231,6 +241,52 @@ describe("sendOutboundMessage", () => {
       createdAt: "2026-09-10T04:30:01.000Z"
     });
     expect(result.recipients).toEqual(["customer-1", ""]);
+  });
+
+  it("sends a Telegram personal attachment with a caption and persists its URL", async () => {
+    arrangeConversation(conversation({ platform: "telegram_personal", assignedAgentId: null }));
+    const personalClient = {
+      getEntity: vi.fn().mockResolvedValue("peer-42"),
+      sendMessage: dependencyMocks.personalSendMessage,
+      sendFile: dependencyMocks.personalSendFile
+    };
+    dependencyMocks.getActivePersonalClient.mockResolvedValue(personalClient);
+    dependencyMocks.personalSendFile.mockResolvedValue({ id: 8125 });
+    dependencyMocks.uploadFile.mockResolvedValue({
+      secureUrl: "https://res.cloudinary.com/example/raw/upload/bang-gia.pdf",
+      publicId: "message-asset-1",
+      resourceType: "raw",
+      mimeType: "application/pdf",
+      bytes: 3
+    });
+    arrangeStoredMessage();
+
+    const result = await sendOutboundMessage({
+      conversationId: "conversation-1",
+      content: "Bảng giá",
+      attachment: { buffer: Buffer.from("pdf"), originalname: "bang-gia.pdf", mimetype: "application/pdf", size: 3 }
+    }, { id: "customer-1", email: "owner@example.com", role: "customer" });
+
+    expect(dependencyMocks.personalSendFile).toHaveBeenCalledWith("peer-42", expect.objectContaining({ caption: "Bảng giá" }));
+    expect(dependencyMocks.personalSendMessage).not.toHaveBeenCalled();
+    expect(dependencyMocks.createMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "file",
+      attachments: [{ url: "https://res.cloudinary.com/example/raw/upload/bang-gia.pdf", fileType: "application/pdf", fileName: "bang-gia.pdf" }]
+    }));
+    expect(result.message).toMatchObject({ type: "file", attachments: [{ url: "https://res.cloudinary.com/example/raw/upload/bang-gia.pdf", fileName: "bang-gia.pdf", mimeType: "application/pdf" }] });
+  });
+
+  it("does not deliver an attachment through an unsupported channel", async () => {
+    arrangeConversation(conversation({ platform: "telegram" }));
+
+    await expect(sendOutboundMessage({
+      conversationId: "conversation-1",
+      content: "Tài liệu",
+      attachment: { buffer: Buffer.from("pdf"), originalname: "tai-lieu.pdf", mimetype: "application/pdf", size: 3 }
+    }, agentAuth)).rejects.toMatchObject({ code: "UNSUPPORTED_ATTACHMENT_CHANNEL", statusCode: 400 });
+
+    expect(dependencyMocks.uploadFile).not.toHaveBeenCalled();
+    expect(dependencyMocks.botSendText).not.toHaveBeenCalled();
   });
 
   it("sends through Zalo personal after pausing the bot and persists the external id", async () => {

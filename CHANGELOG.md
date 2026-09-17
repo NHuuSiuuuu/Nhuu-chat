@@ -7,6 +7,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 - Thay badge Zalo tự dựng bằng SVG logo Zalo thật ở cả biến thể có nền và trong suốt.
 - Thêm tooltip khi hover cho các nút hướng dẫn, đính kèm, mẫu trả lời nhanh và gửi tin nhắn trong ô soạn tin.
+- Cho phép gửi một ảnh hoặc file kèm chú thích từ Inbox tới Zalo cá nhân và Telegram cá nhân; giới hạn 20 MB, chặn định dạng nguy hiểm và lưu media qua Cloudinary.
 
 ## 2026-09-17
 

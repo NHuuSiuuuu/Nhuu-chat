@@ -6,6 +6,7 @@ import { createChatSocket } from "../lib/socket.js";
 import { resolveApiBaseUrl } from "../lib/api-url.js";
 import { ConversationList } from "../components/conversations/ConversationList.js";
 import { ChatWindow } from "../components/conversations/ChatWindow.js";
+import type { ComposerSendPayload } from "../components/conversations/MessageComposer.js";
 import { appendUniqueMessage, mergeMessages, upsertConversation } from "../state/inbox-realtime.js";
 import { clampConversationListWidth, CONVERSATION_LIST_MAX_WIDTH, CONVERSATION_LIST_MIN_WIDTH, markConversationRead } from "../state/inbox-ui.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
@@ -307,7 +308,19 @@ export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNav
       setIsTakingOver(false);
     }
   }
-  async function sendText(content: string) { if (!activeId) return; const conversationId = activeId; const message = await apiRequest<ChatMessageContract>(API_URL, "/api/v1/messages/send", token, { method: "POST", body: JSON.stringify({ conversationId, type: "text", content }) }, refresh); setMessages((current) => appendUniqueMessage(current, message)); setDrafts((current) => setConversationDraft(current, conversationId, "")); }
+  async function sendText(payload: ComposerSendPayload) {
+    if (!activeId) return;
+    const conversationId = activeId;
+    const content = typeof payload === "string" ? payload : payload.content;
+    const formData = new FormData();
+    formData.append("conversationId", conversationId);
+    formData.append("type", typeof payload === "string" ? "text" : payload.attachment.type.startsWith("image/") ? "image" : "file");
+    formData.append("content", content);
+    if (typeof payload !== "string") formData.append("attachment", payload.attachment);
+    const message = await apiRequest<ChatMessageContract>(API_URL, "/api/v1/messages/send", token, { method: "POST", body: formData }, refresh);
+    setMessages((current) => appendUniqueMessage(current, message));
+    setDrafts((current) => setConversationDraft(current, conversationId, ""));
+  }
   function updateActiveDraft(content: string) { if (activeId) setDrafts((current) => setConversationDraft(current, activeId, content)); }
   function handleConversationListResizeStart(event: React.PointerEvent<HTMLDivElement>) {
     event.preventDefault();

@@ -1,3 +1,5 @@
+import { CustomFile } from "telegram/client/uploads.js";
+import type { EntityLike } from "telegram/define.js";
 import { TelegramClient } from "../channels/telegram/telegram.client.js";
 import { AppError } from "../common/errors.js";
 import { ConversationModel } from "../models/conversation.model.js";
@@ -14,14 +16,41 @@ type ZaloOutboundClient = {
   sendMessage: (
     threadId: string,
     content: string,
-    conversationType: ZaloConversationType
+    conversationType: ZaloConversationType,
+    attachment?: { buffer: Buffer; filename: string; mimeType: string; size: number }
   ) => Promise<{ id: string }>;
 };
 
+export type UploadedOutboundFile = {
+  buffer: Buffer;
+  originalname: string;
+  mimetype: string;
+  size: number;
+};
+
+type PersistedAttachment = {
+  url: string;
+  fileType: string;
+  fileName: string;
+};
+
+type OutboundMediaService = Pick<
+  import("../media/cloudinary.service.js").CloudinaryMediaService,
+  "uploadFile"
+>;
+
+let outboundMediaServicePromise: Promise<OutboundMediaService> | undefined;
+
+async function outboundMediaService(): Promise<OutboundMediaService> {
+  outboundMediaServicePromise ??= import("../media/cloudinary.service.js")
+    .then(({ CloudinaryMediaService }) => new CloudinaryMediaService());
+  return outboundMediaServicePromise;
+}
+
 async function resolveTelegramPersonalRecipient(client: {
-  getEntity: (channelId: string) => Promise<unknown>;
-  getDialogs: (options: { limit: number }) => Promise<Array<{ id?: unknown; entity?: unknown }>>;
-}, channelId: string): Promise<unknown> {
+  getEntity: (channelId: string) => Promise<EntityLike>;
+  getDialogs: (options: { limit: number }) => Promise<Array<{ id?: unknown; entity?: EntityLike }>>;
+}, channelId: string): Promise<EntityLike> {
   try {
     return await client.getEntity(channelId);
   } catch (error) {
@@ -53,18 +82,19 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
 export function toMessage(row: any) {
   return {
     id: String(row._id), conversationId: String(row.conversationId), platform: row.platform,
-    senderType: row.senderType, senderId: row.senderId, senderName: row.metadata?.senderName, type: row.type, content: row.content,
+    senderType: row.senderType, senderId: row.senderId, ...(row.metadata?.senderName ? { senderName: row.metadata.senderName } : {}), type: row.type, content: row.content,
+    ...(row.attachments?.length ? { attachments: row.attachments.map((attachment: PersistedAttachment) => ({ url: attachment.url, fileName: attachment.fileName, mimeType: attachment.fileType })) } : {}),
     deliveryStatus: row.deliveryStatus, createdAt: new Date(row.createdAt).toISOString()
   };
 }
 
-export async function createOutboundMessage(input: { conversationId: string; platform: string; senderId: string; content: string; externalMessageId?: string; deliveryStatus: "pending" | "sent" | "failed" }) {
-  if (!input.content.trim()) throw new AppError(400, "INVALID_REQUEST", "content is required");
-  return MessageModel.create({ ...input, senderType: "agent", type: "text" });
+export async function createOutboundMessage(input: { conversationId: string; platform: string; senderId: string; content: string; externalMessageId?: string; deliveryStatus: "pending" | "sent" | "failed"; type?: "text" | "image" | "file"; attachments?: PersistedAttachment[] }) {
+  if (!input.content.trim() && !input.attachments?.length) throw new AppError(400, "INVALID_REQUEST", "content or attachment is required");
+  return MessageModel.create({ ...input, senderType: "agent", type: input.type ?? "text" });
 }
 
 // Listener Zalo có thể lưu event tự phản hồi trước outbound flow; duplicate khi đó vẫn chứng minh tin đã được lưu.
-async function persistZaloOutboundMessage(input: { conversationId: string; platform: string; senderId: string; content: string; externalMessageId?: string; deliveryStatus: "pending" | "sent" | "failed" }) {
+async function persistZaloOutboundMessage(input: { conversationId: string; platform: string; senderId: string; content: string; externalMessageId?: string; deliveryStatus: "pending" | "sent" | "failed"; type?: "text" | "image" | "file"; attachments?: PersistedAttachment[] }) {
   try {
     return await createOutboundMessage(input);
   } catch (error) {
@@ -80,7 +110,7 @@ async function persistZaloOutboundMessage(input: { conversationId: string; platf
 
 // Kiểm tra quyền, gửi qua đúng connector và luôn lưu trạng thái truy vết của lần gửi Zalo cá nhân.
 export async function sendOutboundMessage(
-  input: { conversationId: string; content: string },
+  input: { conversationId: string; content: string; attachment?: UploadedOutboundFile },
   auth?: AuthUser
 ) {
   const { conversationId, content } = input;
@@ -105,8 +135,28 @@ export async function sendOutboundMessage(
   if (!canJoinConversation(auth, conversation)) {
     throw new AppError(403, "FORBIDDEN", "You do not have access to this conversation");
   }
+  if (input.attachment && conversation.platform !== "telegram_personal" && conversation.platform !== "zalo_personal") {
+    throw new AppError(400, "UNSUPPORTED_ATTACHMENT_CHANNEL", "Chỉ hỗ trợ gửi file cho Zalo cá nhân và Telegram cá nhân");
+  }
   // Tạm dừng bot sau kiểm tra quyền và trước connector để nhân viên tiếp quản cả khi gửi bị lỗi.
   await pauseBot(conversationId, new Date());
+  const uploadedAttachment = input.attachment
+    ? await (await outboundMediaService()).uploadFile({
+      buffer: input.attachment.buffer,
+      filename: input.attachment.originalname,
+      mimeType: input.attachment.mimetype,
+      userId: auth.id,
+      folder: "nhuu-chat/messages"
+    })
+    : undefined;
+  const persistedAttachments = uploadedAttachment ? [{
+    url: uploadedAttachment.secureUrl,
+    fileType: input.attachment?.mimetype ?? "application/octet-stream",
+    fileName: input.attachment?.originalname ?? "attachment"
+  }] : undefined;
+  const messageType = input.attachment
+    ? (input.attachment.mimetype.startsWith("image/") ? "image" : "file") as "image" | "file"
+    : "text" as const;
   let deliveryStatus: "pending" | "sent" | "failed" = "sent";
   let externalMessageId: string | undefined;
   if (conversation.platform === "telegram_personal") {
@@ -118,7 +168,12 @@ export async function sendOutboundMessage(
       throw new AppError(409, "TELEGRAM_PERSONAL_DISCONNECTED", "Telegram personal session is not active");
     }
     const recipient = await resolveTelegramPersonalRecipient(client, conversation.channelId);
-    const sent = await client.sendMessage(recipient, { message: content });
+    const sent = input.attachment
+      ? await client.sendFile(recipient, {
+        file: new CustomFile(input.attachment.originalname, input.attachment.size, "", input.attachment.buffer),
+        caption: content
+      })
+      : await client.sendMessage(recipient, { message: content });
     externalMessageId = String(sent.id);
   } else if (conversation.platform === "zalo_personal") {
     // Chỉ gọi API Zalo qua session manager để credentials runtime không đi vào outbound flow.
@@ -133,11 +188,23 @@ export async function sendOutboundMessage(
       if (!zaloAccountId) throw new Error("Zalo personal account id is unavailable");
       const conversationType: ZaloConversationType = conversation.conversationType === "group" ? "group" : "private";
       // Truyền loại hội thoại đến adapter để group không bị gửi nhầm qua endpoint direct.
-      const sent = await (client as unknown as ZaloOutboundClient).sendMessage(
-        conversation.channelId,
-        content,
-        conversationType
-      );
+      const sent = input.attachment
+        ? await (client as unknown as ZaloOutboundClient).sendMessage(
+          conversation.channelId,
+          content,
+          conversationType,
+          {
+            buffer: input.attachment.buffer,
+            filename: input.attachment.originalname,
+            mimeType: input.attachment.mimetype,
+            size: input.attachment.size
+          }
+        )
+        : await (client as unknown as ZaloOutboundClient).sendMessage(
+          conversation.channelId,
+          content,
+          conversationType
+        );
       externalMessageId = `zalo_personal:${zaloAccountId}:${sent.id}`;
     } catch (error) {
       await createOutboundMessage({
@@ -145,6 +212,7 @@ export async function sendOutboundMessage(
         platform: conversation.platform,
         senderId: "agent",
         content,
+        ...(persistedAttachments ? { attachments: persistedAttachments, type: messageType } : {}),
         externalMessageId: undefined,
         // AppError xảy ra trước khi gửi; lỗi connector thường không xác định được phía Zalo đã nhận hay chưa.
         deliveryStatus: error instanceof AppError ? "failed" : "pending"
@@ -166,6 +234,7 @@ export async function sendOutboundMessage(
       platform: conversation.platform,
       senderId: "agent",
       content,
+      ...(persistedAttachments ? { attachments: persistedAttachments, type: messageType } : {}),
       externalMessageId,
       deliveryStatus
     })
@@ -174,12 +243,14 @@ export async function sendOutboundMessage(
       platform: conversation.platform,
       senderId: "agent",
       content,
+      ...(persistedAttachments ? { attachments: persistedAttachments, type: messageType } : {}),
       externalMessageId,
       deliveryStatus
     });
   const lastMessageAt = new Date();
+  const lastMessageSnippet = content || input.attachment?.originalname || "Tệp đính kèm";
   await ConversationModel.findByIdAndUpdate(conversationId, {
-    $set: { lastMessageAt, lastMessageSnippet: content }
+    $set: { lastMessageAt, lastMessageSnippet }
   });
 
   return {
@@ -187,7 +258,7 @@ export async function sendOutboundMessage(
     conversation: toConversation({
       ...conversation,
       lastMessageAt,
-      lastMessageSnippet: content
+      lastMessageSnippet
     }),
     recipients: [
       conversation.ownerId ? String(conversation.ownerId) : "",

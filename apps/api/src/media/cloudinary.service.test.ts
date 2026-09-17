@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 type UploadResult = {
   secure_url: string;
   public_id: string;
-  resource_type: "image";
+  resource_type: "image" | "raw";
   bytes: number;
   width: number;
   height: number;
@@ -12,7 +12,7 @@ type UploadResult = {
 
 type MockUploader = {
   upload_stream: (options: unknown, callback: (error: unknown, result?: UploadResult) => void) => Writable;
-  destroy: (publicId: string, options: { resource_type: "image" | "video" }) => Promise<unknown>;
+  destroy: (publicId: string, options: { resource_type: "image" | "video" | "raw" }) => Promise<unknown>;
 };
 
 const validEnvironment = {
@@ -99,6 +99,44 @@ describe("CloudinaryMediaService", () => {
         use_filename: true,
         unique_filename: true
       }),
+      expect.any(Function)
+    );
+  });
+
+  it("uploads a generic outbound file with raw Cloudinary storage", async () => {
+    stubEnvironment();
+    const { CloudinaryMediaService } = await importService();
+    const uploader = createUploader();
+    uploader.upload_stream.mockImplementation((_options, callback) => new Writable({
+      write(_chunk, _encoding, done) { done(); },
+      final(done) {
+        callback(null, {
+          secure_url: "https://res.cloudinary.com/example/raw/upload/bang-gia.pdf",
+          public_id: "nhuu-chat/messages/user-1/bang-gia",
+          resource_type: "raw",
+          bytes: 3
+        });
+        done();
+      }
+    }));
+    const service = new CloudinaryMediaService({ uploader });
+
+    await expect(service.uploadFile({
+      buffer: Buffer.from("pdf"),
+      filename: "bang-gia.pdf",
+      mimeType: "application/pdf",
+      userId: "user-1",
+      folder: "nhuu-chat/messages"
+    })).resolves.toEqual({
+      secureUrl: "https://res.cloudinary.com/example/raw/upload/bang-gia.pdf",
+      publicId: "nhuu-chat/messages/user-1/bang-gia",
+      resourceType: "raw",
+      mimeType: "application/pdf",
+      bytes: 3
+    });
+
+    expect(uploader.upload_stream).toHaveBeenCalledWith(
+      expect.objectContaining({ folder: "nhuu-chat/messages/user-1", resource_type: "raw" }),
       expect.any(Function)
     );
   });

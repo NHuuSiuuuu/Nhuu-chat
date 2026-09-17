@@ -35,7 +35,8 @@ describe("conversation and message HTTP schemas", () => {
     expect(outboundMessageSchema.safeParse({ conversationId: 42, type: "text", content: "Hello" }).success).toBe(false);
   });
 
-  it("requires outbound messages to use the text type", () => {
-    expect(outboundMessageSchema.safeParse({ conversationId: "conversation-1", type: "image", content: "Hello" }).success).toBe(false);
+  it("accepts image and file outbound message types", () => {
+    expect(outboundMessageSchema.safeParse({ conversationId: "conversation-1", type: "image", content: "Hello" }).success).toBe(true);
+    expect(outboundMessageSchema.safeParse({ conversationId: "conversation-1", type: "file", content: "" }).success).toBe(true);
   });
 });

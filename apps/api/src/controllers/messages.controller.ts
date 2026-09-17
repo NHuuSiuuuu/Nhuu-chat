@@ -7,7 +7,7 @@ import { conversationAccessFilter } from "../realtime/access.js";
 import { emitChatEvent, emitInboxEventToRecipients } from "../realtime/socket.js";
 import { conversationIdSchema } from "../schemas/conversation.schemas.js";
 import { messageListQuerySchema, outboundMessageSchema } from "../schemas/message.schemas.js";
-import { listMessages as listMessageRecords, sendOutboundMessage } from "../services/message.service.js";
+import { listMessages as listMessageRecords, sendOutboundMessage, type UploadedOutboundFile } from "../services/message.service.js";
 
 function authenticatedRequest(request: Request) {
   const auth = (request as AuthenticatedRequest).auth;
@@ -47,11 +47,18 @@ export const sendMessage: RequestHandler = async (request, response, next) => {
   try {
     const body = outboundMessageSchema.safeParse(request.body);
     if (!body.success) {
-      throw new AppError(400, "INVALID_REQUEST", "conversationId, type and content are required");
+      throw new AppError(400, "INVALID_REQUEST", "conversationId and type are required");
     }
     const { conversationId, content } = body.data;
     const auth = (request as AuthenticatedRequest).auth;
-    const result = await sendOutboundMessage({ conversationId, content }, auth);
+    const file = request.file;
+    const attachment: UploadedOutboundFile | undefined = file ? {
+      buffer: file.buffer,
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size
+    } : undefined;
+    const result = await sendOutboundMessage({ conversationId, content, ...(attachment ? { attachment } : {}) }, auth);
     emitChatEvent("chat:message_received", conversationId, result.message);
     emitChatEvent("chat:delivery_updated", conversationId, result.message);
     emitInboxEventToRecipients(

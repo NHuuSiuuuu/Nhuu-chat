@@ -7,7 +7,7 @@ MVP quản lý inbox chăm sóc khách hàng Telegram và trợ lý RAG. MongoDB
 - Workspace React/Vite + Node/Express/TypeScript.
 - JWT auth và role admin/agent/customer.
 - Dashboard onboarding và kết nối Telegram cá nhân bằng QR MTProto; session chỉ lưu mã hóa ở backend.
-- Backend Zalo cá nhân thử nghiệm qua QR, nhận media metadata và gửi text; credentials chỉ lưu mã hóa ở backend.
+- Backend Zalo cá nhân thử nghiệm qua QR, nhận media metadata và gửi text, ảnh hoặc file; credentials chỉ lưu mã hóa ở backend.
 - MongoDB/Mongoose domain models, mã hóa provider secret AES-256-GCM.
 - Telegram webhook có secret và idempotency.
 - Chatbot tự động dùng chung orchestration/delivery cho Telegram Bot và Telegram cá nhân, có template, RAG đúng owner, fallback và bàn giao.
@@ -117,7 +117,11 @@ Các route `/api/v1/quick-replies` chỉ cho `admin` và `agent`, đồng thời
 
 `POST` và `PATCH` dùng `multipart/form-data`; `attachment` phải là ảnh (`image/*`) và không vượt quá 5 MiB. Backend nhận file trong memory rồi stream lên Cloudinary vào thư mục riêng `nhuu-chat/quick-replies/<userId>`, lưu metadata `secureUrl`, `publicId`, loại tài nguyên, MIME type, kích thước và kích thước ảnh. Khi thay hoặc xóa mẫu, asset cũ được dọn khỏi Cloudinary; upload mồ côi sau khi MongoDB ghi thất bại cũng được dọn best-effort, còn lỗi dọn media không làm thay đổi kết quả persistence.
 
-Tính năng này mới chỉ lưu ảnh cho mẫu trả lời nhanh. Composer chưa gửi media trong message và chưa hỗ trợ upload video.
+### Gửi ảnh và file từ Inbox
+
+Composer hỗ trợ chọn một ảnh hoặc file, nhập chú thích tùy chọn rồi gửi tới hội thoại Zalo cá nhân hoặc Telegram cá nhân. Backend giới hạn 20 MB mỗi lần gửi, chặn `.exe`, `.js`, `.sh` và MIME nguy hiểm, lưu media qua Cloudinary để message còn tải được sau khi reload, đồng thời gửi buffer trực tiếp qua connector cá nhân. Các kênh khác vẫn chỉ hỗ trợ text.
+
+Ảnh nhận JPG, PNG, GIF và WEBP; file nhận PDF, DOC/DOCX, XLS/XLSX, ZIP và file thông thường. Mỗi request chỉ có một file. Cần cấu hình ba biến Cloudinary ở mục trên để bật lưu media.
 
 Mở hai terminal riêng để chạy API và web:
 

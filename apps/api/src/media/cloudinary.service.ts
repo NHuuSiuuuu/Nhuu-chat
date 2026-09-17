@@ -5,6 +5,7 @@ import type { Writable } from "node:stream";
 import { AppError } from "../common/errors.js";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
 export type MediaUploadResult = QuickReplyAttachmentContract;
 
@@ -15,7 +16,7 @@ type CloudinaryConfiguration = Pick<
 
 type CloudinaryUploadOptions = {
   folder: string;
-  resource_type: "image";
+  resource_type: "image" | "raw";
   filename_override: string;
   use_filename: boolean;
   unique_filename: boolean;
@@ -36,7 +37,7 @@ export interface CloudinaryUploader {
     options: CloudinaryUploadOptions,
     callback: (error: unknown, result?: CloudinaryUploadResponse) => void
   ): Writable;
-  destroy(publicId: string, options: { resource_type: "image" | "video" }): Promise<unknown>;
+  destroy(publicId: string, options: { resource_type: "image" | "video" | "raw" }): Promise<unknown>;
 }
 
 export type CloudinaryMediaServiceOptions = {
@@ -53,8 +54,8 @@ function isConfigured(configuration: CloudinaryConfiguration): boolean {
 }
 
 function toMediaUploadResult(response: CloudinaryUploadResponse, mimeType: string): MediaUploadResult {
-  if (response.resource_type !== "image") {
-    throw new Error("Cloudinary upload did not return an image");
+  if (response.resource_type !== "image" && response.resource_type !== "raw") {
+    throw new Error("Cloudinary upload did not return supported media");
   }
 
   return {
@@ -75,7 +76,7 @@ function createDefaultUploader(): CloudinaryUploader {
       return cloudinary.uploader.upload_stream(options, callback);
     },
     destroy(publicId, options) {
-      return cloudinary.uploader.destroy(publicId, options);
+      return cloudinary.uploader.destroy(publicId, options as { resource_type: "image" | "video" });
     }
   };
 }
@@ -150,7 +151,48 @@ export class CloudinaryMediaService {
     });
   }
 
-  async destroyMedia(publicId: string, resourceType: "image" | "video"): Promise<void> {
+  // Lưu media outbound để message còn tải được sau khi reload, trong khi connector nhận buffer trực tiếp.
+  async uploadFile(input: {
+    buffer: Buffer;
+    filename: string;
+    mimeType: string;
+    userId: string;
+    folder: string;
+  }): Promise<MediaUploadResult> {
+    if (input.buffer.byteLength > MAX_FILE_BYTES) {
+      throw new Error("File exceeds 20 MiB limit");
+    }
+
+    this.configureCloudinary();
+
+    return new Promise<MediaUploadResult>((resolve, reject) => {
+      const stream = this.uploader.upload_stream({
+        folder: `${input.folder}/${input.userId}`,
+        resource_type: input.mimeType.startsWith("image/") ? "image" : "raw",
+        filename_override: input.filename,
+        use_filename: true,
+        unique_filename: true
+      }, (error, response) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        if (!response) {
+          reject(new Error("Cloudinary upload did not return metadata"));
+          return;
+        }
+        try {
+          resolve(toMediaUploadResult(response, input.mimeType));
+        } catch (resultError) {
+          reject(resultError);
+        }
+      });
+      stream.once("error", reject);
+      stream.end(input.buffer);
+    });
+  }
+
+  async destroyMedia(publicId: string, resourceType: "image" | "video" | "raw"): Promise<void> {
     this.configureCloudinary();
     await this.uploader.destroy(publicId, { resource_type: resourceType });
   }

@@ -5,6 +5,14 @@ import * as inboxModule from "./InboxPage.js";
 import { filterConversationsByTag, getVisibleConversationTagCount, UNTAGGED_CONVERSATION_FILTER } from "../components/conversations/ConversationList.js";
 
 describe("Inbox Tailwind migration", () => {
+  it("uses multipart form data for outbound attachments", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("new FormData()");
+    expect(source).toContain('formData.append("attachment", payload.attachment)');
+    expect(source).toContain('payload.attachment.type.startsWith("image/") ? "image" : "file"');
+  });
+
   it("filters conversations by the dashboard account without filtering merge view", () => {
     expect(buildConversationListRequestPath("zalo_personal")).toBe("/api/v1/conversations?platform=zalo_personal");
     expect(buildConversationListRequestPath("telegram_personal")).toBe("/api/v1/conversations?platform=telegram_personal");
@@ -73,6 +81,8 @@ describe("Inbox Tailwind migration", () => {
     expect(chat).toContain('aria-label="Quay lại danh sách hội thoại"');
     expect(chat).toContain('<InboxIcon name="chevron-left"');
     expect(chat).toContain("message.senderName");
+    expect(chat).toContain("message.attachments");
+    expect(chat).toContain("Tải tệp đính kèm");
     expect(chat).toContain("rounded-2xl");
     expect(chat).toContain("group-hover:opacity-100");
     expect(chat).toContain("@All");

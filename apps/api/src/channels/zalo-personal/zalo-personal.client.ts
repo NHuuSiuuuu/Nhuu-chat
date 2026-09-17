@@ -12,6 +12,7 @@ type ZcaQrEvent = {
   actions?: { abort?: () => unknown } | null;
 };
 type ZcaThreadType = 0 | 1;
+type ZaloAttachment = { buffer: Buffer; filename: string; mimeType: string; size: number };
 export type ZaloConversationType = "private" | "group";
 type ZcaConstructor = new (options?: { selfListen?: boolean }) => { loginQR(options: Record<string, never>, callback: (event: ZcaQrEvent) => unknown): Promise<ZcaApi>; login(credentials: ZcaCredentials): Promise<ZcaApi> };
 const ZaloConstructor = (zca as unknown as { Zalo: ZcaConstructor }).Zalo;
@@ -24,7 +25,7 @@ export interface ZaloPersonalApi {
   onClosed(listener: (code?: unknown, reason?: unknown) => void): void;
   startListener(): Promise<void>;
   stopListener(): Promise<void>;
-  sendMessage(threadId: string, content: string, conversationType?: ZaloConversationType): Promise<{ id: string }>;
+  sendMessage(threadId: string, content: string, conversationType?: ZaloConversationType, attachment?: ZaloAttachment): Promise<{ id: string }>;
 }
 
 export interface ZaloPersonalClient {
@@ -43,7 +44,7 @@ interface ZcaApi {
     start(options?: { retryOnClose?: boolean }): void;
     stop(): void;
   };
-  sendMessage(message: string, threadId: string, type: ZcaThreadType): Promise<{ message?: { msgId?: number | string } | null }>;
+  sendMessage(message: string | { msg: string; attachments?: { data: Buffer; filename: string; metadata: { totalSize: number } } | { data: Buffer; filename: string; metadata: { totalSize: number } }[] }, threadId: string, type: ZcaThreadType): Promise<{ message?: { msgId?: number | string } | null }>;
 }
 
 interface ZcaClientOptions {
@@ -115,10 +116,16 @@ class ZaloPersonalClientAdapter implements ZaloPersonalClient {
       stopListener: async () => {
         zcaApi.listener.stop();
       },
-      sendMessage: async (threadId, content, conversationType = "private") => {
+      sendMessage: async (threadId, content, conversationType = "private", attachment) => {
         // zca-js dùng type 1 cho group và type 0 cho direct; không được suy ra chỉ từ thread id.
         const threadType: ZcaThreadType = conversationType === "group" ? 1 : 0;
-        const result = await zcaApi.sendMessage(content, threadId, threadType);
+        const result = await zcaApi.sendMessage(
+          attachment
+            ? { msg: content, attachments: [{ data: attachment.buffer, filename: attachment.filename, metadata: { totalSize: attachment.size } }] }
+            : content,
+          threadId,
+          threadType
+        );
         const id = result.message?.msgId;
         if ((typeof id !== "number" && typeof id !== "string") || String(id).trim() === "") {
           throw new Error("Zalo API returned an invalid message response");

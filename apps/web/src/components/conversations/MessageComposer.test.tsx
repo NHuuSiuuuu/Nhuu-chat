@@ -26,6 +26,15 @@ describe("MessageComposer accessibility", () => {
     expect(source).toContain('title="Gửi tin nhắn"');
   });
 
+  it("provides separate bounded image and file upload controls", () => {
+    const source = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('accept="image/jpeg,image/png,image/gif,image/webp"');
+    expect(source).toContain('.pdf,.doc,.docx,.xls,.xlsx,.zip');
+    expect(source).toContain("20 MB");
+    expect(source).toContain("selectedFile");
+  });
+
   it("renders only the settings-managed conversation tags without an overflow area", () => {
     const source = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
 
@@ -121,7 +130,7 @@ describe("MessageComposer accessibility", () => {
 
     expect(source).toContain("setContent(value)");
     expect(source).toContain("onClick={() => selectSuggestion(suggestion)}");
-    expect(source).toContain("onSend(content.trim())");
+    expect(source).toContain("onSend(selectedFile ?");
   });
 
   it("builds a backend quick-reply draft without sending it", () => {

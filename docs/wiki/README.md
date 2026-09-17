@@ -34,7 +34,8 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
 - Telegram webhook có secret validation và idempotency.
 - Chatbot tự động trên hai connector Telegram dùng chung orchestrator, delivery, automation template và RAG theo owner.
 - Telegram cá nhân hỗ trợ QR login, xác minh 2FA, hủy phiên QR cũ và khôi phục session sau khi API restart.
-- Backend Zalo cá nhân thử nghiệm hỗ trợ QR, lưu credentials mã hóa, nhận direct/group media metadata và gửi text.
+- Backend Zalo cá nhân thử nghiệm hỗ trợ QR, lưu credentials mã hóa, nhận direct/group media metadata và gửi text, ảnh hoặc file.
+- Outbound media từ Inbox hỗ trợ một ảnh/file tối đa 20 MB kèm chú thích cho Zalo cá nhân và Telegram cá nhân; media được lưu qua Cloudinary và các định dạng nguy hiểm bị chặn.
 - Socket.IO room authentication và event realtime cho message/conversation.
 - API đọc/ghi hội thoại, message, customer và knowledge.
 - API CRUD danh mục thẻ hội thoại dùng chung cho admin/agent tại `/api/v1/conversation-tags`.
@@ -73,7 +74,8 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
   - `/` mở mẫu trả lời nhanh;
   - `@` mở gợi ý thành viên;
   - modal `Phím tắt & Mẹo`;
-  - toolbar file, ảnh, ghi chú và mẫu trả lời.
+  - toolbar file, ảnh, ghi chú và mẫu trả lời;
+  - chọn một ảnh/file, xem tên hoặc preview, xóa lựa chọn và gửi kèm chú thích.
 - Sidebar thông tin bên phải khung chat có:
   - tab `Thông tin` và `Tạo đơn`;
   - khu vực `Ghi chú`, hiển thị tác giả, nội dung, ngày/tháng/năm cùng thời gian cập nhật và thao tác sửa/xóa/ghim;
@@ -171,7 +173,9 @@ Các route `/api/v1/quick-replies` yêu cầu role `admin` hoặc `agent`, nhưn
 
 `attachment` chỉ nhận MIME type `image/*`, tối đa 5 MiB (5 × 1024 × 1024 byte). Backend stream ảnh từ memory lên Cloudinary vào `nhuu-chat/quick-replies/<userId>` và lưu URL bảo mật, public ID, resource type, MIME type, số byte cùng metadata kích thước ảnh. Khi thay ảnh, xóa mẫu hoặc dọn upload mồ côi sau khi MongoDB thất bại, asset Cloudinary tương ứng được xóa theo cơ chế best-effort; lỗi cleanup được ghi log và không rollback trạng thái MongoDB đã quyết định. Nếu chưa cấu hình Cloudinary, các thao tác không kèm ảnh vẫn không cần khởi tạo media service, còn request có ảnh sẽ lỗi cấu hình.
 
-Đây chưa phải luồng gửi media: message composer hiện chưa gửi ảnh/media và hệ thống cũng chưa hỗ trợ upload video.
+### Gửi media outbound
+
+`POST /api/v1/messages/send` tiếp nhận JSON cho tin text hoặc `multipart/form-data` với các field `conversationId`, `type`, `content` và một file `attachment`. Backend giới hạn 20 MB, chặn `.exe`, `.js`, `.sh` cùng MIME nguy hiểm, upload media vào Cloudinary rồi gửi buffer qua connector. `telegram_personal` dùng GramJS `sendFile`; `zalo_personal` dùng attachment buffer của `zca-js`. Chỉ hai kênh cá nhân này được phép gửi media; Facebook, Instagram, Telegram Bot và Zalo khác vẫn text-only. Video chưa có nút riêng trong bản đầu.
 
 Khởi động Redis local:
 
@@ -279,7 +283,7 @@ Các test quan trọng của Inbox kiểm tra tự cuộn, unread state, metadat
 - Redis adapter và Mongo integration cần xác minh lại trong CI/Atlas sạch.
 - Thanh toán trong phần Trợ lý AI hiện mới là UI cố định; tích hợp ví và tính phí thực tế chưa triển khai.
 - Nút `+ Tạo đơn`, ghi chú và một số toolbar hiện mới là UI placeholder; chưa có luồng persistence/order backend hoàn chỉnh.
-- Ảnh Cloudinary hiện chỉ dùng cho mẫu trả lời nhanh; gửi media trong message và upload video chưa được triển khai.
+- Gửi media trong message đã hỗ trợ một ảnh/file cho Zalo cá nhân và Telegram cá nhân; upload video chưa có nút riêng trong bản đầu.
 - Meta/Instagram OAuth, Zalo cá nhân production UI/live smoke/reconnect đầy đủ, WebRTC và load test thực tế chưa thuộc MVP hiện tại.
 
 ## 8. Kế hoạch tiếp theo

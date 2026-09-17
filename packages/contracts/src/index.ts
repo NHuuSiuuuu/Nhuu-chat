@@ -91,8 +91,15 @@ export interface ChatMessageContract {
   senderName?: string;
   type: "text" | "image" | "video" | "audio" | "file" | "template";
   content: string;
+  attachments?: MessageAttachmentContract[];
   deliveryStatus: "pending" | "sent" | "delivered" | "failed";
   createdAt: string;
+}
+
+export interface MessageAttachmentContract {
+  url: string;
+  fileName?: string;
+  mimeType: string;
 }
 
 export interface ConversationContract {
@@ -118,7 +125,7 @@ export interface ConversationContract {
 export interface QuickReplyAttachmentContract {
   secureUrl: string;
   publicId: string;
-  resourceType: "image" | "video";
+  resourceType: "image" | "video" | "raw";
   mimeType: string;
   bytes: number;
   width?: number;
