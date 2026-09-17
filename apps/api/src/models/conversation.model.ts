@@ -20,6 +20,12 @@ const conversationSchema = new Schema(
     botPausedUntil: { type: Date, default: null },
     sendLeaseId: { type: String, default: null },
     sendLeaseAt: { type: Date, default: null },
+    pinnedMessages: [{
+      _id: false,
+      messageId: { type: Schema.Types.ObjectId, ref: "Message", required: true },
+      pinnedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+      pinnedAt: { type: Date, required: true }
+    }],
     lastMessageAt: { type: Date, default: Date.now, index: true },
     lastMessageSnippet: { type: String, default: "" }
   },

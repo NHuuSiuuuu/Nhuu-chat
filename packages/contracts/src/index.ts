@@ -97,6 +97,21 @@ export interface ChatMessageContract {
   createdAt: string;
 }
 
+export interface PinnedMessageContract {
+  messageId: string;
+  content: string;
+  type: ChatMessageContract["type"];
+  senderName?: string;
+  createdAt: string;
+  pinnedBy: string;
+  pinnedAt: string;
+}
+
+export interface ConversationPinEventPayload {
+  conversationId: string;
+  pinnedMessages: PinnedMessageContract[];
+}
+
 export interface MessageAttachmentContract {
   url: string;
   fileName?: string;
@@ -145,6 +160,7 @@ export const chatEvents = {
   messageReceived: "chat:message_received",
   conversationUpdated: "chat:conversation_updated",
   deliveryUpdated: "chat:delivery_updated",
+  messagePinUpdated: "chat:message_pin_updated",
   joinRoom: "chat:join_room",
   agentTyping: "chat:agent_typing"
 } as const;
