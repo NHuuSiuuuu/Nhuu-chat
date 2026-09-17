@@ -5,7 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
-- Chưa có thay đổi chưa phát hành.
+- Thay badge Zalo tự dựng bằng SVG logo Zalo thật ở cả biến thể có nền và trong suốt.
 
 ## 2026-09-17
 
