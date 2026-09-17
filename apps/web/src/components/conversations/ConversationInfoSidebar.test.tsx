@@ -49,6 +49,10 @@ describe("ConversationInfoSidebar", () => {
     expect(source).toContain('note.isPinned ? "visible text-yellow-500" : "invisible"');
     expect(source).toContain("group-hover:visible");
     expect(source).toContain("group-focus-within:visible");
+    expect(source).toContain("w-1/5");
+    expect(source).toContain("min-w-[60px]");
+    expect(source).toContain("max-w-[72px]");
+    expect(source).toContain("size-5");
     expect(source).toContain("min-w-0 rounded-lg");
     expect(source).toContain("grid min-w-0 gap-2");
   });
