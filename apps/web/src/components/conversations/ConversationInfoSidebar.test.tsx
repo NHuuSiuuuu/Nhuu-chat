@@ -21,7 +21,8 @@ describe("ConversationInfoSidebar", () => {
 
     expect(source).toContain("min-[1000px]:flex");
     expect(source).toContain("min-[1000px]:hidden");
-    expect(source).toContain("w-[clamp(300px,34vw,500px)]");
+    expect(source).toContain("w-[clamp(300px,34vw,395px)]");
+    expect(source).not.toContain("500px");
     expect(source).not.toContain("w-[300px]");
     expect(source).not.toContain("1180px");
     expect(source).toContain("fixed inset-y-0 right-0");
