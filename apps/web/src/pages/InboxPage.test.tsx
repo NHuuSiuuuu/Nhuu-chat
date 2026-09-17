@@ -128,9 +128,10 @@ describe("Inbox Tailwind migration", () => {
     expect(list).toContain("item.accountAvatarUrl");
     expect(list).toContain("conversationAccountName");
     expect(list).toContain("hasExplicitAccountName");
-    expect(list).toContain("hasExplicitAccountName ?");
     expect(list).toContain("accountName.toLowerCase() !== conversationPlatformLabel(item.platform).toLowerCase()");
-    expect(list).toContain('PlatformIcon provider={platform} size={15} plain');
+    expect(list).toContain('PlatformIcon provider={platform} size={16} plain');
+    expect(list).toContain('className="ml-auto shrink-0" title={conversationPlatformLabel(item.platform)}><PlatformIcon provider={platform} size={16} plain />');
+    expect(list).not.toContain('<span className="leading-4">{conversationPlatformLabel(item.platform)}</span>');
     expect(list).toContain("conversation-account flex min-w-0 items-center gap-1.5 leading-4");
     expect(list).toContain('className="min-w-0 max-w-[120px] truncate leading-4"');
     expect(list).toContain("truncate");

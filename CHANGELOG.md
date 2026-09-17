@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Đưa logo nền tảng về bên phải dòng hội thoại và bỏ chữ tên nền tảng; chỉ giữ tên/avatar tài khoản thật khi có dữ liệu.
 - Thay glyph `Z` tự dựng trong dòng hội thoại bằng wordmark Zalo SVG không nền, giữ kích thước đồng nhất với logo Telegram.
 - Sửa trường hợp API trả tên tài khoản trùng tên nền tảng: không còn dựng avatar chữ `Z` cho Zalo, luôn hiển thị biểu tượng nền tảng thật.
 - Sửa dòng thông tin hội thoại: dùng biểu tượng nền tảng thật thay cho avatar chữ và badge `Zalo` giả khi chưa có tên tài khoản cụ thể.
