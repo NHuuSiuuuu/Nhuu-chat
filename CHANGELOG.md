@@ -11,6 +11,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Sửa lỗi upload ảnh/file bị từ chối `400 INVALID_ATTACHMENT` do giới hạn multipart không đủ cho payload gửi từ trình duyệt.
 - Sửa lỗi Zalo gửi ảnh thành công nhưng API trả `502` vì ID tin media nằm trong `attachment` thay vì `message`.
 - Hiển thị tin nhắn gửi đi ngay trong Inbox, đồng bộ theo `clientMessageId` giữa HTTP/Socket.IO và cho phép gửi lại text/file khi delivery thất bại.
+- Hiển thị trạng thái đang gửi, đã gửi và gửi thất bại trực tiếp trên bubble; ảnh/file có indicator overlay và hỗ trợ retry từ dấu `!`.
 
 ## 2026-09-17
 
