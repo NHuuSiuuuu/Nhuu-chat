@@ -5,6 +5,10 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Chưa có thay đổi chưa phát hành.
+
+## 2026-09-17
+
 - Đồng bộ sidebar thông tin bên phải với sidebar hội thoại bên trái: desktop co giãn trong khoảng `300px`–`395px`, tự thu theo viewport và chuyển sang drawer dưới `1000px`.
 - Thu gọn cụm nút sửa/xóa/ghim của ghi chú để không che tên người ghi; icon ghim đang bật dùng màu vàng và không còn nhãn `Đã ghim`.
 - Hiển thị ngày/tháng/năm cùng dòng với thời gian cập nhật ghi chú và đánh dấu `• Đã sửa` khi nội dung đã được chỉnh sửa.
@@ -16,6 +20,9 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Sửa Trợ lý AI ghi nhớ chatbot đang được chọn theo từng tài khoản; sau khi refresh vẫn mở đúng trợ lý đã chọn, chỉ fallback về mặc định nếu trợ lý đó đã bị xóa.
 - Đưa logo nền tảng về bên phải dòng hội thoại và bỏ chữ tên nền tảng; chỉ giữ tên/avatar tài khoản thật khi có dữ liệu.
 - Thay glyph `Z` tự dựng trong dòng hội thoại bằng wordmark Zalo SVG không nền, giữ kích thước đồng nhất với logo Telegram.
+
+## 2026-09-16
+
 - Sửa trường hợp API trả tên tài khoản trùng tên nền tảng: không còn dựng avatar chữ `Z` cho Zalo, luôn hiển thị biểu tượng nền tảng thật.
 - Sửa dòng thông tin hội thoại: dùng biểu tượng nền tảng thật thay cho avatar chữ và badge `Zalo` giả khi chưa có tên tài khoản cụ thể.
 - Thay chữ thương hiệu ở màn hình loading bằng logo NhuuChat trong suốt, giữ nguyên nền loading sáng.
@@ -35,7 +42,6 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Thêm độ trễ 2 giây trước khi gửi mẫu chào tự động để phản hồi tự nhiên hơn.
 - Sửa layout danh sách mẫu chào trong Trợ lý AI: nội dung dài không còn đẩy mất nút Sửa/Xóa.
 - Chỉ pause chatbot khi nhân viên gửi tin, nhân viên tiếp quản hội thoại hoặc khách chọn “Gặp nhân viên”; fallback và lỗi xử lý bot không còn tự pause.
-
 - Sửa chatbot không tự pause sau fallback thiếu thông tin; khách có thể tiếp tục nhắn và bot vẫn xử lý.
 - Sửa chatbot tự động cho Zalo cá nhân: bổ sung adapter gửi phản hồi qua session Zalo đang hoạt động và giữ đúng loại hội thoại direct/group.
 - Thêm API `POST /api/v1/channels/telegram-personal/logout` để hủy kết nối Telegram cá nhân, dừng client/QR và xóa session nhưng giữ nguyên dữ liệu Inbox.
@@ -54,9 +60,6 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Hiển thị custom toast khi người dùng click vào tab Settings chưa phát triển; tab không chuyển nội dung và thông báo tự đóng sau 5 giây.
 - Sửa lỗi tiến trình API khởi động trùng mở listener Zalo trước khi kiểm tra port HTTP, gây `ZALO_PERSONAL_LISTENER_ERROR`; server chỉ restore listener sau khi bind HTTP thành công.
 - Gắn URL thật cho các mục điều hướng header để truy cập trực tiếp Đơn hàng, Bài viết và Thống kê không bị rơi vào liên kết rỗng.
-- Thêm backend thử nghiệm cho Zalo cá nhân: quản lý phiên QR, lưu credentials đã mã hóa, cô lập dữ liệu theo owner và chuẩn hóa tin nhắn inbound/outbound; đây là API không chính thức nên tài khoản có nguy cơ bị Zalo hạn chế hoặc khóa.
-- Bổ sung migration thủ công, idempotent cho unique index conversation Zalo cá nhân: trong maintenance window, sao lưu database rồi chạy `MONGODB_URI=... pnpm --filter api run migrate:zalo-personal-conversation-index` trước khi rollout connector; helper tạo `{ platform, channelId, ownerId }` trước khi xóa legacy `{ platform, channelId }` và không chạy khi server khởi động.
-- Sửa Zalo cá nhân đọc caption/media từ attachment object thật của `zca-js`, dừng migration an toàn khi owner index có option không tương thích và chuẩn hóa lỗi tạo QR thành `ZALO_QR_CREATE_FAILED`; đồng bộ hướng dẫn vận hành trong README/Wiki.
 - Sửa drawer danh sách hội thoại trên mobile bắt đầu dưới header cố định và chỉ chiếm phần chiều cao còn lại.
 - Sửa lỗi ô nhập tin nhắn bị xóa liên tục khi gõ sau khi thêm cơ chế draft theo từng conversation.
 - Thêm skeleton loading cho danh sách hội thoại khi tải lại Inbox, tránh nháy trạng thái empty state.
@@ -65,6 +68,9 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## 2026-09-15
 
+- Thêm backend thử nghiệm cho Zalo cá nhân: quản lý phiên QR, lưu credentials đã mã hóa, cô lập dữ liệu theo owner và chuẩn hóa tin nhắn inbound/outbound; đây là API không chính thức nên tài khoản có nguy cơ bị Zalo hạn chế hoặc khóa.
+- Bổ sung migration thủ công, idempotent cho unique index conversation Zalo cá nhân; migration yêu cầu sao lưu database và chạy trong maintenance window trước khi rollout connector.
+- Sửa Zalo cá nhân đọc caption/media từ attachment object thật của `zca-js`, dừng migration an toàn khi owner index không tương thích và chuẩn hóa lỗi tạo QR thành `ZALO_QR_CREATE_FAILED`; đồng bộ hướng dẫn vận hành trong README/Wiki.
 - Hoàn thiện gán chatbot cho kênh đã kết nối, giữ lựa chọn chatbot sau khi tải lại và bảo vệ phạm vi owner/kênh.
 - Thêm nút `Xuất bản`/`Gỡ xuất bản` để bật/tắt AI tự động trả lời theo từng chatbot.
 - Cập nhật `lastMessageAt` và `lastMessageSnippet` của conversation sau khi nhân viên gửi tin, để sidebar sắp xếp đúng cả trước và sau khi reload.
