@@ -26,6 +26,14 @@ type PinnedMessageRow = {
 
 const PIN_LIMIT = 10;
 
+function pinLimitError(): AppError {
+  return new AppError(
+    409,
+    "CONVERSATION_PIN_LIMIT_REACHED",
+    "A conversation can have at most 10 pinned messages"
+  );
+}
+
 function getSenderName(metadata: unknown): string | undefined {
   if (!metadata || typeof metadata !== "object" || !("senderName" in metadata)) return undefined;
   return typeof metadata.senderName === "string" ? metadata.senderName : undefined;
@@ -102,21 +110,33 @@ export async function pinConversationMessage(
   if (storedPins.some((pin) => String(pin.messageId) === messageId)) {
     return loadCanonicalPins(conversationId, storedPins);
   }
-  if (storedPins.length >= PIN_LIMIT) {
-    throw new AppError(
-      409,
-      "CONVERSATION_PIN_LIMIT_REACHED",
-      "A conversation can have at most 10 pinned messages"
-    );
-  }
+  if (storedPins.length >= PIN_LIMIT) throw pinLimitError();
 
   const pinnedMessage = { messageId, pinnedBy: auth.id, pinnedAt: new Date() };
   const updated = await ConversationModel.findOneAndUpdate(
-    { _id: conversationId, ...conversationAccessFilter(auth) },
+    {
+      _id: conversationId,
+      ...conversationAccessFilter(auth),
+      "pinnedMessages.messageId": { $ne: messageId },
+      $expr: {
+        $lt: [
+          { $size: { $ifNull: ["$pinnedMessages", []] } },
+          PIN_LIMIT
+        ]
+      }
+    },
     { $push: { pinnedMessages: pinnedMessage } },
     { new: true }
   ).lean() as ConversationWithPins | null;
-  if (!updated) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
+  if (!updated) {
+    const latest = await findAccessibleConversation(conversationId, auth);
+    const latestPins = latest.pinnedMessages ?? [];
+    if (latestPins.some((pin) => String(pin.messageId) === messageId)) {
+      return loadCanonicalPins(conversationId, latestPins);
+    }
+    if (latestPins.length >= PIN_LIMIT) throw pinLimitError();
+    throw new AppError(409, "CONVERSATION_PIN_CONFLICT", "Conversation pin state changed");
+  }
 
   return loadCanonicalPins(conversationId, updated.pinnedMessages ?? []);
 }

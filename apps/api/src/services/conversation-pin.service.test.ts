@@ -101,7 +101,14 @@ describe("conversation pin service", () => {
           { platform: { $ne: "zalo_personal" } },
           { ownerId: "admin-1" },
           { assignedAgentId: "admin-1" }
-        ]
+        ],
+        "pinnedMessages.messageId": { $ne: "message-1" },
+        $expr: {
+          $lt: [
+            { $size: { $ifNull: ["$pinnedMessages", []] } },
+            10
+          ]
+        }
       },
       { $push: { pinnedMessages: {
         messageId: "message-1",
@@ -189,6 +196,78 @@ describe("conversation pin service", () => {
     expect(result.pinnedMessages).toHaveLength(1);
     expect(result.pinnedMessages[0]?.messageId).toBe("message-1");
     expect(conversationModel.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it("returns one canonical pin when a concurrent request already pinned the message", async () => {
+    conversationModel.findOne
+      .mockReturnValueOnce(resolvedQuery(conversation()))
+      .mockReturnValueOnce(resolvedQuery(conversation([olderPin])));
+    messageModel.findOne.mockReturnValue(resolvedQuery(message(
+      "message-1",
+      "Tin được request khác ghim trước",
+      "2026-09-17T07:30:00.000Z"
+    )));
+    conversationModel.findOneAndUpdate.mockReturnValue(resolvedQuery(null));
+    messageModel.find.mockReturnValue(resolvedQuery([
+      message(
+        "message-1",
+        "Tin được request khác ghim trước",
+        "2026-09-17T07:30:00.000Z"
+      )
+    ]));
+
+    const result = await pinConversationMessage("conversation-1", "message-1", adminAuth);
+
+    expect(result.pinnedMessages).toHaveLength(1);
+    expect(result.pinnedMessages[0]?.messageId).toBe("message-1");
+    expect(conversationModel.findOne).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a concurrent eleventh pin when the conditional update no longer matches", async () => {
+    const ninePins = Array.from({ length: 9 }, (_, index) => ({
+      messageId: `message-${index + 1}`,
+      pinnedBy: "admin-1",
+      pinnedAt: new Date(`2026-09-17T0${index}:00:00.000Z`)
+    }));
+    const tenthPin = {
+      messageId: "message-10",
+      pinnedBy: "agent-1",
+      pinnedAt: new Date("2026-09-17T09:00:00.000Z")
+    };
+    conversationModel.findOne
+      .mockReturnValueOnce(resolvedQuery(conversation(ninePins)))
+      .mockReturnValueOnce(resolvedQuery(conversation([...ninePins, tenthPin])));
+    messageModel.findOne.mockReturnValue(resolvedQuery(message(
+      "message-11",
+      "Tin cạnh tranh thứ mười một",
+      "2026-09-17T10:00:00.000Z"
+    )));
+    conversationModel.findOneAndUpdate.mockReturnValue(resolvedQuery(null));
+
+    await expect(
+      pinConversationMessage("conversation-1", "message-11", adminAuth)
+    ).rejects.toMatchObject({ statusCode: 409, code: "CONVERSATION_PIN_LIMIT_REACHED" });
+
+    expect(conversationModel.findOne).toHaveBeenCalledTimes(2);
+    expect(messageModel.find).not.toHaveBeenCalled();
+  });
+
+  it("reports a pin conflict when the failed conditional update is neither duplicate nor full", async () => {
+    conversationModel.findOne
+      .mockReturnValueOnce(resolvedQuery(conversation()))
+      .mockReturnValueOnce(resolvedQuery(conversation()));
+    messageModel.findOne.mockReturnValue(resolvedQuery(message(
+      "message-1",
+      "Tin gặp tranh chấp",
+      "2026-09-17T07:30:00.000Z"
+    )));
+    conversationModel.findOneAndUpdate.mockReturnValue(resolvedQuery(null));
+
+    await expect(
+      pinConversationMessage("conversation-1", "message-1", adminAuth)
+    ).rejects.toMatchObject({ statusCode: 409, code: "CONVERSATION_PIN_CONFLICT" });
+
+    expect(conversationModel.findOne).toHaveBeenCalledTimes(2);
   });
 
   it("rejects access to a conversation outside the agent assignment", async () => {
