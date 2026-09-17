@@ -7,13 +7,16 @@ describe("App navigation", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("onLogoClick={() => navigate(\"dashboard\")}");
-    expect(source).toContain('if (item === "Hội thoại") return navigate("inbox")');
+    expect(source).toContain('if (item === "Hội thoại") return navigate("inbox", inboxPlatform)');
+    expect(source).not.toContain('if (item === "Hội thoại") return navigate("inbox")');
     expect(source).toContain('if (item === "Cài đặt") return navigate("settings")');
     expect(source).toContain('return navigate("development", undefined, item)');
     expect(source).toContain("window.history.pushState");
     expect(source).toContain("window.addEventListener(\"popstate\"");
     expect(source).toContain("/inbox");
     expect(source).toContain("/dashboard");
+    expect(source).toContain('if (nextPage === "inbox") setInboxPlatform(platform)');
+    expect(source).not.toContain('setInboxPlatform(nextPage === "inbox" ? platform : undefined)');
   });
 
   it("routes the settings header item to /settings and renders it below the shared header", () => {

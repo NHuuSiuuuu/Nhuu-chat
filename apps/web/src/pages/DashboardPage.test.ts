@@ -25,8 +25,8 @@ describe("dashboard connected accounts", () => {
   });
 
   it("opens the selected platform or all platforms only for merge view", () => {
-    expect(conversationPathForPlatform("zalo_personal")).toBe("/inbox?platform=zalo_personal");
-    expect(conversationPathForPlatform("telegram_personal")).toBe("/inbox?platform=telegram_personal");
+    expect(conversationPathForPlatform("zalo_personal")).toBe("/inbox");
+    expect(conversationPathForPlatform("telegram_personal")).toBe("/inbox");
     expect(conversationPathForPlatform()).toBe("/inbox");
   });
 

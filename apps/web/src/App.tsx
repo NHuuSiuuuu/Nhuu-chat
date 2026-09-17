@@ -69,13 +69,18 @@ export function App() {
   const [introReady, setIntroReady] = useState(false);
   const navigate = useCallback((nextPage: AppPage, platform?: InboxPlatform, nextDevelopmentSection?: DevelopmentSection) => {
     setPage(nextPage);
-    setInboxPlatform(nextPage === "inbox" ? platform : undefined);
+    if (nextPage === "inbox") setInboxPlatform(platform);
     if (nextDevelopmentSection) setDevelopmentSection(nextDevelopmentSection);
     const nextPath = nextPage === "inbox" ? pathForInbox(platform) : pathForPage(nextPage, nextDevelopmentSection);
     if (`${window.location.pathname}${window.location.search}` !== nextPath) window.history.pushState({}, "", nextPath);
   }, []);
   useEffect(() => {
-    const handlePopState = () => { setPage(pageFromPath(window.location.pathname)); setInboxPlatform(inboxPlatformFromLocation()); setDevelopmentSection(developmentSectionFromPath(window.location.pathname)); };
+    const handlePopState = () => {
+      const nextPage = pageFromPath(window.location.pathname);
+      setPage(nextPage);
+      if (nextPage === "inbox") setInboxPlatform(inboxPlatformFromLocation());
+      setDevelopmentSection(developmentSectionFromPath(window.location.pathname));
+    };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
@@ -105,7 +110,7 @@ export function App() {
     const logout = () => { clearAuth(); setAuth(null); };
     const openProfile = () => navigate("profile");
     const navigateFromHeader = (item: HeaderNavItem) => {
-      if (item === "Hội thoại") return navigate("inbox");
+      if (item === "Hội thoại") return navigate("inbox", inboxPlatform);
       if (item === "Cài đặt") return navigate("settings");
       return navigate("development", undefined, item);
     };

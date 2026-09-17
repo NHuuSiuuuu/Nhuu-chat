@@ -21,7 +21,7 @@ export function buildDashboardAccounts(telegram: TelegramStatus, zalo: ZaloStatu
 }
 
 export function conversationPathForPlatform(platform?: DashboardConnectedAccount["id"]): string {
-  return platform ? `/inbox?platform=${encodeURIComponent(platform)}` : "/inbox";
+  return "/inbox";
 }
 
 export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavigate, user, onLogout, onProfile }: { token: string; refresh?: () => Promise<string | null>; onOpenInbox: (platform?: DashboardConnectedAccount["id"]) => void; onLogoClick?: () => void; onNavigate?: (item: "Hội thoại" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void; user?: DashboardAccount | null; onLogout?: () => void; onProfile?: () => void }) {
