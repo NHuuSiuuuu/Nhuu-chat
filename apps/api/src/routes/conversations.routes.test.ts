@@ -3,9 +3,16 @@ import express from "express";
 import request from "supertest";
 
 const routeMocks = vi.hoisted(() => ({
-  requireRole: vi.fn((_adminRole: string, _agentRole: string) => (_request: unknown, _response: unknown, next: () => void) => next()),
+  requireRole: vi.fn((...roles: string[]) => {
+    const middleware = (_request: unknown, _response: unknown, next: () => void) => next();
+    Object.assign(middleware, { roles });
+    return middleware;
+  }),
   getConversationReplySuggestions: vi.fn((_request: unknown, response: { sendStatus: (status: number) => unknown }) => response.sendStatus(204)),
-  updateBotEnabled: vi.fn()
+  updateBotEnabled: vi.fn(),
+  listConversationPins: vi.fn(),
+  pinConversationMessage: vi.fn(),
+  unpinConversationMessage: vi.fn()
 }));
 
 vi.mock("../auth/auth.middleware.js", () => ({ requireRole: routeMocks.requireRole }));
@@ -24,10 +31,47 @@ vi.mock("../controllers/conversations.controller.js", () => ({
   updateConversationNote: vi.fn()
 }));
 vi.mock("../controllers/messages.controller.js", () => ({ listMessages: vi.fn() }));
+vi.mock("../controllers/conversation-pins.controller.js", () => ({
+  listConversationPins: routeMocks.listConversationPins,
+  pinConversationMessage: routeMocks.pinConversationMessage,
+  unpinConversationMessage: routeMocks.unpinConversationMessage
+}));
 
 import { conversationRouter } from "./conversations.routes.js";
 
-describe("conversation suggestions route", () => {
+describe("conversation routes", () => {
+  it("registers GET, POST, and DELETE pin routes for admins and agents", () => {
+    const pinRoutes = conversationRouter.stack.filter((layer) =>
+      typeof layer.route?.path === "string" && layer.route.path.includes("/pins")
+    );
+
+    expect(pinRoutes.map((layer) => ({
+      method: Object.keys((layer.route as unknown as { methods?: Record<string, boolean> })?.methods ?? {})[0],
+      path: layer.route?.path,
+      roles: (layer.route?.stack[0]?.handle as { roles?: string[] } | undefined)?.roles,
+      handler: layer.route?.stack.at(-1)?.handle
+    }))).toEqual([
+      {
+        method: "get",
+        path: "/:conversationId/pins",
+        roles: ["admin", "agent"],
+        handler: routeMocks.listConversationPins
+      },
+      {
+        method: "post",
+        path: "/:conversationId/pins",
+        roles: ["admin", "agent"],
+        handler: routeMocks.pinConversationMessage
+      },
+      {
+        method: "delete",
+        path: "/:conversationId/pins/:messageId",
+        roles: ["admin", "agent"],
+        handler: routeMocks.unpinConversationMessage
+      }
+    ]);
+  });
+
   it("registers the note routes for admins and agents", () => {
     expect(conversationRouter.stack.some((layer) => layer.route?.path === "/:conversationId/notes")).toBe(true);
     expect(conversationRouter.stack.some((layer) => layer.route?.path === "/:conversationId/notes/:noteId/pin")).toBe(true);
