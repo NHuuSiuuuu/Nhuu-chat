@@ -327,6 +327,37 @@ describe("Inbox Tailwind migration", () => {
     expect(source).toContain("socket.on(\"connect\", joinActiveRoom)");
   });
 
+  it("loads and mutates the active conversation pins through canonical API responses", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("createPinnedMessagesRequestGuard");
+    expect(source).toContain("resetPinnedMessages(current)");
+    expect(source).toContain("/api/v1/conversations/${activeId}/pins");
+    expect(source).toContain('method: "POST"');
+    expect(source).toContain('JSON.stringify({ messageId })');
+    expect(source).toContain('method: "DELETE"');
+    expect(source).toContain("encodeURIComponent(messageId)");
+    expect(source).toContain("if (isCurrentRequest()) setPinnedMessages");
+  });
+
+  it("replaces pins from the active realtime room and cleans up the socket listener", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("chatEvents.messagePinUpdated");
+    expect(source).toContain("ConversationPinEventPayload");
+    expect(source).toContain("applyPinnedMessagesEvent");
+    expect(source).toContain("socket.off(chatEvents.messagePinUpdated");
+  });
+
+  it("passes pin state, lookup and mutation callbacks to ChatWindow without rendering pin UI here", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("pinnedMessages");
+    expect(source).toContain("isPinned");
+    expect(source).toContain("onPinMessage");
+    expect(source).toContain("onUnpinMessage");
+  });
+
   it("loads quick replies exactly once and applies the current result", async () => {
     expect(typeof inboxModule.createQuickRepliesRequestGuard).toBe("function");
     expect(typeof inboxModule.loadInboxQuickReplies).toBe("function");
