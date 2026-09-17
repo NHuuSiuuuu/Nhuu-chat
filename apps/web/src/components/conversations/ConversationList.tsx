@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ConversationContract } from "@nhuu-chat/contracts";
+import type { ConversationContract, ConversationTagContract } from "@nhuu-chat/contracts";
 import { conversationAccountName, conversationDisplayName, formatConversationTime, conversationPlatformLabel } from "../../state/inbox-ui.js";
 import { InboxIcon } from "./InboxIcon.js";
 import { ConversationAvatar } from "./ConversationAvatar.js";
@@ -11,10 +11,19 @@ interface ConversationListProps {
   activeId: string | null;
   onSelect: (id: string) => void;
   isLoading?: boolean;
+  availableTags?: ConversationTagContract[];
   [key: string]: unknown;
   collapsed?: boolean;
   onResizeStart?: (event: React.PointerEvent<HTMLDivElement>) => void;
 }
+export const UNTAGGED_CONVERSATION_FILTER = "__untagged__";
+
+export function filterConversationsByTag(items: ConversationContract[], tagFilter: string | null): ConversationContract[] {
+  if (!tagFilter) return items;
+  if (tagFilter === UNTAGGED_CONVERSATION_FILTER) return items.filter((item) => !item.tags?.length);
+  return items.filter((item) => item.tags?.some((tag) => tag.id === tagFilter));
+}
+
 function platformIconProvider(platform: ConversationContract["platform"]) {
   return platform === "telegram_personal" ? "telegram" : platform === "zalo_personal" ? "zalo" : platform;
 }
@@ -37,14 +46,23 @@ export function getVisibleConversationTagCount(width: number, tagsOrCount: numbe
   return Math.max(1, visibleCount);
 }
 
-export function ConversationList({ items, activeId, onSelect, isLoading = false, collapsed = false, onResizeStart }: ConversationListProps) {
+export function ConversationList({ items, activeId, onSelect, isLoading = false, availableTags = [], collapsed = false, onResizeStart }: ConversationListProps) {
   const [search, setSearch] = useState("");
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const sidebarRef = useRef<HTMLElement>(null);
   const filtered = useMemo(
-    () => items.filter((item) => `${item.channelId} ${item.lastMessageSnippet} ${item.customerName ?? ""} ${item.conversationName ?? ""} ${conversationPlatformLabel(item.platform)}`.toLowerCase().includes(search.toLowerCase())),
-    [items, search]
+    () => filterConversationsByTag(items.filter((item) => `${item.channelId} ${item.lastMessageSnippet} ${item.customerName ?? ""} ${item.conversationName ?? ""} ${conversationPlatformLabel(item.platform)}`.toLowerCase().includes(search.toLowerCase())), tagFilter),
+    [items, search, tagFilter]
   );
+  const selectedTag = availableTags.find((tag) => tag.id === tagFilter);
+  const filterLabel = selectedTag?.name ?? (tagFilter === UNTAGGED_CONVERSATION_FILTER ? "Không gắn thẻ" : "Tất cả");
+
+  function selectTagFilter(nextFilter: string | null) {
+    setTagFilter(nextFilter);
+    setIsFilterOpen(false);
+  }
 
   useEffect(() => {
     const sidebar = sidebarRef.current;
@@ -59,7 +77,7 @@ export function ConversationList({ items, activeId, onSelect, isLoading = false,
 
   return <aside ref={sidebarRef} className={`relative rounded-tl-lg conversation-sidebar flex h-full min-w-0 flex-col overflow-hidden border-r border-gray-200 bg-white transition-[width] duration-200 ${collapsed ? "w-[72px]" : "w-full"}`} aria-label="Danh sách hội thoại" aria-busy={isLoading}>
     <div className={`${collapsed ? "flex min-h-[66px] items-center justify-center p-3" : "conversation-toolbar grid grid-cols-[minmax(0,1fr)_82px_40px] gap-2 p-3 max-[680px]:grid-cols-[minmax(0,1fr)_40px]"}`}>
-      {collapsed ? <span className="text-gray-400" title="Kéo để thay đổi kích thước danh sách hội thoại"><InboxIcon name="list" /></span> : <><label className="conversation-search flex h-10 min-w-0 items-center gap-2 rounded-lg border border-gray-200 px-2.5 text-gray-400 transition-shadow focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-600/10"><InboxIcon name="search" size={17} /><input className="w-full min-w-0 border-0 bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm tên, sđt..." aria-label="Tìm hội thoại" /></label><button className="conversation-filter flex h-10 items-center justify-around rounded-lg border border-gray-200 bg-white text-[13px] text-gray-600 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 max-[680px]:hidden" type="button"><span>Tất cả</span><span aria-hidden="true">⌄</span></button><button className="conversation-add grid h-10 place-items-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Thêm hội thoại"><InboxIcon name="plus" /></button></>}
+      {collapsed ? <span className="text-gray-400" title="Kéo để thay đổi kích thước danh sách hội thoại"><InboxIcon name="list" /></span> : <><label className="conversation-search flex h-10 min-w-0 items-center gap-2 rounded-lg border border-gray-200 px-2.5 text-gray-400 transition-shadow focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-600/10"><InboxIcon name="search" size={17} /><input className="w-full min-w-0 border-0 bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm tên, sđt..." aria-label="Tìm hội thoại" /></label><div className="relative max-[680px]:hidden"><button className="conversation-filter flex h-10 w-full items-center justify-around rounded-lg border border-gray-200 bg-white text-[13px] text-gray-600 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-haspopup="menu" aria-expanded={isFilterOpen} onClick={() => setIsFilterOpen((current) => !current)}><span className="truncate">{filterLabel}</span><span aria-hidden="true">⌄</span></button>{isFilterOpen && <div className="absolute right-0 top-full z-30 mt-1 grid min-w-full gap-0.5 rounded-lg border border-gray-200 bg-white p-1 shadow-lg" role="menu" aria-label="Lọc theo thẻ"><button className={`rounded-md px-3 py-2 text-left text-xs hover:bg-slate-50 ${tagFilter === null ? "font-bold text-blue-600" : "text-gray-700"}`} type="button" role="menuitem" onClick={() => selectTagFilter(null)}>Tất cả</button>{availableTags.map((tag) => <button className={`rounded-md px-3 py-2 text-left text-xs hover:bg-slate-50 ${tagFilter === tag.id ? "font-bold text-blue-600" : "text-gray-700"}`} type="button" role="menuitem" key={tag.id} onClick={() => selectTagFilter(tag.id)}>{tag.name}</button>)}<button className={`rounded-md px-3 py-2 text-left text-xs hover:bg-slate-50 ${tagFilter === UNTAGGED_CONVERSATION_FILTER ? "font-bold text-blue-600" : "text-gray-700"}`} type="button" role="menuitem" onClick={() => selectTagFilter(UNTAGGED_CONVERSATION_FILTER)}>Không gắn thẻ</button></div>}</div><button className="conversation-add grid h-10 place-items-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Thêm hội thoại"><InboxIcon name="plus" /></button></>}
     </div>
     {!collapsed && <div className="conversation-list-header flex min-h-11 items-center justify-between border-y border-gray-200 px-3 text-sm font-semibold text-gray-600"><span>Tất cả hội thoại <b className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-500">{items.length}</b></span><button className="grid place-items-center text-gray-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Tùy chọn danh sách"><InboxIcon name="list" /></button></div>}
     <div className={`conversation-items min-h-0 flex-1 overflow-y-auto scrollbar-none ${collapsed ? "py-2" : ""}`}>

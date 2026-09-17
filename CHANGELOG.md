@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm bộ lọc hội thoại theo các tag đã tạo và lựa chọn `Không gắn thẻ` trong sidebar Inbox.
 - Sửa điều hướng Hội thoại giữ nguyên kênh đang chọn khi quay lại từ Dashboard; URL luôn dùng `/inbox`, chỉ `Gộp trang` mới mở toàn bộ kênh.
 - Sửa Trợ lý AI ghi nhớ chatbot đang được chọn theo từng tài khoản; sau khi refresh vẫn mở đúng trợ lý đã chọn, chỉ fallback về mặc định nếu trợ lý đó đã bị xóa.
 - Đưa logo nền tảng về bên phải dòng hội thoại và bỏ chữ tên nền tảng; chỉ giữ tên/avatar tài khoản thật khi có dữ liệu.

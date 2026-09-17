@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { buildConversationListRequestPath, createAiSuggestionsRequestGuard, getConversationDraft, setConversationDraft, shouldAutoRefreshAiSuggestions } from "./InboxPage.js";
 import * as inboxModule from "./InboxPage.js";
-import { getVisibleConversationTagCount } from "../components/conversations/ConversationList.js";
+import { filterConversationsByTag, getVisibleConversationTagCount, UNTAGGED_CONVERSATION_FILTER } from "../components/conversations/ConversationList.js";
 
 describe("Inbox Tailwind migration", () => {
   it("filters conversations by the dashboard account without filtering merge view", () => {
@@ -24,6 +24,16 @@ describe("Inbox Tailwind migration", () => {
     expect(getVisibleConversationTagCount(320, 6)).toBe(2);
     expect(getVisibleConversationTagCount(530, 6)).toBe(4);
     expect(getVisibleConversationTagCount(530, 2)).toBe(2);
+  });
+
+  it("filters by a created tag or conversations without tags", () => {
+    const tagged = { id: "conversation-tagged", tags: [{ id: "tag-vip", name: "VIP", color: "#111111" }] };
+    const otherTagged = { id: "conversation-other", tags: [{ id: "tag-new", name: "Mới", color: "#222222" }] };
+    const untagged = { id: "conversation-untagged", tags: [] };
+
+    expect(filterConversationsByTag([tagged, otherTagged, untagged] as never[], "tag-vip").map((item) => item.id)).toEqual(["conversation-tagged"]);
+    expect(filterConversationsByTag([tagged, otherTagged, untagged] as never[], UNTAGGED_CONVERSATION_FILTER).map((item) => item.id)).toEqual(["conversation-untagged"]);
+    expect(filterConversationsByTag([tagged, otherTagged, untagged] as never[], null).map((item) => item.id)).toEqual(["conversation-tagged", "conversation-other", "conversation-untagged"]);
   });
 
   it("uses the shared shell without handwritten Inbox CSS", () => {
@@ -138,7 +148,8 @@ describe("Inbox Tailwind migration", () => {
     expect(list).toContain("min-h-[88px]");
     expect(list).not.toContain('name="send"');
     expect(list).not.toContain('name="tag"');
-    expect(list).not.toContain("availableTags");
+    expect(list).toContain("availableTags");
+    expect(list).toContain("Không gắn thẻ");
     expect(list).not.toContain("onTagsChange");
     expect(list).not.toContain("openTagId");
     expect(list).not.toContain("Gắn thẻ cho ${name}");
