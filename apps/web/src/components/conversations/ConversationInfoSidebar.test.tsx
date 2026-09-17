@@ -26,4 +26,19 @@ describe("ConversationInfoSidebar", () => {
     expect(source).toContain("overflow-y-auto");
     expect(source).toContain('aria-label="Đóng thông tin hội thoại"');
   });
+
+  it("renders the conversation note workflow with author metadata and actions", () => {
+    const source = readFileSync(new URL("./ConversationInfoSidebar.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("ConversationNoteContract");
+    expect(source).toContain("notes");
+    expect(source).toContain("onCreate");
+    expect(source).toContain("onEdit");
+    expect(source).toContain("onDelete");
+    expect(source).toContain("onTogglePin");
+    expect(source).toContain('aria-label="Sửa ghi chú"');
+    expect(source).toContain('aria-label="Xóa ghi chú"');
+    expect(source).toContain('aria-label="Ghim ghi chú"');
+    expect(source).toContain("Đã ghim");
+  });
 });

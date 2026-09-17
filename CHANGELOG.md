@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm ghi chú nội bộ theo từng hội thoại: agent/admin có thể tạo bằng Enter, xem người ghi và nội dung, sửa, xóa hoặc ghim ghi chú trong sidebar `Thông tin`.
 - Sửa giữ nguyên kênh Inbox sau khi tải lại trang bằng cách lưu lựa chọn kênh trong phiên làm việc; `Gộp trang` vẫn xóa bộ lọc kênh.
 - Thêm bộ lọc hội thoại theo các tag đã tạo và lựa chọn `Không gắn thẻ` trong sidebar Inbox.
 - Sửa điều hướng Hội thoại giữ nguyên kênh đang chọn khi quay lại từ Dashboard; URL luôn dùng `/inbox`, chỉ `Gộp trang` mới mở toàn bộ kênh.

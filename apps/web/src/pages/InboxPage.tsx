@@ -108,6 +108,7 @@ export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNav
   const quickRepliesGuardRef = React.useRef(createQuickRepliesRequestGuard());
   aiSuggestionsGuardRef.current.setActiveConversation(activeId);
   const active = conversations.find((item) => item.id === activeId) ?? null;
+  (globalThis as typeof globalThis & { __nhuuChatConversationContext?: { id: string | null; token: string; refresh?: () => Promise<string | null> } }).__nhuuChatConversationContext = { id: activeId, token, refresh };
   const aiSuggestionsEnabled = aiSettings.enabled && aiSettings.suggestionsEnabled;
   const [readRequestKey, setReadRequestKey] = useState(0);
   // Uses generation and revision guards so delayed read responses cannot undo newer realtime activity.

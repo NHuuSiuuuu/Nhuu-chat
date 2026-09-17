@@ -39,6 +39,7 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
 - API đọc/ghi hội thoại, message, customer và knowledge.
 - API CRUD danh mục thẻ hội thoại dùng chung cho admin/agent tại `/api/v1/conversation-tags`.
 - API CRUD mẫu trả lời nhanh dùng chung cho admin/agent tại `/api/v1/quick-replies`, hỗ trợ một ảnh đính kèm lưu trên Cloudinary.
+- API ghi chú nội bộ theo hội thoại tại `/api/v1/conversations/:conversationId/notes`, hỗ trợ tạo, sửa, xóa và ghim cho admin/agent có quyền truy cập.
 - Chunking và parser cho TXT, Markdown, PDF, DOCX; RAG adapter độc lập với provider.
 - Bot Pause 30 phút; queue hỗ trợ retry `0s`, `1s`, `4s`, nhưng chatbot tự động chỉ gửi một lần do connector chưa hỗ trợ khóa idempotency.
 - Bot Pause 30 phút và retry outbound theo các mốc `0s`, `1s`, `4s`.
@@ -75,7 +76,7 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
   - toolbar file, ảnh, ghi chú và mẫu trả lời.
 - Sidebar thông tin bên phải khung chat có:
   - tab `Thông tin` và `Tạo đơn`;
-  - khu vực `Ghi chú`;
+  - khu vực `Ghi chú`, hiển thị tác giả, nội dung, thời gian và thao tác sửa/xóa/ghim;
   - khu vực `Đơn hàng`;
   - responsive drawer trên màn hình hẹp.
 - Khi chiều rộng màn hình dưới breakpoint Inbox:

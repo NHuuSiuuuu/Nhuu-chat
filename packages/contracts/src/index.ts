@@ -70,6 +70,18 @@ export interface ConversationTagContract {
   color: string;
 }
 
+export interface ConversationNoteContract {
+  id: string;
+  conversationId: string;
+  authorId: string;
+  authorName: string;
+  authorAvatarUrl?: string;
+  content: string;
+  isPinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ChatMessageContract {
   id: string;
   conversationId: string;

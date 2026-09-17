@@ -16,13 +16,24 @@ vi.mock("../controllers/conversations.controller.js", () => ({
   updateBotEnabled: routeMocks.updateBotEnabled,
   updateStatus: vi.fn(),
   updateConversationTags: vi.fn(),
-  getConversationReplySuggestions: routeMocks.getConversationReplySuggestions
+  getConversationReplySuggestions: routeMocks.getConversationReplySuggestions,
+  createConversationNote: vi.fn(),
+  deleteConversationNote: vi.fn(),
+  listConversationNotes: vi.fn(),
+  toggleConversationNotePin: vi.fn(),
+  updateConversationNote: vi.fn()
 }));
 vi.mock("../controllers/messages.controller.js", () => ({ listMessages: vi.fn() }));
 
 import { conversationRouter } from "./conversations.routes.js";
 
 describe("conversation suggestions route", () => {
+  it("registers the note routes for admins and agents", () => {
+    expect(conversationRouter.stack.some((layer) => layer.route?.path === "/:conversationId/notes")).toBe(true);
+    expect(conversationRouter.stack.some((layer) => layer.route?.path === "/:conversationId/notes/:noteId/pin")).toBe(true);
+    expect(routeMocks.requireRole).toHaveBeenCalledWith("admin", "agent");
+  });
+
   it("registers the bot switch endpoint for admins and agents", () => {
     const route = conversationRouter.stack.find((layer) => layer.route?.path === "/:id/bot");
 

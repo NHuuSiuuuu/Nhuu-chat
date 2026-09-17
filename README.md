@@ -17,6 +17,7 @@ MVP quản lý inbox chăm sóc khách hàng Telegram và trợ lý RAG. MongoDB
 - Knowledge chunking, TXT/Markdown/PDF/DOCX parser, provider-independent RAG.
 - Bot Pause 30 phút; queue có chính sách retry 0s/1s/4s, riêng chatbot tự động chỉ gửi một lần để tránh trả lời trùng.
 - Inbox React tối thiểu.
+- Ghi chú nội bộ theo từng hội thoại; agent/admin có thể tạo, sửa, xóa và ghim ghi chú trong sidebar Thông tin.
 - Security headers, request ID và rate limit auth.
 
 ## Chạy local

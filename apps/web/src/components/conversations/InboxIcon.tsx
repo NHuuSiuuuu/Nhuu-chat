@@ -1,6 +1,6 @@
 import * as React from "react";
 
-type IconName = "inbox" | "chat" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "chevron-left" | "chevron-down" | "tag" | "edit" | "trash" | "monitor" | "phone" | "cloud" | "wrench" | "clock" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more" | "check" | "download" | "upload" | "file" | "camera" | "robot";
+type IconName = "inbox" | "chat" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "chevron-left" | "chevron-down" | "tag" | "edit" | "trash" | "pin" | "monitor" | "phone" | "cloud" | "wrench" | "clock" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more" | "check" | "download" | "upload" | "file" | "camera" | "robot";
 
 export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -18,6 +18,7 @@ export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }
     tag: <path d="m20.6 13.4-7.2 7.2a2 2 0 0 1-2.8 0L3.4 13.4a2 2 0 0 1 0-2.8l7.2-7.2A2 2 0 0 1 12 2.8h5.8a2 2 0 0 1 2 2V10a2 2 0 0 1-.6 1.4ZM16 7h.01" />,
     edit: <><path d="m4 16.5-.8 4.3 4.3-.8L19 8.5 15.5 5 4 16.5Z" /><path d="m13.5 7 3.5 3.5" /></>,
     trash: <><path d="M5 7h14M10 11v6M14 11v6" /><path d="M9 7V4h6v3m-9 0 1 13h10l1-13" /></>,
+    pin: <path d="m15 4 5 5-3 1-3.5 3.5.5 3.5-2 2-2-4-4-2 2-2 3.5.5L15 8l-1-3Z" />,
     monitor: <><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></>,
     phone: <path d="M6.5 4.5 9 4l2 4-2 1.5a14 14 0 0 0 5.5 5.5L16 13l4 2-.5 2.5c-.2 1.2-1.3 2-2.5 1.8A15.8 15.8 0 0 1 4.7 7c-.2-1.2.6-2.3 1.8-2.5Z" />,
     cloud: <path d="M7.5 19h10a4 4 0 0 0 .6-8A6.5 6.5 0 0 0 6 9.5 4.5 4.5 0 0 0 7.5 19Z" />,
