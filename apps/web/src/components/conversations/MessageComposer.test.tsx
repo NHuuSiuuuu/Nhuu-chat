@@ -19,6 +19,11 @@ describe("MessageComposer accessibility", () => {
     expect(source).toContain('aria-label="Làm mới gợi ý AI"');
     expect(source).toContain('aria-label="Đính kèm hình ảnh"');
     expect(source).toContain('aria-label="Mở mẫu trả lời"');
+    expect(source).toContain('title="Phím tắt & hướng dẫn"');
+    expect(source).toContain('title="Video và tài liệu"');
+    expect(source).toContain('title="Hình ảnh"');
+    expect(source).toContain('title="Mẫu trả lời nhanh"');
+    expect(source).toContain('title="Gửi tin nhắn"');
   });
 
   it("renders only the settings-managed conversation tags without an overflow area", () => {

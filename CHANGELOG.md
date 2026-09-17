@@ -6,6 +6,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 ## [Unreleased]
 
 - Thay badge Zalo tự dựng bằng SVG logo Zalo thật ở cả biến thể có nền và trong suốt.
+- Thêm tooltip khi hover cho các nút hướng dẫn, đính kèm, mẫu trả lời nhanh và gửi tin nhắn trong ô soạn tin.
 
 ## 2026-09-17
 
