@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useEffect, useState } from "react";
-import { chatEvents, type AiSettingsContract, type AiSuggestionsResponse, type ChatMessageContract, type ConversationContract, type ConversationPinEventPayload, type ConversationTagContract, type PinnedMessageContract, type QuickReplyContract } from "@nhuu-chat/contracts";
+import { chatEvents, type AiSettingsContract, type AiSuggestionsResponse, type ChatMessageContract, type ConversationContract, type ConversationPinEventPayload, type ConversationTagContract, type QuickReplyContract } from "@nhuu-chat/contracts";
 import { apiRequest } from "../lib/api.js";
 import { createChatSocket } from "../lib/socket.js";
 import { resolveApiBaseUrl } from "../lib/api-url.js";
@@ -8,7 +8,7 @@ import { ConversationList } from "../components/conversations/ConversationList.j
 import { ChatWindow } from "../components/conversations/ChatWindow.js";
 import type { ComposerSendPayload } from "../components/conversations/MessageComposer.js";
 import { appendUniqueMessage, mergeMessages, upsertConversation } from "../state/inbox-realtime.js";
-import { applyPinnedMessagesEvent, createPinnedMessagesRequestGuard, findPinnedMessage, replacePinnedMessages, resetPinnedMessages } from "../state/inbox-pins.js";
+import { applyPinnedMessagesEvent, createPinnedMessagesRequestGuard, findPinnedMessage, getPinnedMessagesForConversation, replacePinnedMessages, type ConversationPinnedMessagesState } from "../state/inbox-pins.js";
 import { clampConversationListWidth, CONVERSATION_LIST_MAX_WIDTH, CONVERSATION_LIST_MIN_WIDTH, markConversationRead } from "../state/inbox-ui.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
 import { DashboardTopbar, type DashboardAccount } from "../components/dashboard/DashboardTopbar.js";
@@ -118,7 +118,7 @@ export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNav
   const [conversations, setConversations] = useState<ConversationContract[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageContract[]>([]);
-  const [pinnedMessages, setPinnedMessages] = useState<PinnedMessageContract[]>([]);
+  const [pinnedMessagesState, setPinnedMessagesState] = useState<ConversationPinnedMessagesState>({ conversationId: null, pinnedMessages: [] });
   const [pinnedMessagesError, setPinnedMessagesError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [aiSuggestions, setAiSuggestions] = useState<AiSuggestionsResponse["suggestions"] | null>(null);
@@ -147,6 +147,7 @@ export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNav
   const optimisticMessageIdsRef = React.useRef(new Map<string, string>());
   aiSuggestionsGuardRef.current.setActiveConversation(activeId);
   pinnedMessagesGuardRef.current.setActiveConversation(activeId);
+  const pinnedMessages = getPinnedMessagesForConversation(pinnedMessagesState, activeId);
   const active = conversations.find((item) => item.id === activeId) ?? null;
   (globalThis as typeof globalThis & { __nhuuChatConversationContext?: { id: string | null; token: string; refresh?: () => Promise<string | null> } }).__nhuuChatConversationContext = { id: activeId, token, refresh };
   const aiSuggestionsEnabled = aiSettings.enabled && aiSettings.suggestionsEnabled;
@@ -282,18 +283,18 @@ export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNav
     return () => { cancelled = true; };
   }, [activeId, token, refresh]);
   useEffect(() => {
-    setPinnedMessages((current) => resetPinnedMessages(current));
+    setPinnedMessagesState({ conversationId: activeId, pinnedMessages: [] });
     setPinnedMessagesError(null);
     if (!activeId) return;
-    const isCurrentRequest = pinnedMessagesGuardRef.current.start(activeId);
+    const isCurrentRequest = pinnedMessagesGuardRef.current.startLoad(activeId);
     void apiRequest<ConversationPinEventPayload>(API_URL, `/api/v1/conversations/${activeId}/pins`, token, {}, refresh)
       .then((result) => {
-        if (isCurrentRequest()) setPinnedMessages((current) => replacePinnedMessages(current, result.pinnedMessages));
+        if (isCurrentRequest()) setPinnedMessagesState({ conversationId: activeId, pinnedMessages: replacePinnedMessages([], result.pinnedMessages) });
       })
       .catch(() => {
         if (isCurrentRequest()) setPinnedMessagesError("Không thể tải danh sách tin nhắn ghim.");
       });
-    return () => { pinnedMessagesGuardRef.current.invalidate(); };
+    return () => { pinnedMessagesGuardRef.current.invalidateLoad(); };
   }, [activeId, token, refresh]);
   useEffect(() => {
     setIsCustomerTyping(false);
@@ -309,8 +310,11 @@ export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNav
     const joinActiveRoom = () => { if (activeId) socket.emit(chatEvents.joinRoom, activeId); };
     const handleMessagePinUpdated = (payload: ConversationPinEventPayload) => {
       if (payload.conversationId !== activeId) return;
-      pinnedMessagesGuardRef.current.invalidate();
-      setPinnedMessages((current) => applyPinnedMessagesEvent(current, activeId, payload));
+      pinnedMessagesGuardRef.current.invalidateLoad();
+      setPinnedMessagesState((current) => ({
+        conversationId: activeId,
+        pinnedMessages: applyPinnedMessagesEvent(getPinnedMessagesForConversation(current, activeId), activeId, payload)
+      }));
       setPinnedMessagesError(null);
     };
     socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => { const revision = (conversationRevisionRef.current.get(message.conversationId) ?? 0) + 1; conversationRevisionRef.current.set(message.conversationId, revision); if (message.clientMessageId) { const optimisticId = optimisticMessageIdsRef.current.get(message.clientMessageId); if (optimisticId) { releaseRetryPayload(optimisticId); optimisticMessageIdsRef.current.delete(message.clientMessageId); } } if (message.senderType === "customer") { const conversation = conversationsRef.current.find((item) => item.id === message.conversationId); setMessageToasts((current) => appendMessageToast(current, { id: message.id, conversationId: message.conversationId, senderName: message.senderName?.trim() || conversation?.customerName?.trim() || "Khách hàng", content: message.content, platform: message.platform, ...(conversation?.customerAvatarUrl ? { avatarUrl: conversation.customerAvatarUrl } : {}) })); } if (message.conversationId === activeId) { setIsCustomerTyping(false); setMessages((current) => appendUniqueMessage(current, message)); void markActiveRead(activeId); if (message.senderType === "customer" && aiSettingsLoaded && shouldAutoRefreshAiSuggestions(aiSettings.suggestionMode, "customer_message")) void refreshAiSuggestions(activeId, "customer_message"); } });
@@ -365,25 +369,25 @@ export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNav
   async function pinActiveMessage(messageId: string): Promise<void> {
     if (!activeId) return;
     const conversationId = activeId;
-    const isCurrentRequest = pinnedMessagesGuardRef.current.start(conversationId);
+    const isActiveMutation = pinnedMessagesGuardRef.current.startMutation(conversationId);
     setPinnedMessagesError(null);
     try {
       const result = await apiRequest<ConversationPinEventPayload>(API_URL, `/api/v1/conversations/${conversationId}/pins`, token, { method: "POST", body: JSON.stringify({ messageId }) }, refresh);
-      if (isCurrentRequest()) setPinnedMessages((current) => replacePinnedMessages(current, result.pinnedMessages));
+      if (isActiveMutation()) setPinnedMessagesState({ conversationId, pinnedMessages: replacePinnedMessages([], result.pinnedMessages) });
     } catch {
-      if (isCurrentRequest()) setPinnedMessagesError("Không thể ghim tin nhắn.");
+      if (isActiveMutation()) setPinnedMessagesError("Không thể ghim tin nhắn.");
     }
   }
   async function unpinActiveMessage(messageId: string): Promise<void> {
     if (!activeId) return;
     const conversationId = activeId;
-    const isCurrentRequest = pinnedMessagesGuardRef.current.start(conversationId);
+    const isActiveMutation = pinnedMessagesGuardRef.current.startMutation(conversationId);
     setPinnedMessagesError(null);
     try {
       const result = await apiRequest<ConversationPinEventPayload>(API_URL, `/api/v1/conversations/${conversationId}/pins/${encodeURIComponent(messageId)}`, token, { method: "DELETE" }, refresh);
-      if (isCurrentRequest()) setPinnedMessages((current) => replacePinnedMessages(current, result.pinnedMessages));
+      if (isActiveMutation()) setPinnedMessagesState({ conversationId, pinnedMessages: replacePinnedMessages([], result.pinnedMessages) });
     } catch {
-      if (isCurrentRequest()) setPinnedMessagesError("Không thể bỏ ghim tin nhắn.");
+      if (isActiveMutation()) setPinnedMessagesError("Không thể bỏ ghim tin nhắn.");
     }
   }
   // Đồng bộ công tắc bot với backend để takeover tắt tự động trả lời theo hội thoại.

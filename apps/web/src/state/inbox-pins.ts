@@ -1,5 +1,17 @@
 import type { ConversationPinEventPayload, PinnedMessageContract } from "@nhuu-chat/contracts";
 
+export type ConversationPinnedMessagesState = {
+  conversationId: string | null;
+  pinnedMessages: PinnedMessageContract[];
+};
+
+export function getPinnedMessagesForConversation(
+  state: ConversationPinnedMessagesState,
+  conversationId: string | null
+): PinnedMessageContract[] {
+  return state.conversationId === conversationId ? state.pinnedMessages : [];
+}
+
 export function replacePinnedMessages(
   _current: PinnedMessageContract[],
   incoming: PinnedMessageContract[]
@@ -30,20 +42,27 @@ export function applyPinnedMessagesEvent(
 // Khóa response cũ để dữ liệu ghim của hội thoại trước không ghi đè hội thoại đang mở.
 export function createPinnedMessagesRequestGuard() {
   let activeConversationId: string | null = null;
-  let latestRequestId = 0;
+  let latestLoadRequestId = 0;
+
+  function startLoad(conversationId: string) {
+    const requestId = ++latestLoadRequestId;
+    return () => requestId === latestLoadRequestId && conversationId === activeConversationId;
+  }
+
+  function invalidateLoad() {
+    latestLoadRequestId += 1;
+  }
 
   return {
     setActiveConversation(conversationId: string | null) {
       if (conversationId === activeConversationId) return;
       activeConversationId = conversationId;
-      latestRequestId += 1;
+      invalidateLoad();
     },
-    start(conversationId: string) {
-      const requestId = ++latestRequestId;
-      return () => requestId === latestRequestId && conversationId === activeConversationId;
+    startLoad,
+    startMutation(conversationId: string) {
+      return () => conversationId === activeConversationId;
     },
-    invalidate() {
-      latestRequestId += 1;
-    }
+    invalidateLoad
   };
 }

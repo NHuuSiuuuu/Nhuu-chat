@@ -5,6 +5,7 @@ import {
   applyPinnedMessagesEvent,
   createPinnedMessagesRequestGuard,
   findPinnedMessage,
+  getPinnedMessagesForConversation,
   replacePinnedMessages,
   resetPinnedMessages
 } from "./inbox-pins.js";
@@ -67,20 +68,42 @@ describe("inbox pinned-message state", () => {
     expect(applyPinnedMessagesEvent([oldPin], "conversation-active", otherPayload)).toEqual([oldPin]);
   });
 
-  it("invalidates stale loads and mutations when a newer request or conversation takes over", () => {
+  it("invalidates stale loads when a newer load or conversation takes over", () => {
     const guard = createPinnedMessagesRequestGuard();
     guard.setActiveConversation("conversation-a");
-    const isFirstCurrent = guard.start("conversation-a");
-    const isSecondCurrent = guard.start("conversation-a");
+    const isFirstCurrent = guard.startLoad("conversation-a");
+    const isSecondCurrent = guard.startLoad("conversation-a");
 
     expect(isFirstCurrent()).toBe(false);
     expect(isSecondCurrent()).toBe(true);
 
-    guard.invalidate();
+    guard.invalidateLoad();
     expect(isSecondCurrent()).toBe(false);
 
-    const isThirdCurrent = guard.start("conversation-a");
+    const isThirdCurrent = guard.startLoad("conversation-a");
     guard.setActiveConversation("conversation-b");
     expect(isThirdCurrent()).toBe(false);
+  });
+
+  it("does not expose pins owned by the previously active conversation", () => {
+    const state = { conversationId: "conversation-a", pinnedMessages: [oldPin] };
+    expect(getPinnedMessagesForConversation(state, "conversation-a")).toEqual([oldPin]);
+    expect(getPinnedMessagesForConversation(state, "conversation-b")).toEqual([]);
+  });
+
+  it("keeps an active mutation current when a socket event only invalidates the stale load", () => {
+    const guard = createPinnedMessagesRequestGuard();
+
+    guard.setActiveConversation("conversation-a");
+    const isCurrentLoad = guard.startLoad("conversation-a");
+    const isActiveMutation = guard.startMutation("conversation-a");
+
+    guard.invalidateLoad();
+
+    expect(isCurrentLoad()).toBe(false);
+    expect(isActiveMutation()).toBe(true);
+
+    guard.setActiveConversation("conversation-b");
+    expect(isActiveMutation()).toBe(false);
   });
 });

@@ -331,13 +331,15 @@ describe("Inbox Tailwind migration", () => {
     const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("createPinnedMessagesRequestGuard");
-    expect(source).toContain("resetPinnedMessages(current)");
+    expect(source).toContain("getPinnedMessagesForConversation");
+    expect(source).toContain("startLoad(activeId)");
+    expect(source).toContain("startMutation(conversationId)");
     expect(source).toContain("/api/v1/conversations/${activeId}/pins");
     expect(source).toContain('method: "POST"');
     expect(source).toContain('JSON.stringify({ messageId })');
     expect(source).toContain('method: "DELETE"');
     expect(source).toContain("encodeURIComponent(messageId)");
-    expect(source).toContain("if (isCurrentRequest()) setPinnedMessages");
+    expect(source).toContain("if (isActiveMutation()) setPinnedMessagesError");
   });
 
   it("replaces pins from the active realtime room and cleans up the socket listener", () => {
