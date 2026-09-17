@@ -34,6 +34,7 @@ These instructions apply to the entire `Nhuu-chat` project.
 - After verification and a focused local commit, push the current feature branch to its configured remote automatically so the user can test the change.
 - Always ask the user for confirmation before merging into another branch, including `main`.
 - Report the commit hash, push result, and verification results after pushing.
+- Viết commit message theo Conventional Commits: giữ prefix tiếng Anh như `feat:`, `fix:`, `docs:` hoặc `chore:`, phần mô tả phía sau viết bằng tiếng Việt, ngắn gọn, không viết hoa chữ cái đầu và không đặt dấu chấm cuối câu.
 
 ## File Modification Rules
 
