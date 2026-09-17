@@ -12,7 +12,15 @@ const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 const blockedExtensions = new Set([".exe", ".js", ".sh"]);
 const attachmentUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_ATTACHMENT_BYTES, files: 1, fields: 3, parts: 4, fieldSize: 64 * 1024, fieldNameSize: 100 },
+  limits: {
+    fileSize: MAX_ATTACHMENT_BYTES,
+    files: 1,
+    fields: 3,
+    // Busboy cần dư một part cho payload gồm ba field và một file.
+    parts: 5,
+    fieldSize: 64 * 1024,
+    fieldNameSize: 100
+  },
   fileFilter(_request, file, callback) {
     const extension = file.originalname.toLowerCase().slice(file.originalname.lastIndexOf("."));
     if (blockedExtensions.has(extension) || file.mimetype === "application/x-msdownload" || file.mimetype === "application/javascript" || file.mimetype === "text/x-shellscript") {
