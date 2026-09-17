@@ -27,7 +27,7 @@ function renderMessageContent(content: string): React.ReactNode {
 function MessageDeliveryIndicator({ message, onRetry }: { message: ChatMessageContract; onRetry?: (messageId: string) => void }) {
   if (message.senderType !== "agent") return null;
   const state = getMessageDeliveryState(message.deliveryStatus);
-  const position = "absolute bottom-1 right-1";
+  const position = "absolute bottom-1 -right-5";
   if (state === "failed" && onRetry) return <button className={`${position} grid size-6 place-items-center rounded-full bg-red-600 text-xs font-bold text-white shadow-md transition hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-300`} type="button" onClick={() => onRetry(message.id)} aria-label="Gửi lại tin nhắn" title="Gửi lại tin nhắn">!</button>;
   if (state === "sending") return <span className={`${position} grid size-5 place-items-center rounded-full bg-white/90 text-blue-600 shadow-sm`} aria-label="Đang gửi tin nhắn"><span className="animate-spin"><InboxIcon name="refresh" size={13} /></span></span>;
   return <span className={`${position} grid size-5 place-items-center rounded-full bg-white/90 text-emerald-600 shadow-sm`} aria-label="Đã gửi tin nhắn"><span className="text-xs font-bold">✓</span></span>;
@@ -35,7 +35,7 @@ function MessageDeliveryIndicator({ message, onRetry }: { message: ChatMessageCo
 
 function renderMessageAttachments(message: ChatMessageContract, onRetry?: (messageId: string) => void): React.ReactNode {
   return message.attachments?.map((attachment) => attachment.mimeType.startsWith("image/")
-    ? <div className="relative mb-2 overflow-hidden rounded-lg" key={attachment.url}><a className="block" href={attachment.url} target="_blank" rel="noreferrer" aria-label={`Mở hình ảnh ${attachment.fileName ?? "đính kèm"}`}><img className="max-h-72 max-w-full object-contain" src={attachment.url} alt={attachment.fileName ?? "Hình ảnh đính kèm"} /></a><MessageDeliveryIndicator message={message} onRetry={onRetry} /></div>
+    ? <div className="relative mb-2 rounded-lg" key={attachment.url}><a className="block overflow-hidden rounded-lg" href={attachment.url} target="_blank" rel="noreferrer" aria-label={`Mở hình ảnh ${attachment.fileName ?? "đính kèm"}`}><img className="max-h-72 max-w-full object-contain" src={attachment.url} alt={attachment.fileName ?? "Hình ảnh đính kèm"} /></a><MessageDeliveryIndicator message={message} onRetry={onRetry} /></div>
     : <div className="relative mb-2" key={attachment.url}><a className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sky-700 underline" href={attachment.url} target="_blank" rel="noreferrer" aria-label={`Tải tệp đính kèm ${attachment.fileName ?? ""}`}><InboxIcon name="file" size={17} /><span className="min-w-0 truncate">{attachment.fileName ?? "Tệp đính kèm"}</span></a><MessageDeliveryIndicator message={message} onRetry={onRetry} /></div>);
 }
 
