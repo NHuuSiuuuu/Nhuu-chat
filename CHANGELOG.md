@@ -5,6 +5,9 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Đồng bộ sidebar thông tin bên phải với sidebar hội thoại bên trái: desktop co giãn trong khoảng `300px`–`395px`, tự thu theo viewport và chuyển sang drawer dưới `1000px`.
+- Thu gọn cụm nút sửa/xóa/ghim của ghi chú để không che tên người ghi; icon ghim đang bật dùng màu vàng và không còn nhãn `Đã ghim`.
+- Hiển thị ngày/tháng/năm cùng dòng với thời gian cập nhật ghi chú và đánh dấu `• Đã sửa` khi nội dung đã được chỉnh sửa.
 - Sửa layout card ghi chú trong sidebar: tên/thời gian dài không còn làm tràn cụm icon sửa, xóa và ghim.
 - Thêm ghi chú nội bộ theo từng hội thoại: agent/admin có thể tạo bằng Enter, xem người ghi và nội dung, sửa, xóa hoặc ghim ghi chú trong sidebar `Thông tin`.
 - Sửa giữ nguyên kênh Inbox sau khi tải lại trang bằng cách lưu lựa chọn kênh trong phiên làm việc; `Gộp trang` vẫn xóa bộ lọc kênh.

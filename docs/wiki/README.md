@@ -76,9 +76,12 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
   - toolbar file, ảnh, ghi chú và mẫu trả lời.
 - Sidebar thông tin bên phải khung chat có:
   - tab `Thông tin` và `Tạo đơn`;
-  - khu vực `Ghi chú`, hiển thị tác giả, nội dung, thời gian và thao tác sửa/xóa/ghim;
+  - khu vực `Ghi chú`, hiển thị tác giả, nội dung, ngày/tháng/năm cùng thời gian cập nhật và thao tác sửa/xóa/ghim;
+  - action ghi chú chỉ hiện đầy đủ khi hover/focus; ghi chú đã ghim giữ icon ghim màu vàng, không hiển thị nhãn chữ;
+  - cụm action được thu gọn để giữ vùng hiển thị tên người ghi chú;
   - khu vực `Đơn hàng`;
-  - responsive drawer trên màn hình hẹp.
+  - desktop rộng tương đương sidebar hội thoại trái, co giãn từ `300px` đến tối đa `395px`;
+  - responsive drawer trên màn hình hẹp dưới `1000px`.
 - Khi chiều rộng màn hình dưới breakpoint Inbox:
   - danh sách hội thoại bên trái được ẩn khỏi layout cố định;
   - khung chat chiếm phần còn lại;
