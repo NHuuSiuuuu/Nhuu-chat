@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa thanh tag phía trên ô nhập tin nhắn tự động xuống dòng trên màn hình hẹp, thêm khoảng cách giữa các tag và bỏ cuộn ngang gây cắt nội dung.
 - Sửa thanh điều hướng mở đúng Hộp thư tại `/inbox` thay vì rơi vào trang tính năng đang phát triển.
 - Đổi animation loading Inbox sang mẫu 2 chấm xanh mới, vẫn tách nền trong suốt và giữ kích thước `size-8`.
 - Dùng animation loading gradient đã tách nền trong suốt, hiển thị gọn ở kích thước `size-8`.

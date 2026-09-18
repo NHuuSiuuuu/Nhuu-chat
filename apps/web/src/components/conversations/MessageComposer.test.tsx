@@ -47,6 +47,13 @@ describe("MessageComposer accessibility", () => {
     expect(source).not.toContain("Thẻ đang gắn");
   });
 
+  it("wraps conversation tags when the composer becomes narrow", () => {
+    const source = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('className="flex w-full flex-wrap gap-1"');
+    expect(source).not.toContain('className="flex w-full overflow-x-auto scrollbar-none"');
+  });
+
   it("defines keyboard shortcut behavior and the shortcut dialog", () => {
     const source = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
 
