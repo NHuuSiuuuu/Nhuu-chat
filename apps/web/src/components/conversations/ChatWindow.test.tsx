@@ -218,6 +218,9 @@ describe("ChatWindow loading and composer layout", () => {
     expect(source).toContain("animate-bounce");
     expect(source).toContain("[animation-delay:-0.3s]");
     expect(source).toContain("[animation-delay:-0.15s]");
+    expect(source).toContain("size-8 place-items-center");
+    expect(source).toContain("size-1.5 animate-bounce");
+    expect(source).not.toMatch(/(?:w|h)-16|md:(?:w|h)-/);
   });
 
   it("keeps the message composer visible below the scrollable message area", () => {
