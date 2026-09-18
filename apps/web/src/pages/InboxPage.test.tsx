@@ -124,7 +124,9 @@ describe("Inbox Tailwind migration", () => {
     expect(source).toContain("message.conversationId === activeId");
     expect(source).toContain("max-[899px]:hidden");
     expect(source).toContain("isConversationListOpen");
-    expect(source).toContain("fixed top-28 bottom-0 left-[44px] z-50 flex w-[calc(100vw-44px)]");
+    expect(source).toContain("fixed left-[44px] right-0 top-16 bottom-0 z-50 flex");
+    expect(source).toContain("isConversationListOpen ? \"max-[899px]:hidden\" : \"\"");
+    expect(source).not.toContain("fixed top-28 bottom-0 left-[44px] z-50 flex w-[calc(100vw-44px)]");
     expect(source).not.toContain("fixed inset-y-0 left-[44px] z-50 flex w-[calc(100vw-44px)]");
     expect(source).not.toContain("w-[min(395px,calc(100vw-44px))]");
     expect(source).toContain("/api/v1/conversation-tags");
@@ -143,6 +145,7 @@ describe("Inbox Tailwind migration", () => {
     expect(chat).toContain('message.senderType === "customer" ? "flex-row" : "flex-row-reverse"');
     expect(chat).toContain('message.senderType === "customer" ? "justify-start" : "justify-end"');
     expect(chat).toContain('message.senderType === "customer" && <ConversationAvatar');
+    expect(list).toContain("rounded-tl-none");
     expect(source).toContain("readStateRef");
     expect(source).toContain("generation");
     expect(source).toContain("confirmedGeneration");

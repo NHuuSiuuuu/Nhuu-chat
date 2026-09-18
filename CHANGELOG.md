@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa layout Inbox mobile: danh sách hội thoại sát dưới header, bỏ bo góc trái trên và ẩn khung chat khi đang mở danh sách để không bị chồng khi quay lại.
+- Thêm trạng thái loading xoay tròn cho nút làm mới Dashboard trong thời gian tải lại dữ liệu và chặn click lặp.
 - Thêm modal `Chọn pages để chat` từ nút `Gộp trang`: tìm kiếm, chọn từng Page, chọn tất cả Page đang hiển thị và xác nhận mở Inbox.
 - Sửa nút `Gộp trang` dùng Flexbox để icon SVG và chữ luôn nằm cùng hàng, căn giữa theo chiều dọc.
 - Thêm hamburger menu mobile cho header Dashboard với sidebar trượt từ trái, overlay đóng menu và giữ nguyên điều hướng desktop.
