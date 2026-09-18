@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm hamburger menu mobile cho header Dashboard với sidebar trượt từ trái, overlay đóng menu và giữ nguyên điều hướng desktop.
 - Thay ký tự mũi tên trong bộ lọc Dashboard mobile bằng icon SVG `chevron-up/chevron-down`.
 - Chuyển bộ lọc nền tảng trên Dashboard mobile thành nút dropdown gọn; giữ thanh lọc ngang trên desktop.
 - Sửa khoảng cách mobile của Dashboard bị cộng đúp dưới header và hiển thị avatar tài khoản kết nối từ `avatarUrl` của API.

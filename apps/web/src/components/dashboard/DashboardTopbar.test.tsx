@@ -39,4 +39,15 @@ describe("DashboardTopbar", () => {
     expect(source).toContain("Hồ sơ");
     expect(source).toContain("Đang tải...");
   });
+
+  it("adds a mobile hamburger that opens a sliding navigation drawer", () => {
+    const source = readFileSync(new URL("./DashboardTopbar.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("isMobileMenuOpen");
+    expect(source).toContain("Mở menu điều hướng");
+    expect(source).toContain("translate-x-0");
+    expect(source).toContain("-translate-x-full");
+    expect(source).toContain("Đóng menu điều hướng");
+    expect(source).toContain("max-[700px]:hidden");
+  });
 });
