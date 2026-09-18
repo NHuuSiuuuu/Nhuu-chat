@@ -59,4 +59,14 @@ describe("dashboard connected accounts", () => {
     expect(source).toContain("account.avatarUrl");
     expect(source).toContain("object-cover");
   });
+
+  it("provides a compact mobile platform filter menu while keeping the desktop filter bar", () => {
+    const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("isFilterMenuOpen");
+    expect(source).toContain("Mở bộ lọc nền tảng");
+    expect(source).toContain("Đóng bộ lọc nền tảng");
+    expect(source).toContain("min-[701px]:hidden");
+    expect(source).toContain("min-[701px]:flex");
+  });
 });
