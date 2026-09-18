@@ -5,6 +5,7 @@ import { apiRequest } from "../lib/api.js";
 import { ConnectModal } from "../components/dashboard/ConnectModal.js";
 import { DashboardTopbar, type DashboardAccount } from "../components/dashboard/DashboardTopbar.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
+import { MergePagesModal, selectAllMergePages } from "../components/dashboard/MergePagesModal.js";
 import { PlatformIcon } from "../components/dashboard/PlatformIcon.js";
 
 interface TelegramStatus { connected: boolean; displayName: string | null; username: string | null; avatarUrl?: string | null; }
@@ -35,6 +36,9 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "zalo" | "telegram">("all");
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+  const [showMergePages, setShowMergePages] = useState(false);
+  const [mergeSearch, setMergeSearch] = useState("");
+  const [selectedMergePageIds, setSelectedMergePageIds] = useState<Set<string>>(new Set());
   const loadStatus = useCallback(async () => {
     const [telegram, zalo] = await Promise.all([
       apiRequest<TelegramStatus>("", "/api/v1/channels/telegram-personal/status", token, {}, refresh).catch(() => ({ connected: false, displayName: null, username: null })),
@@ -53,6 +57,14 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
   const activeFilterLabel = filter === "all" ? "Tất cả nền tảng" : filter === "zalo" ? "Zalo" : "Telegram";
   const selectFilter = (nextFilter: "all" | "zalo" | "telegram") => { setFilter(nextFilter); setIsFilterMenuOpen(false); };
   const openModal = () => setShowConnect(true);
+  const openMergeModal = () => { setMergeSearch(""); setSelectedMergePageIds(new Set()); setShowMergePages(true); };
+  const toggleMergePage = (pageId: string) => setSelectedMergePageIds((current) => {
+    const next = new Set(current);
+    if (next.has(pageId)) next.delete(pageId); else next.add(pageId);
+    return next;
+  });
+  const selectAllMergePagesFromSearch = () => setSelectedMergePageIds((current) => selectAllMergePages(accounts, mergeSearch, current));
+  const mergeSelectedPages = () => { setShowMergePages(false); onOpenInbox(); };
   const openDeactivateModal = (account: DashboardConnectedAccount) => { setDeactivateError(null); setAccountToDeactivate(account); };
   const closeDeactivateModal = () => { if (!isDeactivating) setAccountToDeactivate(null); };
   const deactivateAccount = async () => {
@@ -78,7 +90,7 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
     <div className="mx-auto w-full max-w-[954px] max-[700px]:mt-[34px]">
       <header className="mb-2 flex items-end justify-between gap-6 rounded-[14px] bg-white px-[17px] pb-4 pt-[19px] max-[700px]:items-stretch max-[700px]:flex-col">
         <div><h1 id="dashboard-title" className="mb-[18px] text-[21px] tracking-[-.02em]">Bảng điều khiển</h1><label className="flex w-[430px] max-w-[48vw] items-center gap-[9px] rounded-[9px] border border-[#e0e6ee] bg-white px-[14px] py-[11px] text-[#a3afbf] shadow-[0_1px_2px_rgba(42,55,74,.03)] max-[700px]:w-auto max-[700px]:max-w-none"><span className="text-[25px] leading-[15px]" aria-hidden="true">⌕</span><input className="w-full bg-transparent text-[13px] text-[#354258] outline-none placeholder:text-[#a0abbb]" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm kiếm..." aria-label="Tìm kiếm tài khoản" /></label></div>
-        <div className="flex items-center gap-[9px] max-[700px]:justify-end"><button className="h-10 w-10 rounded-[9px] border border-[#e0e6ee] bg-white text-[21px] text-[#69778b] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" aria-label="Làm mới" onClick={() => void loadStatus()}>↻</button><button className="h-10 rounded-[9px] border border-[#e0e6ee] bg-[#e9edf3] px-4 text-[13px] font-bold text-[#354258] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2 max-[700px]:flex-1" type="button" onClick={openModal}><span className="text-lg">＋</span> Kết nối</button><button className="h-10 rounded-[9px] border border-[#e0e6ee] bg-white px-4 text-[13px] font-bold text-[#354258] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2 max-[700px]:flex-1" type="button" onClick={() => onOpenInbox()}><InboxIcon name="layers" size={17} /> Gộp trang</button></div>
+        <div className="flex items-center gap-[9px] max-[700px]:justify-end"><button className="h-10 w-10 rounded-[9px] border border-[#e0e6ee] bg-white text-[21px] text-[#69778b] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" aria-label="Làm mới" onClick={() => void loadStatus()}>↻</button><button className="h-10 rounded-[9px] border border-[#e0e6ee] bg-[#e9edf3] px-4 text-[13px] font-bold text-[#354258] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2 max-[700px]:flex-1" type="button" onClick={openModal}><span className="text-lg">＋</span> Kết nối</button><button className="flex h-10 items-center gap-2 whitespace-nowrap rounded-[9px] border border-[#e0e6ee] bg-white px-4 text-[13px] font-bold text-[#354258] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2 max-[700px]:flex-1" type="button" onClick={openMergeModal}><InboxIcon name="layers" size={17} /> Gộp trang</button></div>
       </header>
       <div className="relative mb-2 min-[701px]:hidden">
          <button className="flex w-full items-center justify-between rounded-[12px] border border-[#e7ebf1] bg-white px-4 py-3 text-left text-[13px] font-semibold text-[#354258] shadow-sm focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" aria-label={isFilterMenuOpen ? "Đóng bộ lọc nền tảng" : "Mở bộ lọc nền tảng"} aria-expanded={isFilterMenuOpen} onClick={() => setIsFilterMenuOpen((current) => !current)}><span className="flex items-center gap-2"><PlatformIcon provider={filter} />{activeFilterLabel}<b className="inline-grid min-w-[21px] place-items-center rounded-full bg-[#e7edf4] px-1.5 py-0.5 text-[11px] text-[#7f8b9b]">{filter === "all" ? accounts.length : accounts.filter((account) => account.platform === filter).length}</b></span><InboxIcon name={isFilterMenuOpen ? "chevron-up" : "chevron-down"} size={17} /></button>
@@ -88,6 +100,7 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
       <section className="min-h-[330px] rounded-[14px] border border-[#e8edf3] bg-white p-5" aria-label="Tài khoản đã kết nối">{(!telegramStatus || !zaloStatus) ? <div className="py-20 text-center text-[13px] text-[#8591a1]">Đang kiểm tra kết nối...</div> : visibleAccounts.length > 0 ? <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">{visibleAccounts.map((account) => <ConnectedAccountCard account={account} key={account.id} onOpen={() => onOpenInbox(account.id)} onDeactivate={() => openDeactivateModal(account)} />)}</div> : <div className="grid justify-items-center px-5 pb-20 pt-[100px] text-center"><div className="mb-[18px] grid h-[58px] w-[58px] place-items-center rounded-full bg-[#e9f6fc] text-[30px] text-[#22a8df]">＋</div><h3 className="mb-2 text-base">Chưa có tài khoản kết nối</h3><p className="text-[13px] text-[#8390a1]">Kết nối Zalo hoặc Telegram để bắt đầu nhận và trả lời tin nhắn.</p><button className="mt-5 cursor-pointer rounded-lg border-0 bg-[#2aa9e7] px-4 py-[10px] text-[12px] font-bold text-white focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" onClick={openModal}>Kết nối tài khoản</button></div>}</section>
     </div>
     {showConnect && <ConnectModal token={token} refresh={refresh} onClose={() => setShowConnect(false)} onConnected={() => { void loadStatus(); }} />}
+    {showMergePages && <MergePagesModal pages={accounts} selectedIds={selectedMergePageIds} searchQuery={mergeSearch} onSearchChange={setMergeSearch} onTogglePage={toggleMergePage} onSelectAll={selectAllMergePagesFromSearch} onClose={() => setShowMergePages(false)} onMerge={mergeSelectedPages} />}
     {accountToDeactivate && <DeactivateAccountModal account={accountToDeactivate} error={deactivateError} loading={isDeactivating} onCancel={closeDeactivateModal} onConfirm={() => void deactivateAccount()} />}
   </main>;
 }

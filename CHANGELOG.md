@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm modal `Chọn pages để chat` từ nút `Gộp trang`: tìm kiếm, chọn từng Page, chọn tất cả Page đang hiển thị và xác nhận mở Inbox.
+- Sửa nút `Gộp trang` dùng Flexbox để icon SVG và chữ luôn nằm cùng hàng, căn giữa theo chiều dọc.
 - Thêm hamburger menu mobile cho header Dashboard với sidebar trượt từ trái, overlay đóng menu và giữ nguyên điều hướng desktop.
 - Thay ký tự mũi tên trong bộ lọc Dashboard mobile bằng icon SVG `chevron-up/chevron-down`.
 - Chuyển bộ lọc nền tảng trên Dashboard mobile thành nút dropdown gọn; giữ thanh lọc ngang trên desktop.

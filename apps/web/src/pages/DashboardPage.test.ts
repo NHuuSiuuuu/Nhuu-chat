@@ -85,4 +85,13 @@ describe("dashboard connected accounts", () => {
     expect(source).toContain("max-[700px]:mt-[34px]");
     expect(source).not.toContain('<span className="text-lg">♣</span> Gộp trang');
   });
+
+  it("opens the page selection modal from the merge action", () => {
+    const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("MergePagesModal");
+    expect(source).toContain("showMergePages");
+    expect(source).toContain("setShowMergePages(true)");
+    expect(source).toContain('onClick={openMergeModal}');
+  });
 });
