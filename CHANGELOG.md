@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Tối ưu header Inbox mobile: giảm padding/gap và cho cụm tên người dùng nhận phần chiều rộng còn lại để hạn chế truncate quá sớm.
 - Sắp xếp lại header Inbox trên mobile: tên người dùng luôn một dòng, icon nền tảng nằm bên dưới và cụm switch bot/menu bám sát mép phải.
 - Sửa layout Inbox mobile: danh sách hội thoại sát dưới header, bỏ bo góc trái trên và ẩn khung chat khi đang mở danh sách để không bị chồng khi quay lại.
 - Thêm trạng thái loading xoay tròn cho nút làm mới Dashboard trong thời gian tải lại dữ liệu và chặn click lặp.

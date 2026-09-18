@@ -183,11 +183,20 @@ describe("ChatWindow mobile header", () => {
   it("keeps the user identity on one line and groups the right-side controls", () => {
     const source = readFileSync(new URL("./ChatWindow.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain('className="min-w-0 flex flex-col"');
+    expect(source).toContain('className="flex min-w-0 flex-1 flex-col"');
     expect(source).toContain('className="mb-1 truncate whitespace-nowrap text-base font-semibold"');
-    expect(source).toContain('className="ml-auto flex shrink-0 items-center gap-2"');
+    expect(source).toContain('className="ml-auto flex shrink-0 items-center gap-2 max-[899px]:gap-1"');
     expect(source).toContain('aria-label="Tùy chọn hội thoại"');
     expect(source).toContain('<InboxIcon name="more" />');
     expect(source).not.toContain('aria-label="Thông tin hội thoại"><InboxIcon name="users" />');
+  });
+
+  it("gives the identity area the remaining mobile width", () => {
+    const source = readFileSync(new URL("./ChatWindow.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("max-[899px]:gap-2");
+    expect(source).toContain("max-[899px]:px-2");
+    expect(source).toContain('className="flex min-w-0 flex-1 flex-col"');
+    expect(source).toContain("max-[899px]:gap-1");
   });
 });
