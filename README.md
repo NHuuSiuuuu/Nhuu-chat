@@ -17,6 +17,7 @@ MVP quản lý inbox chăm sóc khách hàng Telegram và trợ lý RAG. MongoDB
 - Knowledge chunking, TXT/Markdown/PDF/DOCX parser, provider-independent RAG.
 - Bot Pause 30 phút; queue có chính sách retry 0s/1s/4s, riêng chatbot tự động chỉ gửi một lần để tránh trả lời trùng.
 - Inbox React tối thiểu.
+- Ghim tối đa 10 tin nhắn trong mỗi hội thoại, có thanh tin đã ghim và đồng bộ realtime cho admin/agent.
 - Ghi chú nội bộ theo từng hội thoại; agent/admin có thể tạo, sửa, xóa và ghim ghi chú trong sidebar Thông tin.
 - Security headers, request ID và rate limit auth.
 
@@ -122,6 +123,12 @@ Các route `/api/v1/quick-replies` chỉ cho `admin` và `agent`, đồng thời
 Composer hỗ trợ chọn một ảnh hoặc file, nhập chú thích tùy chọn rồi gửi tới hội thoại Zalo cá nhân hoặc Telegram cá nhân. Backend giới hạn 20 MB mỗi lần gửi, chặn `.exe`, `.js`, `.sh` và MIME nguy hiểm, lưu media qua Cloudinary để message còn tải được sau khi reload, đồng thời gửi buffer trực tiếp qua connector cá nhân. Các kênh khác vẫn chỉ hỗ trợ text.
 
 Ảnh nhận JPG, PNG, GIF và WEBP; file nhận PDF, DOC/DOCX, XLS/XLSX, ZIP và file thông thường. Mỗi request chỉ có một file. Cần cấu hình ba biến Cloudinary ở mục trên để bật lưu media.
+
+### Ghim tin nhắn
+
+Admin và agent có quyền truy cập hội thoại có thể ghim tối đa 10 tin nhắn. Khi hover hoặc focus vào một tin, giao diện chỉ hiển thị thao tác `Ghim tin nhắn` hoặc `Bỏ ghim`; tin đã ghim có nhãn `Đã ghim`. Thanh ghim ở đầu khung chat hiển thị số thứ tự, trích dẫn nội dung và cho phép chuyển giữa các tin ghim; bấm vào nội dung sẽ cuộn mượt tới tin gốc đang có trong lịch sử đã tải.
+
+Backend cung cấp `GET/POST /api/v1/conversations/:conversationId/pins` và `DELETE /api/v1/conversations/:conversationId/pins/:messageId`. Mỗi thao tác thành công phát event Socket.IO `chat:message_pin_updated` vào room của hội thoại để các client đang mở thay toàn bộ danh sách ghim theo dữ liệu canonical. Tính năng không cần biến môi trường riêng. Nếu tin gốc nằm ngoài page lịch sử hiện tại, thanh ghim vẫn hiện trích dẫn nhưng chưa tự tải page cũ để cuộn tới tin đó.
 
 Mở hai terminal riêng để chạy API và web:
 

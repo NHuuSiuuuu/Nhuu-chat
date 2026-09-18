@@ -41,6 +41,7 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
 - API CRUD danh mục thẻ hội thoại dùng chung cho admin/agent tại `/api/v1/conversation-tags`.
 - API CRUD mẫu trả lời nhanh dùng chung cho admin/agent tại `/api/v1/quick-replies`, hỗ trợ một ảnh đính kèm lưu trên Cloudinary.
 - API ghi chú nội bộ theo hội thoại tại `/api/v1/conversations/:conversationId/notes`, hỗ trợ tạo, sửa, xóa và ghim cho admin/agent có quyền truy cập.
+- API ghim tin nhắn theo hội thoại tại `/api/v1/conversations/:conversationId/pins`, giới hạn 10 tin và chỉ cho admin/agent có quyền truy cập.
 - Chunking và parser cho TXT, Markdown, PDF, DOCX; RAG adapter độc lập với provider.
 - Bot Pause 30 phút; queue hỗ trợ retry `0s`, `1s`, `4s`, nhưng chatbot tự động chỉ gửi một lần do connector chưa hỗ trợ khóa idempotency.
 - Bot Pause 30 phút và retry outbound theo các mốc `0s`, `1s`, `4s`.
@@ -89,6 +90,18 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
   - khung chat chiếm phần còn lại;
   - nút danh sách cạnh avatar mở conversation list dạng drawer;
   - drawer có overlay và tự đóng sau khi chọn hội thoại.
+
+### Ghim tin nhắn
+
+Admin và agent có quyền truy cập hội thoại có thể ghim tối đa 10 tin. Khi hover hoặc focus vào message, cụm thao tác chỉ hiển thị `Ghim tin nhắn` hoặc `Bỏ ghim`; message đã ghim có nhãn `Đã ghim` nằm ngoài bubble. Thanh ghim cố định phía trên lịch sử chat hiển thị vị trí hiện tại trên tổng số tin ghim, trích dẫn một dòng và nút chuyển trước/sau. Bấm vào phần nội dung sẽ cuộn mượt tới tin gốc; nút X bỏ ghim không kích hoạt thao tác cuộn.
+
+Các endpoint đều yêu cầu JWT role `admin` hoặc `agent` và kiểm tra quyền truy cập hội thoại trong service:
+
+- `GET /api/v1/conversations/:conversationId/pins`: lấy danh sách ghim mới nhất trước.
+- `POST /api/v1/conversations/:conversationId/pins` với body `{ "messageId": "..." }`: ghim một tin thuộc đúng hội thoại.
+- `DELETE /api/v1/conversations/:conversationId/pins/:messageId`: bỏ ghim một tin.
+
+Sau khi ghim hoặc bỏ ghim thành công, API phát `chat:message_pin_updated` vào Socket.IO room của hội thoại. Frontend thay toàn bộ danh sách ghim bằng payload canonical nên event và HTTP response đến khác thứ tự không tạo bản trùng. Không cần biến môi trường riêng. Nếu tin gốc chưa nằm trong page lịch sử đang tải, thanh ghim vẫn hiển thị trích dẫn nhưng chưa tự tải page cũ để cuộn tới tin đó.
 
 ## 3. Kiến trúc thư mục chính
 

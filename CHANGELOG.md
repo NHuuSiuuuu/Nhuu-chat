@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm ghim tối đa 10 tin nhắn cho mỗi hội thoại dành cho admin/agent: nút ghim khi hover, thanh tin đã ghim có điều hướng và cuộn tới tin gốc, API ghim/bỏ ghim cùng đồng bộ Socket.IO realtime.
 - Thay badge Zalo tự dựng bằng SVG logo Zalo thật ở cả biến thể có nền và trong suốt.
 - Thêm tooltip khi hover cho các nút hướng dẫn, đính kèm, mẫu trả lời nhanh và gửi tin nhắn trong ô soạn tin.
 - Cho phép gửi một ảnh hoặc file kèm chú thích từ Inbox tới Zalo cá nhân và Telegram cá nhân; giới hạn 20 MB, chặn định dạng nguy hiểm và lưu media qua Cloudinary.
