@@ -7,11 +7,11 @@ import { buildDashboardAccounts, conversationPathForPlatform } from "./Dashboard
 describe("dashboard connected accounts", () => {
   it("includes a connected Zalo personal account beside Telegram", () => {
     expect(buildDashboardAccounts(
-      { connected: true, displayName: "Telegram cá nhân", username: "telegram-user" },
-      { id: "zalo-session-1", status: "connected", displayName: "Zalo cá nhân", username: "zalo-user" }
+      { connected: true, displayName: "Telegram cá nhân", username: "telegram-user", avatarUrl: "https://cdn.example/telegram.jpg" },
+      { id: "zalo-session-1", status: "connected", displayName: "Zalo cá nhân", username: "zalo-user", avatarUrl: "https://cdn.example/zalo.jpg" }
     )).toEqual([
-      { id: "telegram_personal", platform: "telegram", name: "Telegram cá nhân", username: "telegram-user" },
-      { id: "zalo_personal", platform: "zalo", name: "Zalo cá nhân", username: "zalo-user" }
+      { id: "telegram_personal", platform: "telegram", name: "Telegram cá nhân", username: "telegram-user", avatarUrl: "https://cdn.example/telegram.jpg" },
+      { id: "zalo_personal", platform: "zalo", name: "Zalo cá nhân", username: "zalo-user", avatarUrl: "https://cdn.example/zalo.jpg" }
     ]);
   });
 
@@ -48,5 +48,15 @@ describe("dashboard connected accounts", () => {
     expect(source).not.toContain(">Tài khoản đã kết nối</h2>");
     expect(source).toContain("rounded-lg");
     expect(source).toContain("<PlatformIcon provider={account.platform} />");
+  });
+
+  it("keeps the mobile dashboard content directly below the wrapped header and renders account avatars", () => {
+    const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("max-[700px]:pt-0");
+    expect(source).not.toContain("max-[700px]:pt-28");
+    expect(source).toContain("avatarUrl?: string | null");
+    expect(source).toContain("account.avatarUrl");
+    expect(source).toContain("object-cover");
   });
 });

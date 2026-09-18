@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa khoảng cách mobile của Dashboard bị cộng đúp dưới header và hiển thị avatar tài khoản kết nối từ `avatarUrl` của API.
 - Làm gọn giao diện tài khoản kết nối trên Dashboard bằng grid responsive, card avatar vuông bo góc và menu thao tác ở góc phải.
 - Đồng bộ avatar tài khoản và khách hàng Zalo từ hồ sơ `zca-js`, giúp danh sách hội thoại hiển thị ảnh thật thay vì fallback chữ cái.
 - Sửa danh sách hội thoại giữ lại URL avatar hợp lệ khi event realtime trả về dữ liệu avatar rỗng và truyền URL đã chuẩn hóa vào thẻ ảnh.

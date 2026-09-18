@@ -6,16 +6,16 @@ import { ConnectModal } from "../components/dashboard/ConnectModal.js";
 import { DashboardTopbar, type DashboardAccount } from "../components/dashboard/DashboardTopbar.js";
 import { PlatformIcon } from "../components/dashboard/PlatformIcon.js";
 
-interface TelegramStatus { connected: boolean; displayName: string | null; username: string | null; }
-interface ZaloStatus { id: string; status: "disconnected" | "waiting_qr" | "connected" | "expired" | "error"; displayName?: string; username?: string; }
+interface TelegramStatus { connected: boolean; displayName: string | null; username: string | null; avatarUrl?: string | null; }
+interface ZaloStatus { id: string; status: "disconnected" | "waiting_qr" | "connected" | "expired" | "error"; displayName?: string; username?: string; avatarUrl?: string | null; }
 
-export interface DashboardConnectedAccount { id: "telegram_personal" | "zalo_personal"; platform: "telegram" | "zalo"; name: string; username?: string; status?: "error"; }
+export interface DashboardConnectedAccount { id: "telegram_personal" | "zalo_personal"; platform: "telegram" | "zalo"; name: string; username?: string; avatarUrl?: string | null; status?: "error"; }
 
 export function buildDashboardAccounts(telegram: TelegramStatus, zalo: ZaloStatus): DashboardConnectedAccount[] {
   const accounts: DashboardConnectedAccount[] = [];
-  if (telegram.connected) accounts.push({ id: "telegram_personal", platform: "telegram", name: telegram.displayName ?? "Telegram cá nhân", ...(telegram.username ? { username: telegram.username } : {}) });
+  if (telegram.connected) accounts.push({ id: "telegram_personal", platform: "telegram", name: telegram.displayName ?? "Telegram cá nhân", ...(telegram.username ? { username: telegram.username } : {}), ...(telegram.avatarUrl ? { avatarUrl: telegram.avatarUrl } : {}) });
   if (zalo.status === "connected" || (zalo.status === "error" && zalo.displayName)) {
-    accounts.push({ id: "zalo_personal", platform: "zalo", name: zalo.displayName ?? "Zalo cá nhân", ...(zalo.username ? { username: zalo.username } : {}), ...(zalo.status === "error" ? { status: "error" as const } : {}) });
+    accounts.push({ id: "zalo_personal", platform: "zalo", name: zalo.displayName ?? "Zalo cá nhân", ...(zalo.username ? { username: zalo.username } : {}), ...(zalo.avatarUrl ? { avatarUrl: zalo.avatarUrl } : {}), ...(zalo.status === "error" ? { status: "error" as const } : {}) });
   }
   return accounts;
 }
@@ -69,7 +69,7 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
     }
   };
 
-  return <main className="min-h-screen bg-[#f2f5f9] pt-16 text-[#273348] max-[700px]:px-[34px] max-[700px]:pt-28" aria-labelledby="dashboard-title">
+  return <main className="min-h-screen bg-[#f2f5f9] pt-16 text-[#273348] max-[700px]:px-[34px] max-[700px]:pt-0" aria-labelledby="dashboard-title">
     <DashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} />
     <div className="mx-auto w-full max-w-[954px]">
       <header className="mb-2 flex items-end justify-between gap-6 rounded-[14px] bg-white px-[17px] pb-4 pt-[19px] max-[700px]:items-stretch max-[700px]:flex-col">
@@ -90,9 +90,12 @@ function FilterButton({ active, onClick, provider, label, count }: { active: boo
 
 function ConnectedAccountCard({ account, onOpen, onDeactivate }: { account: DashboardConnectedAccount; onOpen: () => void; onDeactivate: () => void }) {
   const needsReconnect = account.status === "error";
+  const avatarUrl = account.avatarUrl?.trim();
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  useEffect(() => setAvatarFailed(false), [avatarUrl]);
   return <article className="group relative flex min-w-0 items-start justify-between gap-3 rounded-xl border border-[#e3e8ef] bg-white p-4 shadow-[0_2px_8px_rgba(37,55,78,.04)] transition hover:border-[#b9ddec] hover:shadow-[0_5px_14px_rgba(37,55,78,.08)]">
     <button className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 border-0 bg-transparent pr-8 text-left focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" onClick={onOpen}>
-      <span className="grid size-14 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-[#26394f] to-[#111923] text-[21px] font-bold text-white">{account.name.slice(0, 1).toUpperCase()}</span>
+      <span className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-gradient-to-br from-[#26394f] to-[#111923] text-[21px] font-bold text-white">{avatarUrl && !avatarFailed ? <img className="size-full object-cover" src={avatarUrl} alt={`Avatar ${account.name}`} onError={() => setAvatarFailed(true)} /> : account.name.slice(0, 1).toUpperCase()}</span>
       <span className="grid min-w-0 gap-2 pt-0.5"><strong className="truncate text-[14px]">{account.name}</strong><small className="flex min-w-0 items-center gap-2 truncate text-[12px] text-[#7e8b9c]"><span className="inline-grid size-7 shrink-0 place-items-center rounded-lg bg-[#edf1f5]"><PlatformIcon provider={account.platform} /></span><span className="truncate">{needsReconnect ? "Cần kết nối lại" : account.username ? `@${account.username}` : `${account.platform === "zalo" ? "Zalo" : "Telegram"} cá nhân`}</span></small></span>
     </button>
     <span className={`absolute right-12 top-4 text-[19px] ${needsReconnect ? "text-[#e87927]" : "text-[#f3a51d]"}`} title={needsReconnect ? "Cần kết nối lại" : "Đang hoạt động"}>●</span>
