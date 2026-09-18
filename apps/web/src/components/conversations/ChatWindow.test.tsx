@@ -120,7 +120,7 @@ describe("ChatWindow pinned messages", () => {
     expect(html).toContain("Tin mới nhất cần ghim có nội dung rất dài");
     expect(html).toMatch(/class="[^"]*truncate[^"]*"/);
     expect(html).toContain('aria-label="Mở danh sách tin ghim"');
-    expect(html).toContain('aria-label="Bỏ ghim tin nhắn"');
+    expect(html).not.toContain('aria-label="Bỏ ghim tin nhắn"');
   });
 
   it("copies the selected pinned message quote", async () => {
