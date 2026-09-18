@@ -211,6 +211,15 @@ describe("ChatWindow loading and composer layout", () => {
     expect(source).toContain("Chưa có tin nhắn");
   });
 
+  it("keeps the chat column at full height and uses a smooth loading animation", () => {
+    const source = readFileSync(new URL("./ChatWindow.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('className="chat-main flex h-full min-w-0 min-h-0 flex-col bg-slate-100"');
+    expect(source).toContain("animate-bounce");
+    expect(source).toContain("[animation-delay:-0.3s]");
+    expect(source).toContain("[animation-delay:-0.15s]");
+  });
+
   it("keeps the message composer visible below the scrollable message area", () => {
     const composer = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
 
