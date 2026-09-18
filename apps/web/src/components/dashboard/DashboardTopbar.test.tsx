@@ -15,7 +15,7 @@ describe("DashboardTopbar", () => {
     expect(logo).not.toContain("<rect");
     expect(source).toContain("nhuusiuu");
     expect(source).toContain("OWNER");
-    expect(source).toContain("Hội thoại");
+    expect(source).toContain("Hộp thư");
   });
 
   it("exposes clickable brand and conversation navigation callbacks", () => {

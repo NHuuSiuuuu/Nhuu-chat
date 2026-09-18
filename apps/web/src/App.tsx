@@ -22,7 +22,7 @@ interface AuthResponse {
 
 type AppPage = "dashboard" | "telegram" | "inbox" | "settings" | "profile" | "development";
 type InboxPlatform = "telegram_personal" | "zalo_personal" | undefined;
-type HeaderNavItem = "Hội thoại" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt";
+type HeaderNavItem = "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt";
 const INBOX_PLATFORM_STORAGE_KEY = "nhuu-chat.inbox-platform";
 
 function pageFromPath(pathname: string): AppPage {
@@ -129,7 +129,7 @@ export function App() {
     const logout = () => { persistInboxPlatform(undefined); clearAuth(); setAuth(null); };
     const openProfile = () => navigate("profile");
     const navigateFromHeader = (item: HeaderNavItem) => {
-      if (item === "Hội thoại") return navigate("inbox", inboxPlatform);
+      if (item === "Hộp thư") return navigate("inbox", inboxPlatform);
       if (item === "Cài đặt") return navigate("settings");
       return navigate("development", undefined, item);
     };

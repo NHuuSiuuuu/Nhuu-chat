@@ -12,7 +12,7 @@ export type ConnectionProviderId =
 
 export const initialConnectionProvider: ConnectionProviderId = "telegram";
 
-export const dashboardNavItems = ["Hội thoại", "Đơn hàng", "Bài viết", "Thống kê", "Cài đặt"] as const;
+export const dashboardNavItems = ["Hộp thư", "Đơn hàng", "Bài viết", "Thống kê", "Cài đặt"] as const;
 
 export const platformIconBoxSize = 32;
 

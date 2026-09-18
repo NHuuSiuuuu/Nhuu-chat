@@ -7,8 +7,8 @@ describe("App navigation", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("onLogoClick={() => navigate(\"dashboard\")}");
-    expect(source).toContain('if (item === "Hội thoại") return navigate("inbox", inboxPlatform)');
-    expect(source).not.toContain('if (item === "Hội thoại") return navigate("inbox")');
+    expect(source).toContain('if (item === "Hộp thư") return navigate("inbox", inboxPlatform)');
+    expect(source).not.toContain('if (item === "Hộp thư") return navigate("inbox")');
     expect(source).toContain('if (item === "Cài đặt") return navigate("settings")');
     expect(source).toContain('return navigate("development", undefined, item)');
     expect(source).toContain("window.history.pushState");

@@ -25,7 +25,7 @@ describe("dashboard connection UI", () => {
 
   it("defines the top navigation shown in the Hchat header", () => {
     expect(dashboardNavItems).toEqual([
-      "Hội thoại",
+      "Hộp thư",
       "Đơn hàng",
       "Bài viết",
       "Thống kê",

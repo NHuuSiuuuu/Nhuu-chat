@@ -114,7 +114,7 @@ export async function loadInboxQuickReplies(request: () => Promise<{ quickReplie
 type InboxAccount = DashboardAccount & { id?: string };
 type RetryPayloadEntry = { conversationId: string; payload: ComposerSendPayload; previewUrl?: string };
 
-export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNavigate, user, onLogout, onProfile }: { token: string; refresh?: () => Promise<string | null>; platform?: string; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hội thoại" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void; user?: InboxAccount | null; onLogout?: () => void; onProfile?: () => void }) {
+export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNavigate, user, onLogout, onProfile }: { token: string; refresh?: () => Promise<string | null>; platform?: string; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void; user?: InboxAccount | null; onLogout?: () => void; onProfile?: () => void }) {
   const [conversations, setConversations] = useState<ConversationContract[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageContract[]>([]);

@@ -133,7 +133,7 @@ type SettingsDashboardAccount = {
 
 type SettingsDashboardTopbarProps = {
   onLogoClick?: () => void;
-  onNavigate?: (item: "Hội thoại" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void;
+  onNavigate?: (item: "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void;
   user?: SettingsDashboardAccount | null;
   onLogout?: () => void;
   onProfile?: () => void;
@@ -799,7 +799,7 @@ interface SettingsPageProps {
   token: string;
   refresh?: () => Promise<string | null>;
   onLogoClick?: () => void;
-  onNavigate?: (item: "Hội thoại" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void;
+  onNavigate?: (item: "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void;
   user?: SettingsDashboardAccount | null;
   onLogout?: () => void;
   onProfile?: () => void;
