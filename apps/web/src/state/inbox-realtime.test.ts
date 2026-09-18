@@ -61,6 +61,12 @@ describe("inbox realtime state", () => {
     const updated = upsertConversation([{ ...conversation, customerName: "Nguyễn Văn Hữu", customerAvatarUrl: "avatar.png", accountName: "Nhuu Telegram", accountAvatarUrl: "account.png", tags: [{ id: "tag-1", name: "Mua hàng", color: "#22c55e" }] }], { ...conversation, lastMessageSnippet: "Mới" });
     expect(updated[0]).toMatchObject({ customerName: "Nguyễn Văn Hữu", customerAvatarUrl: "avatar.png", accountName: "Nhuu Telegram", accountAvatarUrl: "account.png", tags: [{ id: "tag-1" }], lastMessageSnippet: "Mới" });
   });
+
+  it("keeps the existing avatar when a realtime payload contains an empty avatar URL", () => {
+    const updated = upsertConversation([{ ...conversation, customerAvatarUrl: "https://cdn.example/customer.png" }], { ...conversation, customerAvatarUrl: "", lastMessageSnippet: "Mới" });
+
+    expect(updated[0].customerAvatarUrl).toBe("https://cdn.example/customer.png");
+  });
 });
 
 describe("inbox realtime message correlation", () => {

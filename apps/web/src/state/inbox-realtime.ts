@@ -25,6 +25,7 @@ export function upsertConversation(conversations: ConversationContract[], conver
   const merged = {
     ...existing,
     ...conversation,
+    customerAvatarUrl: conversation.customerAvatarUrl?.trim() || existing?.customerAvatarUrl,
     accountName: conversation.accountName ?? existing?.accountName,
     accountAvatarUrl: conversation.accountAvatarUrl ?? existing?.accountAvatarUrl,
     tags: conversation.tags ?? existing?.tags

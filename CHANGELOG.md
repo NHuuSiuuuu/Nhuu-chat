@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa danh sách hội thoại giữ lại URL avatar hợp lệ khi event realtime trả về dữ liệu avatar rỗng và truyền URL đã chuẩn hóa vào thẻ ảnh.
 - Bỏ nút X khỏi thanh ghim thu gọn; thao tác bỏ ghim vẫn có trong danh sách tin ghim và trên từng tin nhắn.
 - Cập nhật thanh tin ghim: nút mũi tên đổi chiều khi mở/thu danh sách, mỗi tin ghim hỗ trợ bỏ ghim và sao chép nội dung.
 - Thêm ghim tối đa 10 tin nhắn cho mỗi hội thoại dành cho admin/agent: nút ghim khi hover, thanh tin đã ghim có điều hướng và cuộn tới tin gốc, API ghim/bỏ ghim cùng đồng bộ Socket.IO realtime.
