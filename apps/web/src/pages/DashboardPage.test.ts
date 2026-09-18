@@ -77,4 +77,12 @@ describe("dashboard connected accounts", () => {
     expect(source).not.toContain("⌃");
     expect(source).not.toContain("⌄");
   });
+
+  it("uses an SVG layers icon for the merge action and balances mobile spacing", () => {
+    const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('<InboxIcon name="layers" size={17} />');
+    expect(source).toContain("max-[700px]:mt-[34px]");
+    expect(source).not.toContain('<span className="text-lg">♣</span> Gộp trang');
+  });
 });

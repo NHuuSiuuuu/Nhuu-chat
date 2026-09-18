@@ -1,6 +1,6 @@
 import * as React from "react";
 
-type IconName = "inbox" | "chat" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "chevron-left" | "chevron-down" | "chevron-up" | "tag" | "edit" | "trash" | "pin" | "monitor" | "phone" | "cloud" | "wrench" | "clock" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more" | "check" | "copy" | "download" | "upload" | "file" | "camera" | "robot";
+type IconName = "inbox" | "chat" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "chevron-left" | "chevron-down" | "chevron-up" | "tag" | "edit" | "trash" | "pin" | "monitor" | "phone" | "cloud" | "wrench" | "clock" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more" | "check" | "copy" | "download" | "upload" | "file" | "camera" | "robot" | "layers";
 
 export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -42,7 +42,8 @@ export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }
     upload: <><path d="M12 21V9M7 14l5-5 5 5" /><path d="M5 3h14" /></>,
     file: <><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v5h4M9 13h6M9 17h6" /></>,
     camera: <><path d="M4 8h3l1.5-2h7L17 8h3v11H4z" /><circle cx="12" cy="13" r="3" /></>,
-    robot: <><rect x="5" y="8" width="14" height="11" rx="3" /><path d="M12 4v4M9 13h.01M15 13h.01M9 16h6" /><path d="M3 12v3M21 12v3" /></>
+    robot: <><rect x="5" y="8" width="14" height="11" rx="3" /><path d="M12 4v4M9 13h.01M15 13h.01M9 16h6" /><path d="M3 12v3M21 12v3" /></>,
+    layers: <><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 12 9 5 9-5M3 16l9 5 9-5" /></>
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
