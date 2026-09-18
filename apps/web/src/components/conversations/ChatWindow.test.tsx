@@ -219,8 +219,16 @@ describe("ChatWindow loading and composer layout", () => {
     expect(source).toContain("[animation-delay:-0.3s]");
     expect(source).toContain("[animation-delay:-0.15s]");
     expect(source).toContain("size-8 place-items-center");
-    expect(source).toContain("size-1.5 animate-bounce");
     expect(source).not.toMatch(/(?:w|h)-16|md:(?:w|h)-/);
+  });
+
+  it("uses the supplied transparent loading animation", () => {
+    const source = readFileSync(new URL("./ChatWindow.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('src="/message-loading.png"');
+    expect(source).toContain('alt=""');
+    expect(source).toContain('aria-hidden="true"');
+    expect(source).toContain('aria-label="Đang tải tin nhắn"');
   });
 
   it("keeps the message composer visible below the scrollable message area", () => {
