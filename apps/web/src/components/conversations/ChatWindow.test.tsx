@@ -225,7 +225,7 @@ describe("ChatWindow loading and composer layout", () => {
   it("uses the supplied transparent loading animation", () => {
     const source = readFileSync(new URL("./ChatWindow.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain('src="/message-loading.png"');
+    expect(source).toContain('src="/message-loading-v2.png"');
     expect(source).toContain('alt=""');
     expect(source).toContain('aria-hidden="true"');
     expect(source).toContain('aria-label="Đang tải tin nhắn"');

@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Đổi animation loading Inbox sang mẫu 2 chấm xanh mới, vẫn tách nền trong suốt và giữ kích thước `size-8`.
 - Dùng animation loading gradient đã tách nền trong suốt, hiển thị gọn ở kích thước `size-8`.
 - Thu nhỏ animation loading tin nhắn thành badge `size-8`, đồng nhất trên mobile và desktop.
 - Sửa Inbox không nháy dòng `Chưa có tin nhắn` khi mở hội thoại: hiển thị spinner trong lúc tải, giữ vùng tin nhắn cuộn được và cố định ô nhập ở đáy khung chat.

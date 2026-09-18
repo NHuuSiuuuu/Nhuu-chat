@@ -172,7 +172,7 @@ export function ChatWindow({ conversation, messages, isLoadingMessages = false, 
       <div className="flex min-w-0 flex-1 flex-col">
         <PinnedMessagesBar pinnedMessages={pinnedMessages} activeIndex={visiblePinnedIndex} onChangeIndex={setActivePinnedIndex} onUnpinMessage={onUnpinMessage} pinError={pinError} />
         <div ref={messagesRef} onScroll={handleScroll} className="chat-messages relative min-h-0 flex-1 overflow-y-auto bg-[#f0f2f5] p-6">
-          {isLoadingMessages ? <div className="grid h-full place-items-center" role="status" aria-label="Đang tải tin nhắn"><img className="size-8 object-contain" src="/message-loading.png" alt="" aria-hidden="true" /></div> : messages.length === 0 ? <p className="chat-no-messages text-center text-gray-400">Chưa có tin nhắn</p> : messages.map((message) => {
+          {isLoadingMessages ? <div className="grid h-full place-items-center" role="status" aria-label="Đang tải tin nhắn"><img className="size-8 object-contain" src="/message-loading-v2.png" alt="" aria-hidden="true" /></div> : messages.length === 0 ? <p className="chat-no-messages text-center text-gray-400">Chưa có tin nhắn</p> : messages.map((message) => {
             const senderName = messageSenderName(message, conversation, name);
             const messageIsPinned = isPinned(message.id);
             const pinLimitReached = pinnedMessages.length >= 10 && !messageIsPinned;
