@@ -69,4 +69,12 @@ describe("dashboard connected accounts", () => {
     expect(source).toContain("min-[701px]:hidden");
     expect(source).toContain("min-[701px]:flex");
   });
+
+  it("uses SVG chevrons instead of Unicode arrow characters for the mobile filter", () => {
+    const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("<InboxIcon name={isFilterMenuOpen ? \"chevron-up\" : \"chevron-down\"}");
+    expect(source).not.toContain("⌃");
+    expect(source).not.toContain("⌄");
+  });
 });
