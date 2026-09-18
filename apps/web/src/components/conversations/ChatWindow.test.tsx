@@ -200,3 +200,20 @@ describe("ChatWindow mobile header", () => {
     expect(source).toContain("max-[899px]:gap-1");
   });
 });
+
+describe("ChatWindow loading and composer layout", () => {
+  it("renders a loading state instead of the empty-message label while messages load", () => {
+    const source = readFileSync(new URL("./ChatWindow.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("isLoadingMessages = false");
+    expect(source).toContain("isLoadingMessages ?");
+    expect(source).toContain('aria-label="Đang tải tin nhắn"');
+    expect(source).toContain("Chưa có tin nhắn");
+  });
+
+  it("keeps the message composer visible below the scrollable message area", () => {
+    const composer = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
+
+    expect(composer).toContain('className="message-composer shrink-0');
+  });
+});

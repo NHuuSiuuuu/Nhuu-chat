@@ -187,7 +187,7 @@ export function MessageComposer({ onSend, quickReplies, disabled = false, draft,
   }
 
   return <>
-    <form ref={composerRef} className="message-composer mx-4 mb-3 mt-2 overflow-visible rounded-xl border border-gray-200 bg-white shadow-sm" onSubmit={(event) => { event.preventDefault(); void submitMessage(); }}>
+    <form ref={composerRef} className="message-composer shrink-0 mx-4 mb-3 mt-2 overflow-visible rounded-xl border border-gray-200 bg-white shadow-sm" onSubmit={(event) => { event.preventDefault(); void submitMessage(); }}>
       {availableTags.length > 0 && <div className="border-b border-gray-100">
         <div className="flex w-full overflow-x-auto scrollbar-none" role="group" aria-label="Gắn thẻ hội thoại">
           {availableTags.map((tag) => {

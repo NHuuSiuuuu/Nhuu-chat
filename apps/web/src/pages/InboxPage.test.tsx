@@ -257,6 +257,17 @@ describe("Inbox Tailwind migration", () => {
     expect(composer).toContain("flex gap-2 overflow-x-auto scrollbar-none");
   });
 
+  it("keeps message loading separate from the empty conversation state", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+    const chat = readFileSync(new URL("../components/conversations/ChatWindow.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("isLoadingMessages");
+    expect(source).toContain("setIsLoadingMessages(true)");
+    expect(source).toContain("setIsLoadingMessages(false)");
+    expect(source).toContain("isLoadingMessages={isLoadingMessages}");
+    expect(source).toContain('className={`flex min-h-0 flex-1 flex-col ${isConversationListOpen ? "max-[899px]:hidden" : ""}`}');
+  });
+
   it("owns the authenticated Gemini suggestions request and state", () => {
     const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
 

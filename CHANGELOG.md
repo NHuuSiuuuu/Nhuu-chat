@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa Inbox không nháy dòng `Chưa có tin nhắn` khi mở hội thoại: hiển thị spinner trong lúc tải, giữ vùng tin nhắn cuộn được và cố định ô nhập ở đáy khung chat.
 - Tối ưu header Inbox mobile: giảm padding/gap và cho cụm tên người dùng nhận phần chiều rộng còn lại để hạn chế truncate quá sớm.
 - Sắp xếp lại header Inbox trên mobile: tên người dùng luôn một dòng, icon nền tảng nằm bên dưới và cụm switch bot/menu bám sát mép phải.
 - Sửa layout Inbox mobile: danh sách hội thoại sát dưới header, bỏ bo góc trái trên và ẩn khung chat khi đang mở danh sách để không bị chồng khi quay lại.
