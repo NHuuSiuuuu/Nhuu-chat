@@ -37,5 +37,16 @@ describe("dashboard connected accounts", () => {
     expect(source).toContain("Hủy kích hoạt");
     expect(source).toContain("Xác nhận hủy kích hoạt");
     expect(source).toContain("/api/v1/channels/zalo-personal/logout");
+    expect(source).toContain("/api/v1/channels/telegram-personal/logout");
+    expect(source).toContain("account.id === \"zalo_personal\" || account.id === \"telegram_personal\"");
+  });
+
+  it("renders connected accounts as a compact responsive grid without the redundant section title", () => {
+    const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3");
+    expect(source).not.toContain(">Tài khoản đã kết nối</h2>");
+    expect(source).toContain("rounded-lg");
+    expect(source).toContain("<PlatformIcon provider={account.platform} />");
   });
 });
