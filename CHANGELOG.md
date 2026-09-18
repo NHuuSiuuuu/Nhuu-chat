@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Đồng bộ avatar tài khoản và khách hàng Zalo từ hồ sơ `zca-js`, giúp danh sách hội thoại hiển thị ảnh thật thay vì fallback chữ cái.
 - Sửa danh sách hội thoại giữ lại URL avatar hợp lệ khi event realtime trả về dữ liệu avatar rỗng và truyền URL đã chuẩn hóa vào thẻ ảnh.
 - Bỏ nút X khỏi thanh ghim thu gọn; thao tác bỏ ghim vẫn có trong danh sách tin ghim và trên từng tin nhắn.
 - Cập nhật thanh tin ghim: nút mũi tên đổi chiều khi mở/thu danh sách, mỗi tin ghim hỗ trợ bỏ ghim và sao chép nội dung.

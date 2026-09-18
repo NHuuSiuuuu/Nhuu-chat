@@ -319,6 +319,7 @@ async function completeQrLogin(pending: PendingZaloPersonalSession, api: ZaloPer
         zaloUserId,
         displayName: nullableString(account.displayName),
         username: nullableString(account.username),
+        avatarUrl: nullableString(account.avatarUrl),
         status: "connected",
         qrSessionId: pending.id,
         qrExpiresAt: pending.expiresAt,
@@ -400,12 +401,23 @@ async function restoreZaloPersonalClient(userId: string, encryptedCredentials: s
       const api = await client.login(credentials);
       attachZaloPersonalMessageSync(userId, api);
       await api.startListener();
+      const account = await api.getAccountInfo().catch(() => undefined);
       await ZaloPersonalSessionModel.updateOne(
         { ownerId: userId },
-        { $set: { status: "connected", lastSeenAt: new Date(), lastErrorCode: null } }
+        {
+          $set: {
+            status: "connected",
+            lastSeenAt: new Date(),
+            lastErrorCode: null,
+            ...(account?.avatarUrl ? { avatarUrl: nullableString(account.avatarUrl) } : {}),
+            ...(account?.displayName ? { displayName: nullableString(account.displayName) } : {}),
+            ...(account?.username ? { username: nullableString(account.username) } : {})
+          }
+        }
       );
       runtimeErrorsByOwner.delete(userId);
       activeClientsByOwner.set(userId, api);
+      await refreshZaloCustomerAvatars(userId, api).catch(() => undefined);
       return api;
     } catch (error) {
       lastFailure = error;
@@ -423,6 +435,43 @@ async function restoreZaloPersonalClient(userId: string, encryptedCredentials: s
   }
 
   throw lastFailure instanceof Error ? lastFailure : new Error("Unable to restore Zalo personal session");
+}
+
+// Avatar trong payload tin nhắn không ổn định; đồng bộ lại từ hồ sơ Zalo để các hội thoại cũ cũng có ảnh.
+async function refreshZaloCustomerAvatars(userId: string, api: ZaloPersonalApi): Promise<void> {
+  if (!api.getUserProfiles) return;
+
+  const conversations = await ConversationModel.find({ ownerId: userId, platform: "zalo_personal" })
+    .select("customerId")
+    .lean();
+  const customerIds = [...new Set(
+    conversations
+      .map((conversation) => stringValue(conversation.customerId))
+      .filter((value): value is string => Boolean(value))
+  )];
+  if (customerIds.length === 0) return;
+
+  const customers = await CustomerModel.find({ _id: { $in: customerIds }, platform: "zalo_personal" })
+    .select("platformId")
+    .lean();
+  const platformIds = [...new Set(
+    customers
+      .map((customer) => stringValue(customer.platformId))
+      .filter((value): value is string => Boolean(value))
+  )];
+  if (platformIds.length === 0) return;
+
+  const profiles = await api.getUserProfiles(platformIds);
+  await Promise.all(
+    Object.entries(profiles).map(async ([platformId, profile]) => {
+      const avatarUrl = stringValue(profile.avatarUrl);
+      if (!avatarUrl) return;
+      await CustomerModel.updateOne(
+        { platform: "zalo_personal", platformId },
+        { $set: { avatarUrl } }
+      );
+    })
+  );
 }
 
 // Listener chỉ chuyển event đã chuẩn hóa vào cùng luồng lưu trữ, không để payload native rò sang service.
@@ -776,14 +825,16 @@ function toQrStatus(session: PendingZaloPersonalSession): ZaloPersonalQrStatus {
   };
 }
 
-function safeAccountMetadata(value: { displayName?: unknown; username?: unknown; zaloUserId?: unknown }): Pick<ZaloPersonalStatus, "displayName" | "username" | "zaloUserId"> {
+function safeAccountMetadata(value: { displayName?: unknown; username?: unknown; zaloUserId?: unknown; avatarUrl?: unknown }): Pick<ZaloPersonalStatus, "displayName" | "username" | "zaloUserId" | "avatarUrl"> {
   const displayName = stringValue(value.displayName);
   const username = stringValue(value.username);
   const zaloUserId = stringValue(value.zaloUserId);
+  const avatarUrl = stringValue(value.avatarUrl);
   return {
     ...(displayName ? { displayName } : {}),
     ...(username ? { username } : {}),
-    ...(zaloUserId ? { zaloUserId } : {})
+    ...(zaloUserId ? { zaloUserId } : {}),
+    ...(avatarUrl ? { avatarUrl } : {})
   };
 }
 

@@ -63,7 +63,7 @@ describe("Zalo personal client adapter", () => {
   it("normalizes the zca-js 2.2 account profile fields after QR login", async () => {
     const zcaApi = {
       getContext: vi.fn(() => ({ imei: "imei", cookie: [], userAgent: "ua" })),
-      fetchAccountInfo: vi.fn(async () => ({ profile: { userId: "account-2", displayName: "Demo Zalo", username: "demo-zalo" } })),
+      fetchAccountInfo: vi.fn(async () => ({ profile: { userId: "account-2", displayName: "Demo Zalo", username: "demo-zalo", avatar: "https://avatar.example/demo.png" } })),
       listener: { on: vi.fn(), start: vi.fn(), stop: vi.fn() },
       sendMessage: vi.fn(async () => ({ message: { msgId: 1 } }))
     };
@@ -76,8 +76,23 @@ describe("Zalo personal client adapter", () => {
     await expect(api.getAccountInfo()).resolves.toEqual({
       id: "account-2",
       displayName: "Demo Zalo",
-      username: "demo-zalo"
+      username: "demo-zalo",
+      avatarUrl: "https://avatar.example/demo.png"
     });
+  });
+
+  it("normalizes customer avatars returned by zca-js user profiles", async () => {
+    const zcaApi = {
+      getContext: vi.fn(() => ({ imei: "imei", cookie: [], userAgent: "ua" })),
+      fetchAccountInfo: vi.fn(async () => ({ profile: {} })),
+      getUserInfo: vi.fn(async () => ({ changed_profiles: { "customer-1_0": { avatar: "https://avatar.example/customer.png" } } })),
+      listener: { on: vi.fn(), start: vi.fn(), stop: vi.fn() },
+      sendMessage: vi.fn(async () => ({ message: { msgId: 1 } }))
+    };
+    const client = createZaloPersonalClient({ zcaFactory: () => ({ loginQR: async () => zcaApi, login: async () => zcaApi }) });
+    const api = await client.loginQR(vi.fn());
+
+    await expect(api.getUserProfiles?.(["customer-1"])).resolves.toEqual({ "customer-1": { avatarUrl: "https://avatar.example/customer.png" } });
   });
 
   it("keeps a string message id returned by the native send response", async () => {

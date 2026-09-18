@@ -9,6 +9,7 @@ export const zaloPersonalStatusSchema = z.object({
   expiresAt: z.string().datetime().optional(),
   displayName: z.string().optional(),
   username: z.string().optional(),
+  avatarUrl: z.string().optional(),
   zaloUserId: z.string().optional(),
   errorCode: z.string().optional()
 }).strict();

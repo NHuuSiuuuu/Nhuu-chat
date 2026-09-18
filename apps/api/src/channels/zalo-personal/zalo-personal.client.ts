@@ -20,7 +20,8 @@ const ZaloConstructor = (zca as unknown as { Zalo: ZcaConstructor }).Zalo;
 
 export interface ZaloPersonalApi {
   getContext(): { credentials: unknown };
-  getAccountInfo(): Promise<{ id?: unknown; displayName?: unknown; username?: unknown }>;
+  getAccountInfo(): Promise<{ id?: unknown; displayName?: unknown; username?: unknown; avatarUrl?: unknown }>;
+  getUserProfiles?(userIds: string[]): Promise<Record<string, { avatarUrl?: unknown }>>;
   onMessage(listener: (event: unknown) => Promise<void>): void;
   onError(listener: (error: unknown) => void): void;
   onClosed(listener: (code?: unknown, reason?: unknown) => void): void;
@@ -38,6 +39,7 @@ export interface ZaloPersonalClient {
 interface ZcaApi {
   getContext(): Record<string, unknown>;
   fetchAccountInfo(): Promise<{ profile?: Record<string, unknown> }>;
+  getUserInfo?(userIds: string | string[]): Promise<{ changed_profiles?: Record<string, Record<string, unknown>> }>;
   listener: {
     on(event: "message", listener: (event: unknown) => unknown): void;
     on(event: "error", listener: (error: unknown) => unknown): void;
@@ -101,8 +103,14 @@ class ZaloPersonalClientAdapter implements ZaloPersonalClient {
         return {
           id: profile.userId ?? profile.uid,
           displayName: profile.displayName ?? profile.dName,
-          username: profile.username ?? profile.userName
+          username: profile.username ?? profile.userName,
+          avatarUrl: profile.avatar ?? profile.avatarUrl
         };
+      },
+      getUserProfiles: async (userIds) => {
+        if (!zcaApi.getUserInfo) return {};
+        const response = await zcaApi.getUserInfo(userIds);
+        return Object.fromEntries(Object.entries(response.changed_profiles ?? {}).map(([key, profile]) => [key.split("_")[0], { avatarUrl: profile.avatar ?? profile.avatarUrl }]));
       },
       // Bắt rejection của callback async để lỗi một event không làm chết tiến trình API.
       onMessage: (listener) => zcaApi.listener.on("message", (event) => {

@@ -7,6 +7,7 @@ const zaloPersonalSessionSchema = new Schema(
     zaloUserId: { type: String, required: true },
     displayName: { type: String, default: null },
     username: { type: String, default: null },
+    avatarUrl: { type: String, default: null },
     status: { type: String, enum: ["disconnected", "waiting_qr", "connected", "expired", "error"], default: "disconnected", index: true },
     qrSessionId: { type: String, default: null },
     qrExpiresAt: { type: Date, default: null },
