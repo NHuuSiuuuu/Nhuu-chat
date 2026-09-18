@@ -178,3 +178,16 @@ describe("ChatWindow pinned messages", () => {
     expect(stopPropagation.mock.invocationCallOrder[0]).toBeLessThan(onUnpinMessage.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY);
   });
 });
+
+describe("ChatWindow mobile header", () => {
+  it("keeps the user identity on one line and groups the right-side controls", () => {
+    const source = readFileSync(new URL("./ChatWindow.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('className="min-w-0 flex flex-col"');
+    expect(source).toContain('className="mb-1 truncate whitespace-nowrap text-base font-semibold"');
+    expect(source).toContain('className="ml-auto flex shrink-0 items-center gap-2"');
+    expect(source).toContain('aria-label="Tùy chọn hội thoại"');
+    expect(source).toContain('<InboxIcon name="more" />');
+    expect(source).not.toContain('aria-label="Thông tin hội thoại"><InboxIcon name="users" />');
+  });
+});
