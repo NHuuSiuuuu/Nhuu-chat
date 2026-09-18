@@ -54,6 +54,12 @@ describe("MessageComposer accessibility", () => {
     expect(source).not.toContain('className="flex w-full overflow-x-auto scrollbar-none"');
   });
 
+  it("keeps conversation tags compact with the approved typography", () => {
+    const source = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("min-w-[92px] flex-1 px-2 py-1 text-[10px] font-normal");
+  });
+
   it("defines keyboard shortcut behavior and the shortcut dialog", () => {
     const source = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
 

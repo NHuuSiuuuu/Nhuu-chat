@@ -192,7 +192,7 @@ export function MessageComposer({ onSend, quickReplies, disabled = false, draft,
         <div className="flex w-full flex-wrap gap-1" role="group" aria-label="Gắn thẻ hội thoại">
           {availableTags.map((tag) => {
             const isAttached = conversationTags.some((attached) => attached.id === tag.id);
-            return <button className="min-w-[92px] flex-1 px-2 py-2 text-[11px] font-bold text-white transition hover:brightness-95 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-300 disabled:cursor-not-allowed disabled:opacity-50" style={{ backgroundColor: tag.color }} type="button" key={tag.id} onClick={() => void toggleConversationTag(tag)} disabled={!onTagsChange} aria-label={`Gắn thẻ ${tag.name}`} aria-pressed={isAttached}>{isAttached && <span className="mr-1 inline-block size-2 rounded-full bg-white align-middle" aria-hidden="true" />}<span>{tag.name}</span></button>;
+            return <button className="min-w-[92px] flex-1 px-2 py-1 text-[10px] font-normal text-white transition hover:brightness-95 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-300 disabled:cursor-not-allowed disabled:opacity-50" style={{ backgroundColor: tag.color }} type="button" key={tag.id} onClick={() => void toggleConversationTag(tag)} disabled={!onTagsChange} aria-label={`Gắn thẻ ${tag.name}`} aria-pressed={isAttached}>{isAttached && <span className="mr-1 inline-block size-2 rounded-full bg-white align-middle" aria-hidden="true" />}<span>{tag.name}</span></button>;
           })}
         </div>
       </div>}
