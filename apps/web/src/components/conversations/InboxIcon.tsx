@@ -1,6 +1,6 @@
 import * as React from "react";
 
-type IconName = "inbox" | "chat" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "chevron-left" | "chevron-down" | "tag" | "edit" | "trash" | "pin" | "monitor" | "phone" | "cloud" | "wrench" | "clock" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more" | "check" | "download" | "upload" | "file" | "camera" | "robot";
+type IconName = "inbox" | "chat" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "chevron-left" | "chevron-down" | "chevron-up" | "tag" | "edit" | "trash" | "pin" | "monitor" | "phone" | "cloud" | "wrench" | "clock" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more" | "check" | "copy" | "download" | "upload" | "file" | "camera" | "robot";
 
 export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -15,6 +15,7 @@ export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }
     list: <><path d="M8 6h12M8 12h12M8 18h12" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></>,
     "chevron-left": <path d="m15 18-6-6 6-6" />,
     "chevron-down": <path d="m6 9 6 6 6-6" />,
+    "chevron-up": <path d="m6 15 6-6 6 6" />,
     tag: <path d="m20.6 13.4-7.2 7.2a2 2 0 0 1-2.8 0L3.4 13.4a2 2 0 0 1 0-2.8l7.2-7.2A2 2 0 0 1 12 2.8h5.8a2 2 0 0 1 2 2V10a2 2 0 0 1-.6 1.4ZM16 7h.01" />,
     edit: <><path d="m4 16.5-.8 4.3 4.3-.8L19 8.5 15.5 5 4 16.5Z" /><path d="m13.5 7 3.5 3.5" /></>,
     trash: <><path d="M5 7h14M10 11v6M14 11v6" /><path d="M9 7V4h6v3m-9 0 1 13h10l1-13" /></>,
@@ -36,6 +37,7 @@ export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }
     reply: <path d="m9 17-5-5 5-5M4 12h10a6 6 0 0 1 6 6" />,
     more: <><circle cx="5" cy="12" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /><circle cx="19" cy="12" r="1" fill="currentColor" /></>,
     check: <path d="m5 12 4 4L19 6" />,
+    copy: <><rect x="8" y="8" width="11" height="11" rx="1.5" /><path d="M16 8V5H5v11h3" /></>,
     download: <><path d="M12 3v12M7 10l5 5 5-5" /><path d="M5 21h14" /></>,
     upload: <><path d="M12 21V9M7 14l5-5 5 5" /><path d="M5 3h14" /></>,
     file: <><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v5h4M9 13h6M9 17h6" /></>,

@@ -104,15 +104,31 @@ describe("ChatWindow delivery indicator", () => {
 });
 
 describe("ChatWindow pinned messages", () => {
+  it("toggles the pinned list and exposes the matching arrow direction", () => {
+    expect(chatWindow.togglePinnedMessagesList(false)).toBe(true);
+    expect(chatWindow.togglePinnedMessagesList(true)).toBe(false);
+
+    const source = readFileSync(new URL("./ChatWindow.tsx", import.meta.url), "utf8");
+    expect(source).toContain('aria-label={isPinnedListOpen ? "Thu danh sách tin ghim" : "Mở danh sách tin ghim"}');
+    expect(source).toContain('name={isPinnedListOpen ? "chevron-up" : "chevron-down"}');
+  });
+
   it("renders the pinned bar with the canonical quote, capacity count and navigation", () => {
     const html = renderChat();
 
     expect(html).toContain("Tin đã ghim · 2/10");
     expect(html).toContain("Tin mới nhất cần ghim có nội dung rất dài");
     expect(html).toMatch(/class="[^"]*truncate[^"]*"/);
-    expect(html).toContain('aria-label="Tin ghim trước"');
-    expect(html).toContain('aria-label="Tin ghim tiếp theo"');
+    expect(html).toContain('aria-label="Mở danh sách tin ghim"');
     expect(html).toContain('aria-label="Bỏ ghim tin nhắn"');
+  });
+
+  it("copies the selected pinned message quote", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+
+    await chatWindow.copyPinnedMessage("  Nội dung cần sao chép  ", { writeText });
+
+    expect(writeText).toHaveBeenCalledWith("Nội dung cần sao chép");
   });
 
   it("renders one pin action per message and marks pinned messages outside their content", () => {
