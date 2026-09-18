@@ -14,7 +14,8 @@ describe("conversation pin schemas", () => {
   it.each([
     [conversationPinMessageSchema, "pinning"],
     [conversationPinMessageIdSchema, "unpinning"]
-  ] as const)("rejects an empty message id when %s", (schema) => {
+  ] as const)("rejects an empty message id when %s", (schema, operation) => {
+    expect(operation).toMatch(/pinning|unpinning/);
     expect(() => schema.parse({ messageId: "   " })).toThrow();
   });
 
