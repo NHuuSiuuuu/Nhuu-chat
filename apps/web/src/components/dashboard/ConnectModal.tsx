@@ -31,7 +31,7 @@ interface ZaloQrStatus {
 export type FacebookOAuthFlow =
   | { status: "login" }
   | { status: "loading" }
-  | { status: "selecting"; selection: string; pages: FacebookOAuthPage[]; selectedPageId: string }
+  | { status: "selecting"; selection: string; pages: FacebookOAuthPage[]; selectedPageId: string; error: string | null }
   | { status: "connected" }
   | { status: "restart"; error: string };
 
@@ -39,6 +39,7 @@ type FacebookOAuthFlowAction =
   | { type: "loading" }
   | { type: "pages-loaded"; selection: string; pages: FacebookOAuthPage[] }
   | { type: "select-page"; pageId: string }
+  | { type: "selection-error"; error: string | null }
   | { type: "connected" }
   | { type: "restart"; error: string };
 
@@ -66,14 +67,24 @@ export function facebookOAuthFlowReducer(state: FacebookOAuthFlow, action: Faceb
     case "loading":
       return { status: "loading" };
     case "pages-loaded":
-      return { status: "selecting", selection: action.selection, pages: action.pages, selectedPageId: "" };
+      return { status: "selecting", selection: action.selection, pages: action.pages, selectedPageId: "", error: null };
     case "select-page":
-      return state.status === "selecting" ? { ...state, selectedPageId: action.pageId } : state;
+      return state.status === "selecting" ? { ...state, selectedPageId: action.pageId, error: null } : state;
+    case "selection-error":
+      return state.status === "selecting" ? { ...state, error: action.error } : state;
     case "connected":
       return { status: "connected" };
     case "restart":
       return { status: "restart", error: action.error };
   }
+}
+
+// Chỉ selection hết hạn buộc đăng nhập lại; các lỗi an toàn khác giữ picker để người dùng thử lại.
+export function facebookOAuthSelectionFailure(requestError: unknown): { restart: boolean; error: string } {
+  if (requestError instanceof FacebookPublishingApiError) {
+    return { restart: requestError.code === "FACEBOOK_OAUTH_SELECTION_INVALID", error: requestError.message };
+  }
+  return { restart: false, error: "Không thể kết nối Facebook Page" };
 }
 
 export function ConnectModal({ token, refresh, onClose, onConnected, initialProvider }: { token: string; refresh?: () => Promise<string | null>; onClose: () => void; onConnected: () => void; initialProvider?: ConnectionProviderId }) {
@@ -226,12 +237,14 @@ export function ConnectModal({ token, refresh, onClose, onConnected, initialProv
   async function selectFacebookPage() {
     if (facebookFlow.status !== "selecting" || !facebookFlow.selectedPageId) return;
     setError(null);
+    dispatchFacebookFlow({ type: "selection-error", error: null });
     setLoading(true);
     try {
       await selectFacebookOAuthPage(facebookFlow.selection, facebookFlow.selectedPageId);
       completeFacebookOAuthSelection(dispatchFacebookFlow, onConnected);
     } catch (requestError) {
-      dispatchFacebookFlow({ type: "restart", error: requestError instanceof FacebookPublishingApiError ? requestError.message : "Không thể kết nối Facebook Page" });
+      const failure = facebookOAuthSelectionFailure(requestError);
+      dispatchFacebookFlow({ type: failure.restart ? "restart" : "selection-error", error: failure.error });
     } finally {
       setLoading(false);
     }
@@ -277,7 +290,8 @@ export function ConnectModal({ token, refresh, onClose, onConnected, initialProv
 export function FacebookConnectContent({ flow, loading, onStart, onSelect, onSelectPage }: { flow: FacebookOAuthFlow; loading: boolean; onStart: () => void; onSelect: () => void; onSelectPage: (pageId: string) => void }) {
   if (flow.status === "connected") return <div className="px-9 py-[70px] text-center"><span className="mx-auto mb-[18px] grid h-[54px] w-[54px] place-items-center rounded-full bg-emerald-50 text-[28px] text-emerald-600">✓</span><h3 className="m-0 text-[17px] font-bold text-emerald-700">Đã kết nối Facebook Page thành công</h3><p className="text-[13px] text-slate-500">Facebook Page đã sẵn sàng để quản lý và đăng bài.</p></div>;
   if (flow.status === "restart") return <div className="px-9 py-[70px] text-center"><span className="mx-auto mb-[18px] grid h-[54px] w-[54px] place-items-center rounded-full bg-rose-50 text-[28px] text-rose-600">!</span><h3 className="m-0 text-[17px] font-bold text-slate-800">Không thể hoàn tất kết nối Facebook</h3><p className="text-xs text-rose-600" role="alert">{flow.error}</p><button className="mt-5 rounded-lg bg-[#1877f2] px-5 py-3 text-sm font-bold text-white hover:bg-[#166fe5] disabled:cursor-wait disabled:opacity-60" type="button" onClick={onStart} disabled={loading}>{loading ? "Đang chuyển tới Facebook..." : "Đăng nhập lại bằng Facebook"}</button></div>;
-  if (flow.status === "selecting") return <div className="px-6 py-10 sm:px-12 sm:py-16"><h3 className="m-0 text-xl font-bold text-slate-800">Chọn Facebook Page</h3><p className="mt-2 text-sm text-slate-500">Chọn Page mà tài khoản Facebook của anh có quyền quản lý và đăng bài.</p><div className="mt-6 grid gap-3">{flow.pages.map((page) => <label className={`flex cursor-pointer items-center gap-3 rounded-xl border p-4 ${flow.selectedPageId === page.id ? "border-sky-500 bg-sky-50" : "border-slate-200"}`} key={page.id}><input type="radio" name="facebook-page" value={page.id} checked={flow.selectedPageId === page.id} onChange={() => onSelectPage(page.id)} disabled={!page.canPublish} /><span className="min-w-0 flex-1"><strong className="block text-sm text-slate-800">{page.name}</strong><small className="text-xs text-slate-500">{page.canPublish ? "Có quyền đăng bài" : "Không có quyền đăng bài"}</small></span></label>)}</div><button className="mt-6 rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={onSelect} disabled={loading || !flow.selectedPageId}>{loading ? "Đang kết nối..." : "Kết nối Page này"}</button></div>;
+  if (flow.status === "selecting" && !flow.pages.some((page) => page.canPublish)) return <div className="px-9 py-[70px] text-center"><span className="mx-auto mb-[18px] grid h-[54px] w-[54px] place-items-center rounded-full bg-amber-50 text-[28px] text-amber-600">!</span><h3 className="m-0 text-[17px] font-bold text-slate-800">Không tìm thấy Facebook Page có quyền đăng bài</h3><p className="mx-auto mt-3 max-w-md text-[13px] leading-6 text-slate-500">Tài khoản vừa đăng nhập không quản lý Page nào có quyền đăng bài. Hãy kiểm tra quyền Page hoặc đăng nhập bằng tài khoản Facebook khác.</p><button className="mt-5 rounded-lg bg-[#1877f2] px-5 py-3 text-sm font-bold text-white hover:bg-[#166fe5] disabled:cursor-wait disabled:opacity-60" type="button" onClick={onStart} disabled={loading}>{loading ? "Đang chuyển tới Facebook..." : "Đăng nhập lại bằng Facebook"}</button></div>;
+  if (flow.status === "selecting") return <div className="px-6 py-10 sm:px-12 sm:py-16"><h3 className="m-0 text-xl font-bold text-slate-800">Chọn Facebook Page</h3><p className="mt-2 text-sm text-slate-500">Chọn Page mà tài khoản Facebook của anh có quyền quản lý và đăng bài.</p><div className="mt-6 grid gap-3">{flow.pages.map((page) => <label className={`flex cursor-pointer items-center gap-3 rounded-xl border p-4 ${flow.selectedPageId === page.id ? "border-sky-500 bg-sky-50" : "border-slate-200"}`} key={page.id}><input type="radio" name="facebook-page" value={page.id} checked={flow.selectedPageId === page.id} onChange={() => onSelectPage(page.id)} disabled={!page.canPublish} /><span className="min-w-0 flex-1"><strong className="block text-sm text-slate-800">{page.name}</strong><small className="text-xs text-slate-500">{page.canPublish ? "Có quyền đăng bài" : "Không có quyền đăng bài"}</small></span></label>)}</div><button className="mt-6 rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={onSelect} disabled={loading || !flow.selectedPageId}>{loading ? "Đang kết nối..." : "Kết nối Page này"}</button>{flow.error && <p className="mt-4 text-xs text-rose-600" role="alert">{flow.error}</p>}</div>;
   const oauthLoading = flow.status === "loading" || loading;
   return <div className="px-9 py-[70px] text-center"><span className="mx-auto mb-[18px] grid h-[54px] w-[54px] place-items-center rounded-full bg-blue-50 text-[28px] text-sky-500">f</span><h3 className="m-0 text-[17px] font-bold text-slate-800">Đăng nhập bằng tài khoản Facebook</h3><p className="mx-auto mt-3 max-w-md text-[13px] leading-6 text-slate-500">Đăng nhập Facebook để lấy danh sách Page anh đang quản lý, sau đó chọn Page muốn kết nối vào NhuuChat.</p><button className="mt-6 rounded-lg bg-[#1877f2] px-5 py-3 text-sm font-bold text-white hover:bg-[#166fe5] disabled:cursor-wait disabled:opacity-60" type="button" onClick={onStart} disabled={oauthLoading}>{oauthLoading ? "Đang chuyển tới Facebook..." : "Đăng nhập bằng Facebook"}</button><p className="mt-7 text-xs text-slate-400">Luồng nhập Page ID và Page Access Token thủ công vẫn được giữ nguyên trong mục Bài viết.</p></div>;
 }

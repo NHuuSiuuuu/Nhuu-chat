@@ -3,6 +3,7 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+import { FacebookPublishingApiError } from "../../lib/facebook-publishing.api.js";
 import * as connectModal from "./ConnectModal.js";
 
 function facebookFlowSurface(flow: connectModal.FacebookOAuthFlow): string {
@@ -79,7 +80,8 @@ describe("ConnectModal Tailwind migration", () => {
       status: "selecting",
       selection: "selection-token",
       pages: [{ id: "page-1", name: "Page One", canPublish: true }],
-      selectedPageId: "page-1"
+      selectedPageId: "page-1",
+      error: null
     };
 
     const connected = connectModal.facebookOAuthFlowReducer(selecting, { type: "connected" });
@@ -113,7 +115,8 @@ describe("ConnectModal Tailwind migration", () => {
       status: "selecting",
       selection: "expired-selection-token",
       pages: [{ id: "page-1", name: "Stale Page", canPublish: true }],
-      selectedPageId: "page-1"
+      selectedPageId: "page-1",
+      error: null
     };
 
     const restart = connectModal.facebookOAuthFlowReducer(selecting, { type: "restart", error: "Phiên chọn Page đã hết hạn." });
@@ -124,6 +127,82 @@ describe("ConnectModal Tailwind migration", () => {
     expect(html).toContain("Đăng nhập lại bằng Facebook");
     expect(html).not.toContain("Stale Page");
     expect(html).not.toContain("Chọn Facebook Page");
+  });
+
+  it("keeps the selected Page and picker visible after a retryable selection failure", () => {
+    const selecting: connectModal.FacebookOAuthFlow = {
+      status: "selecting",
+      selection: "selection-token",
+      pages: [{ id: "page-1", name: "Page One", canPublish: true }],
+      selectedPageId: "page-1",
+      error: null
+    };
+
+    const retryable = connectModal.facebookOAuthFlowReducer(selecting, {
+      type: "selection-error",
+      error: "Không thể kết nối Facebook Page"
+    });
+    const html = facebookFlowSurface(retryable);
+
+    expect(retryable).toEqual({ ...selecting, error: "Không thể kết nối Facebook Page" });
+    expect(html).toContain("Chọn Facebook Page");
+    expect(html).toContain("Page One");
+    expect(html).toContain("Không thể kết nối Facebook Page");
+    expect(html).toContain("Kết nối Page này");
+  });
+
+  it("clears a selecting error when retrying or choosing another Page", () => {
+    const failed: connectModal.FacebookOAuthFlow = {
+      status: "selecting",
+      selection: "selection-token",
+      pages: [
+        { id: "page-1", name: "Page One", canPublish: true },
+        { id: "page-2", name: "Page Two", canPublish: true }
+      ],
+      selectedPageId: "page-1",
+      error: "Facebook tạm thời không phản hồi."
+    };
+
+    expect(connectModal.facebookOAuthFlowReducer(failed, { type: "selection-error", error: null })).toEqual({ ...failed, error: null });
+    expect(connectModal.facebookOAuthFlowReducer(failed, { type: "select-page", pageId: "page-2" })).toEqual({
+      ...failed,
+      selectedPageId: "page-2",
+      error: null
+    });
+  });
+
+  it("restarts only when the OAuth Page selection has expired", () => {
+    expect(connectModal.facebookOAuthSelectionFailure(new FacebookPublishingApiError(
+      "FACEBOOK_OAUTH_SELECTION_INVALID",
+      "Danh sách Page đã hết hạn. Hãy đăng nhập Facebook lại.",
+      400
+    ))).toEqual({ restart: true, error: "Danh sách Page đã hết hạn. Hãy đăng nhập Facebook lại." });
+
+    expect(connectModal.facebookOAuthSelectionFailure(new FacebookPublishingApiError(
+      "FACEBOOK_OAUTH_PAGE_NOT_PUBLISHABLE",
+      "Tài khoản Facebook không có quyền đăng bài trên Page này.",
+      400
+    ))).toEqual({ restart: false, error: "Tài khoản Facebook không có quyền đăng bài trên Page này." });
+    expect(connectModal.facebookOAuthSelectionFailure(new TypeError("Failed to fetch"))).toEqual({
+      restart: false,
+      error: "Không thể kết nối Facebook Page"
+    });
+  });
+
+  it("explains when OAuth returns no publishable Pages and offers login recovery", () => {
+    const noPublishablePages: connectModal.FacebookOAuthFlow = {
+      status: "selecting",
+      selection: "selection-token",
+      pages: [{ id: "page-1", name: "Read-only Page", canPublish: false }],
+      selectedPageId: "",
+      error: null
+    };
+
+    const html = facebookFlowSurface(noPublishablePages);
+
+    expect(html).toContain("Không tìm thấy Facebook Page có quyền đăng bài");
+    expect(html).toContain("Đăng nhập lại bằng Facebook");
+    expect(html).not.toContain("Kết nối Page này");
   });
 
   it("uses the refreshed connection menu treatment", () => {
