@@ -1,11 +1,12 @@
 import * as React from "react";
 
-type IconName = "inbox" | "chat" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "chevron-left" | "chevron-down" | "chevron-up" | "tag" | "edit" | "trash" | "pin" | "monitor" | "phone" | "cloud" | "wrench" | "clock" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more" | "check" | "copy" | "download" | "upload" | "file" | "camera" | "robot" | "layers";
+type IconName = "inbox" | "chat" | "user" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "chevron-left" | "chevron-down" | "chevron-up" | "tag" | "edit" | "trash" | "pin" | "monitor" | "phone" | "cloud" | "wrench" | "clock" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more" | "check" | "copy" | "download" | "upload" | "file" | "camera" | "robot" | "layers";
 
 export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
     inbox: <><path d="M4 5h16v14H4z" /><path d="M4 14h4l1.5 2h5L16 14h4" /></>,
     chat: <><path d="M5 5h14v10H9l-4 4z" /><path d="M8 9h8M8 12h5" /></>,
+    user: <><circle cx="12" cy="8" r="3" /><path d="M5 20c.7-3.5 3-5.5 7-5.5s6.3 2 7 5.5" /></>,
     users: <><circle cx="9" cy="9" r="3" /><path d="M3.5 19c.5-3 2.3-4.5 5.5-4.5s5 1.5 5.5 4.5M16 7a3 3 0 0 1 0 5M16 14.5c2.4.2 3.8 1.7 4.2 4.5" /></>,
     settings: <><circle cx="12" cy="12" r="3" /><path d="m19 12 2-1-2-3-2 .5a7 7 0 0 0-1.5-1L15 5h-3l-.5 2.5a7 7 0 0 0-1.5 1L8 8 6 10l2 2a7 7 0 0 0 0 2l-2 2 2 2 2-.5a7 7 0 0 0 1.5 1L12 21h3l.5-2.5a7 7 0 0 0 1.5-1L19 18l2-2-2-2a7 7 0 0 0 0-2Z" /></>,
     help: <><circle cx="12" cy="12" r="9" /><path d="M9.7 9a2.4 2.4 0 1 1 3.8 2c-1 .7-1.5 1.1-1.5 2.2M12 16.5h.01" /></>,

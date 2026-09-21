@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Cập nhật nội dung tab `Giới thiệu` với hướng dẫn đăng nhập nhiều tài khoản, chế độ Gộp trang, icon SVG, số thứ tự và các lưu ý vận hành Zalo.
 - Thêm tab `Giới thiệu` trong Cài đặt với sidebar Tổng quan, Dashboard, Đa tài khoản, Quản lý tin nhắn, Trợ lý AI và Bảo mật & dữ liệu; nội dung được tổng hợp từ README và CHANGELOG.
 - Thu gọn thẻ tag trên thanh gắn thẻ: padding dọc `py-1`, cỡ chữ `10px` và font thường.
 - Sửa thanh tag phía trên ô nhập tin nhắn tự động xuống dòng trên màn hình hẹp, thêm khoảng cách giữa các tag và bỏ cuộn ngang gây cắt nội dung.

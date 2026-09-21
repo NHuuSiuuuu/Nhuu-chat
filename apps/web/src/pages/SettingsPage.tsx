@@ -120,6 +120,29 @@ const aboutSectionContent: Record<AboutSection, { summary: string; bullets: stri
   }
 };
 
+const multiAccountSteps = [
+  "Nhấn nút Kết nối ở sidebar, chọn kênh cần dùng và bắt đầu đăng nhập.",
+  "Quét QR Code bằng ứng dụng trên điện thoại để xác thực tài khoản.",
+  "Phiên đăng nhập được lưu bảo mật ở backend, không cần xác thực lại sau mỗi lần mở ứng dụng.",
+  "Nhấp vào tài khoản ở sidebar để chuyển đổi giữa các tài khoản mà không cần đăng xuất.",
+  "Theo dõi trạng thái Online/Offline và listener của từng tài khoản trên Dashboard."
+];
+
+const mergedPageSteps = [
+  "Từ Dashboard, nhấn Gộp trang để mở modal Chọn pages để chat.",
+  "Tìm kiếm và chọn từng Page/tài khoản muốn quản lý chung; có thể chọn tất cả Page đang hiển thị.",
+  "Xác nhận lựa chọn để mở Inbox hợp nhất, nơi tin nhắn từ nhiều nguồn được quản lý trong một màn hình.",
+  "Trong chế độ này, hội thoại vẫn giữ thông tin kênh và tài khoản gốc để nhân viên xử lý đúng ngữ cảnh."
+];
+
+const mergedPageNotes = [
+  "Tài khoản Zalo phải là tài khoản cá nhân hoặc tài khoản doanh nghiệp hợp lệ",
+  "App không hỗ trợ tài khoản đã bị Zalo khóa hoặc giới hạn tính năng",
+  "Đăng nhập thông qua QR Code - ứng dụng không lưu mật khẩu Zalo",
+  "Tài khoản đã bị ngắt kết nối (cookie hết hạn) sẽ không tự động gọi lên Zalo - cần kết nối lại thủ công hoặc quét QR mới",
+  "Với chế độ Gộp trang: chỉ gộp các tài khoản đang online để đảm bảo nhận tin nhắn đầy đủ"
+];
+
 type ChatbotAssistant = Pick<AssistantContract, "id" | "name" | "instructions" | "modelTier" | "enabled" | "fallbackMessage" | "channelScope" | "isDefault">;
 type GreetingTemplateDraft = Pick<AutomationTemplateContract, "name" | "keywords" | "responseTemplate" | "allowAiRewrite" | "priority" | "enabled" | "channelScope">;
 
@@ -840,6 +863,18 @@ interface SettingsPageProps {
   onProfile?: () => void;
 }
 
+function AboutInfoBlock({ title, icon, items, numbered = false }: { title: string; icon: "user" | "layers"; items: string[]; numbered?: boolean }) {
+  return <section className="mt-8 first:mt-0" aria-labelledby={`about-${icon}-title`}>
+    <h3 className="flex items-center gap-3 text-xl font-bold text-gray-900" id={`about-${icon}-title`}><span className="text-blue-600"><InboxIcon name={icon} size={22} /></span>{title}</h3>
+    <ul className={numbered ? "mt-5 list-none p-0" : "mt-5 list-disc pl-5"}>
+      {items.map((item, index) => numbered
+        ? <li className="flex gap-4 mb-4" key={item}><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-600">{index + 1}</span><span className="text-sm leading-6 text-gray-700">{item}</span></li>
+        : <li className="mb-3 text-sm leading-6 text-gray-700" key={item}>{item}</li>)}
+    </ul>
+  </section>;
+}
+
+// Hiển thị hướng dẫn vận hành theo section, giữ riêng nội dung đa tài khoản và Gộp trang.
 function AboutSettings() {
   const [activeSection, setActiveSection] = useState<AboutSection>(aboutSections[0]);
   const content = aboutSectionContent[activeSection];
@@ -853,12 +888,20 @@ function AboutSettings() {
     </aside>
     <article className="p-6 sm:p-8" aria-label={`Nội dung ${activeSection}`}>
       <div className="max-w-3xl">
-        {/* <span className="inline-flex rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">Nhuu-chat</span> */}
-        <h2 className="mt-4 text-2xl font-bold text-gray-900">{activeSection}</h2>
-        <p className="mt-3 text-sm leading-7 text-gray-600">{content.summary}</p>
-        <ul className="mt-6 grid gap-3">
-          {content.bullets.map((bullet) => <li className="flex gap-3 text-sm leading-6 text-gray-700" key={bullet}><span className="mt-2 size-1.5 shrink-0 rounded-full bg-sky-500" aria-hidden="true" /><span>{bullet}</span></li>)}
-        </ul>
+        {activeSection === "Đa tài khoản" ? <>
+          <AboutInfoBlock title="Đăng nhập nhiều tài khoản ở các kênh khác" icon="user" items={multiAccountSteps} numbered />
+          <AboutInfoBlock title="Chế độ gộp trang" icon="layers" items={mergedPageSteps} />
+          <section className="mt-8" aria-labelledby="about-important-notes">
+            <h3 className="text-xl font-bold text-gray-900" id="about-important-notes">Lưu ý quan trọng</h3>
+            <ul className="mt-5 list-disc pl-5">{mergedPageNotes.map((note) => <li className="mb-3 text-sm leading-6 text-gray-700" key={note}>{note}</li>)}</ul>
+          </section>
+        </> : <>
+          <h2 className="mt-4 text-2xl font-bold text-gray-900">{activeSection}</h2>
+          <p className="mt-3 text-sm leading-7 text-gray-600">{content.summary}</p>
+          <ul className="mt-6 grid gap-3">
+            {content.bullets.map((bullet) => <li className="flex gap-3 text-sm leading-6 text-gray-700" key={bullet}><span className="mt-2 size-1.5 shrink-0 rounded-full bg-sky-500" aria-hidden="true" /><span>{bullet}</span></li>)}
+          </ul>
+        </>}
       </div>
     </article>
   </div>;

@@ -88,6 +88,24 @@ describe("Settings page", () => {
     expect(settingsModule.settingsItemFromPath("/settings/about")).toBe("Giới thiệu");
   });
 
+  it("renders the multi-account introduction with numbered steps and merged-page guidance", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("Đăng nhập nhiều tài khoản ở các kênh khác");
+    expect(source).toContain('icon="user"');
+    expect(source).toContain('icon="layers"');
+    expect(source).toContain("flex gap-4 mb-4");
+    expect(source).toContain("h-8 w-8");
+    expect(source).toContain("Chế độ gộp trang");
+    expect(source).toContain("Chọn pages để chat");
+    expect(source).toContain("Lưu ý quan trọng");
+    expect(source).toContain("Tài khoản Zalo phải là tài khoản cá nhân hoặc tài khoản doanh nghiệp hợp lệ");
+    expect(source).toContain("App không hỗ trợ tài khoản đã bị Zalo khóa hoặc giới hạn tính năng");
+    expect(source).toContain("Đăng nhập thông qua QR Code");
+    expect(source).toContain("cookie hết hạn");
+    expect(source).toContain("chỉ gộp các tài khoản đang online");
+  });
+
   it("marks unfinished settings tabs as development placeholders", () => {
     expect(typeof settingsModule.isSettingsPlaceholderTab).toBe("function");
 
