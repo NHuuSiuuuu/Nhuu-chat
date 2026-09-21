@@ -900,8 +900,8 @@ function AboutInfoBlock({ title, icon, items, numbered = false }: { title: strin
 function AboutBulletGroup({ title, icon, items }: { title: string; icon: AboutIconName; items: string[] }) {
   return <section className="mt-8 first:mt-0" aria-labelledby={`about-${icon}-${title}`}>
     <h3 className="flex items-center gap-3 text-xl font-bold text-gray-900" id={`about-${icon}-${title}`}><span className="text-blue-600"><InboxIcon name={icon} size={22} /></span>{title}</h3>
-    <ul className="mt-5 grid gap-3">
-      {items.map((item) => <li className="flex items-start gap-3 text-sm leading-6 text-gray-700" key={item}><span className="mt-1 text-blue-600"><InboxIcon name={icon} size={16} /></span><span>{item}</span></li>)}
+    <ul className="mt-5 list-disc ml-5 pl-2">
+      {items.map((item) => <li className="mb-3 text-sm leading-6 text-gray-700" key={item}>{item}</li>)}
     </ul>
   </section>;
 }

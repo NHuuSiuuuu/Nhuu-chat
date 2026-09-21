@@ -128,6 +128,14 @@ describe("Settings page", () => {
     expect(source).toContain("lg:overflow-y-auto");
   });
 
+  it("keeps SVG icons in section headings and uses plain bullets for child items", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const bulletGroup = source.split("function AboutBulletGroup")[1]?.split("function AboutSettings")[0] ?? "";
+
+    expect(bulletGroup).toContain('className="mt-5 list-disc ml-5 pl-2"');
+    expect(bulletGroup).not.toContain("<InboxIcon name={icon} size={16} />");
+  });
+
   it("marks unfinished settings tabs as development placeholders", () => {
     expect(typeof settingsModule.isSettingsPlaceholderTab).toBe("function");
 

@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Làm gọn danh sách trong Tổng quan, Trợ lý AI và Bảo mật & dữ liệu: giữ icon SVG ở tiêu đề, bỏ icon khỏi mục con và dùng bullet mặc định.
 - Mở rộng nội dung Giới thiệu cho Tổng quan, Trợ lý AI và Bảo mật & dữ liệu; bổ sung hướng dẫn AI và sidebar Settings sticky có cuộn riêng.
 - Thêm icon cảnh báo cho mục `Lưu ý quan trọng` và giữ sidebar Cài đặt cố định khi cuộn trên màn hình lớn.
 - Cập nhật nội dung tab `Giới thiệu` với hướng dẫn đăng nhập nhiều tài khoản, chế độ Gộp trang, icon SVG, số thứ tự và các lưu ý vận hành Zalo.
