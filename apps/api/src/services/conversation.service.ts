@@ -1,4 +1,5 @@
 import { AppError } from "../common/errors.js";
+import { describeExternalError } from "../common/external-error.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { UserModel } from "../models/user.model.js";
 import { isValidObjectId } from "mongoose";
@@ -144,8 +145,14 @@ export async function getConversationReplySuggestions(id: string, auth: AuthUser
       modelTier: aiSettings.modelTier
     });
     return { suggestions: suggestions.slice(0, 3), source: "gemini" };
-  } catch {
+  } catch (error) {
     // Provider and configuration failures stay internal while preserving an empty fallback response.
+    console.error("Gemini reply suggestion failed", {
+      conversationId: id,
+      ownerId: auth.id,
+      trigger,
+      error: describeExternalError(error)
+    });
     return { suggestions: [], source: "fallback" };
   }
 }

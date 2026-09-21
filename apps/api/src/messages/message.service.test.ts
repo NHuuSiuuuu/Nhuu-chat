@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 
+import { describeExternalError } from "../common/external-error.js";
 import { listMessages, toMessage } from "../services/message.service.js";
+
+describe("external error diagnostics", () => {
+  it("keeps only safe native error details for outbound diagnostics", () => {
+    const error = Object.assign(new Error("Zalo request failed"), { code: "ECONNRESET", secret: "must-not-log" });
+
+    expect(describeExternalError(error)).toEqual({
+      name: "Error",
+      code: "ECONNRESET",
+      message: "Zalo request failed"
+    });
+    expect(describeExternalError(error)).not.toHaveProperty("secret");
+  });
+});
 
 describe("message pagination ordering", () => {
   it("requests the newest page first while returning messages chronologically", () => {

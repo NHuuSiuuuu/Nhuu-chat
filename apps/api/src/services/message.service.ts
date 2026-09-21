@@ -2,6 +2,7 @@ import { CustomFile } from "telegram/client/uploads.js";
 import type { EntityLike } from "telegram/define.js";
 import { TelegramClient } from "../channels/telegram/telegram.client.js";
 import { AppError } from "../common/errors.js";
+import { describeExternalError } from "../common/external-error.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { MessageModel } from "../models/message.model.js";
 import { pauseBot } from "../orchestration/bot-pause.service.js";
@@ -209,6 +210,12 @@ export async function sendOutboundMessage(
         );
       externalMessageId = `zalo_personal:${zaloAccountId}:${sent.id}`;
     } catch (error) {
+      console.error("Zalo outbound delivery failed", {
+        conversationId,
+        ownerId: auth.id,
+        conversationType: conversation.conversationType === "group" ? "group" : "private",
+        error: describeExternalError(error)
+      });
       await createOutboundMessage({
         conversationId,
         platform: conversation.platform,
