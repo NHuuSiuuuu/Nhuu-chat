@@ -93,7 +93,7 @@ export function updateFacebookPost(id: string, input: { message?: string; mode?:
     return request<FacebookPostResponse>(`/api/v1/facebook-page/posts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ ...input, scheduledAt: null }) }, { baseUrl });
   }
   // Multer cannot carry a JSON null. Draft mode is the backend's multipart-safe schedule-clear operation.
-  const formData = postFormData(input.scheduledAt === null ? { ...input, mode: input.mode ?? "draft", scheduledAt: undefined } : input);
+  const formData = postFormData(input.scheduledAt === null ? { ...input, mode: "draft", scheduledAt: undefined } : input);
   return request<FacebookPostResponse>(`/api/v1/facebook-page/posts/${encodeURIComponent(id)}`, { method: "PATCH", body: formData }, { baseUrl });
 }
 

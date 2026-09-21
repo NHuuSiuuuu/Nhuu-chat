@@ -65,6 +65,20 @@ describe("Facebook publishing API", () => {
     fetchMock.mockRestore();
   });
 
+  it("forces draft mode when clearing a schedule despite a scheduled caller mode", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ id: "post-1", status: "draft" }), { status: 200 }));
+    const image = new File(["image"], "replacement.png", { type: "image/png" });
+
+    await updateFacebookPost("post-1", { scheduledAt: null, mode: "scheduled", image }, "/api");
+
+    const body = fetchMock.mock.calls[0]?.[1]?.body as FormData;
+    expect(body).toBeInstanceOf(FormData);
+    expect(body.get("mode")).toBe("draft");
+    expect(body.get("scheduledAt")).toBeNull();
+    expect(body.get("image")).toBe(image);
+    fetchMock.mockRestore();
+  });
+
   it("handles delete 204 and sends the retry payload", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
