@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 
 import type { FacebookPostMedia } from "@nhuu-chat/contracts";
 import { FacebookPostMediaService } from "./facebook-post-media.service.js";
+import { FacebookPublisher } from "./facebook-publisher.service.js";
 
 const metadata: FacebookPostMedia = {
   secureUrl: "https://res.cloudinary.com/example/image/upload/post.jpg",
@@ -63,28 +64,43 @@ describe("FacebookPostMediaService", () => {
   it("maps Cloudinary metadata and destroys an orphan after persistence fails", async () => {
     const uploadImage = vi.fn().mockResolvedValue(metadata);
     const destroyMedia = vi.fn().mockResolvedValue(undefined);
+    const persistMedia = vi.fn().mockRejectedValue(new Error("persistence failed"));
     const service = new FacebookPostMediaService({ uploadImage, destroyMedia });
 
     const uploaded = await service.upload("user-1", file("image/jpeg"));
     try {
-      throw new Error("persistence failed");
+      await persistMedia(uploaded);
     } catch {
       await service.destroy(uploaded);
     }
 
     expect(uploaded).toEqual(metadata);
+    expect(persistMedia).toHaveBeenCalledWith(metadata);
     expect(destroyMedia).toHaveBeenCalledWith(metadata.publicId, "image");
   });
 
   it("retains uploaded media when a later publish operation fails", async () => {
     const uploadImage = vi.fn().mockResolvedValue(metadata);
     const destroyMedia = vi.fn();
+    const fetchGraph = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: 200, message: "Permission denied" }
+    }), { status: 403, headers: { "content-type": "application/json" } }));
     const service = new FacebookPostMediaService({ uploadImage, destroyMedia });
+    const publisher = new FacebookPublisher({ fetchGraph, graphApiVersion: "v26.0" });
 
     const uploaded = await service.upload("user-1", file("image/jpeg"));
-    await expect(Promise.reject(new Error("publish failed"))).rejects.toThrow("publish failed");
+    await expect(publisher.publish({
+      pageId: "page-1",
+      pageAccessToken: "page-secret",
+      message: "Caption",
+      mediaUrl: uploaded.secureUrl
+    })).rejects.toMatchObject({ code: "FACEBOOK_PERMISSION_DENIED" });
 
     expect(uploaded.secureUrl).toBe(metadata.secureUrl);
+    expect(fetchGraph).toHaveBeenCalledWith(
+      "https://graph.facebook.com/v26.0/page-1/photos",
+      expect.objectContaining({ method: "POST" })
+    );
     expect(destroyMedia).not.toHaveBeenCalled();
   });
 });
