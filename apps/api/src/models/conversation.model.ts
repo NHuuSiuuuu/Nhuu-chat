@@ -9,6 +9,8 @@ const conversationSchema = new Schema(
       required: true
     },
     channelId: { type: String, required: true },
+    // Zalo personal conversations must stay bound to the account that received them.
+    zaloAccountId: { type: String, default: null },
     conversationName: { type: String, default: null },
     conversationType: { type: String, enum: ["private", "group"], default: "private" },
     tagIds: [{ type: Schema.Types.ObjectId, ref: "ConversationTag" }],

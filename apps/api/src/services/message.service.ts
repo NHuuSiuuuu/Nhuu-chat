@@ -189,6 +189,14 @@ export async function sendOutboundMessage(
       const account = await client.getAccountInfo();
       const zaloAccountId = String(account.id ?? "").trim();
       if (!zaloAccountId) throw new Error("Zalo personal account id is unavailable");
+      const conversationAccountId = await resolveZaloConversationAccountId(conversationId, conversation.zaloAccountId);
+      if (conversationAccountId && conversationAccountId !== zaloAccountId) {
+        throw new AppError(
+          409,
+          "ZALO_PERSONAL_CONVERSATION_ACCOUNT_MISMATCH",
+          "This conversation belongs to a different Zalo account. Reconnect that account or wait for a new message from the current account."
+        );
+      }
       const conversationType: ZaloConversationType = conversation.conversationType === "group" ? "group" : "private";
       // Truyền loại hội thoại đến adapter để group không bị gửi nhầm qua endpoint direct.
       const sent = input.attachment
@@ -277,6 +285,21 @@ export async function sendOutboundMessage(
       conversation.assignedAgentId ? String(conversation.assignedAgentId) : ""
     ]
   };
+}
+
+async function resolveZaloConversationAccountId(conversationId: string, storedAccountId: unknown): Promise<string | undefined> {
+  const accountId = typeof storedAccountId === "string" ? storedAccountId.trim() : "";
+  if (accountId) return accountId;
+
+  // Older conversations predate zaloAccountId; recover provenance from their namespaced inbound/outbound ids.
+  const latest = await MessageModel.findOne({
+    conversationId,
+    platform: "zalo_personal",
+    externalMessageId: /^zalo_personal:[^:]+:/
+  }).sort({ createdAt: -1 }).select("externalMessageId").lean();
+  const externalId = typeof latest?.externalMessageId === "string" ? latest.externalMessageId : "";
+  const match = /^zalo_personal:([^:]+):/.exec(externalId);
+  return match?.[1];
 }
 
 function isDuplicateKey(error: unknown): boolean {

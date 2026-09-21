@@ -539,6 +539,7 @@ async function ingestZaloPersonalMessage(userId: string, message: NormalizedZalo
       $set: {
         customerId: customer._id,
         ownerId: userId,
+        zaloAccountId: accountId,
         conversationType: message.chatType,
         conversationName: message.chatType === "group" ? message.channelId : null
       }

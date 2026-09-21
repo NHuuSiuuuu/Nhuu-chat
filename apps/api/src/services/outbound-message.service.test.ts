@@ -112,6 +112,11 @@ describe("sendOutboundMessage", () => {
     vi.setSystemTime(now);
     dependencyMocks.acquireSendLease.mockReturnValue({ lean: async () => ({ _id: "conversation-1" }) });
     dependencyMocks.releaseSendLease.mockResolvedValue({ matchedCount: 1 });
+    dependencyMocks.findMessage.mockReturnValue({
+      sort: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue(null) })
+      })
+    });
   });
 
   afterEach(() => {
@@ -292,7 +297,8 @@ describe("sendOutboundMessage", () => {
   it("sends through Zalo personal after pausing the bot and persists the external id", async () => {
     arrangeConversation(conversation({
       platform: "zalo_personal",
-      assignedAgentId: null
+      assignedAgentId: null,
+      zaloAccountId: "zalo-account-1"
     }));
     dependencyMocks.getActiveZaloPersonalClient.mockResolvedValue({
       getAccountInfo: vi.fn().mockResolvedValue({ id: "zalo-account-1" }),
@@ -338,10 +344,61 @@ describe("sendOutboundMessage", () => {
     });
   });
 
+  it("rejects a Zalo conversation owned by a different logged-in account", async () => {
+    arrangeConversation(conversation({
+      platform: "zalo_personal",
+      assignedAgentId: null,
+      zaloAccountId: "old-zalo-account"
+    }));
+    dependencyMocks.getActiveZaloPersonalClient.mockResolvedValue({
+      getAccountInfo: vi.fn().mockResolvedValue({ id: "current-zalo-account" }),
+      sendMessage: dependencyMocks.zaloPersonalSendMessage
+    });
+    arrangeStoredMessage();
+    const ownerAuth = { id: "customer-1", email: "owner@example.com", role: "customer" } as const;
+
+    await expect(sendOutboundMessage(
+      { conversationId: "conversation-1", content: "Hello from Zalo support" },
+      ownerAuth
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "ZALO_PERSONAL_CONVERSATION_ACCOUNT_MISMATCH"
+    } satisfies Partial<AppError>);
+
+    expect(dependencyMocks.zaloPersonalSendMessage).not.toHaveBeenCalled();
+    expect(dependencyMocks.createMessage).toHaveBeenCalledWith(expect.objectContaining({
+      deliveryStatus: "failed"
+    }));
+  });
+
+  it("recovers the account binding for legacy Zalo conversations", async () => {
+    arrangeConversation(conversation({ platform: "zalo_personal", assignedAgentId: null }));
+    dependencyMocks.findMessage.mockReturnValue({
+      sort: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          lean: vi.fn().mockResolvedValue({ externalMessageId: "zalo_personal:old-zalo-account:8271" })
+        })
+      })
+    });
+    dependencyMocks.getActiveZaloPersonalClient.mockResolvedValue({
+      getAccountInfo: vi.fn().mockResolvedValue({ id: "current-zalo-account" }),
+      sendMessage: dependencyMocks.zaloPersonalSendMessage
+    });
+    arrangeStoredMessage();
+
+    await expect(sendOutboundMessage(
+      { conversationId: "conversation-1", content: "Hello from Zalo support" },
+      { id: "customer-1", email: "owner@example.com", role: "customer" }
+    )).rejects.toMatchObject({ code: "ZALO_PERSONAL_CONVERSATION_ACCOUNT_MISMATCH" });
+
+    expect(dependencyMocks.zaloPersonalSendMessage).not.toHaveBeenCalled();
+  });
+
   it("returns the persisted Zalo message when its listener wins the persistence race", async () => {
     arrangeConversation(conversation({
       platform: "zalo_personal",
-      assignedAgentId: null
+      assignedAgentId: null,
+      zaloAccountId: "zalo-account-1"
     }));
     dependencyMocks.getActiveZaloPersonalClient.mockResolvedValue({
       getAccountInfo: vi.fn().mockResolvedValue({ id: "zalo-account-1" }),
