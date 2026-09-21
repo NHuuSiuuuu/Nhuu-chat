@@ -7,6 +7,7 @@ const OAUTH_STATE_TTL_SECONDS = 600;
 
 export interface FacebookOAuthStore {
   save(token: string, value: FacebookOAuthStoredValue, ttlSeconds: number): Promise<void>;
+  read(token: string): Promise<FacebookOAuthStoredValue | undefined>;
   consume(token: string): Promise<FacebookOAuthStoredValue | undefined>;
 }
 
@@ -130,18 +131,19 @@ export class FacebookOAuthService {
   }
 
   async getSelection(userId: string, selectionToken: string): Promise<FacebookOAuthPage[]> {
-    const saved = await this.stateStore.consume(selectionToken);
+    const saved = await this.stateStore.read(selectionToken);
     if (!saved || saved.kind !== "selection" || saved.userId !== userId) throw new AppError(400, "FACEBOOK_OAUTH_SELECTION_INVALID", "Facebook Page selection is invalid or expired");
-    await this.stateStore.save(selectionToken, saved, OAUTH_STATE_TTL_SECONDS);
     return saved.pages.map(({ accessToken: _accessToken, ...page }) => page);
   }
 
   async select(userId: string, selectionToken: string, pageId: string, connect: (userId: string, input: { pageId: string; pageAccessToken: string }) => Promise<unknown>): Promise<unknown> {
-    const saved = await this.stateStore.consume(selectionToken);
+    const saved = await this.stateStore.read(selectionToken);
     if (!saved || saved.kind !== "selection" || saved.userId !== userId) throw new AppError(400, "FACEBOOK_OAUTH_SELECTION_INVALID", "Facebook Page selection is invalid or expired");
     const page = saved.pages.find((candidate) => candidate.id === pageId);
     if (!page || !page.canPublish) throw new AppError(400, "FACEBOOK_OAUTH_PAGE_NOT_PUBLISHABLE", "The selected Facebook Page cannot publish content");
-    return connect(userId, { pageId: page.id, pageAccessToken: page.accessToken });
+    const connection = await connect(userId, { pageId: page.id, pageAccessToken: page.accessToken });
+    await this.stateStore.consume(selectionToken);
+    return connection;
   }
 }
 

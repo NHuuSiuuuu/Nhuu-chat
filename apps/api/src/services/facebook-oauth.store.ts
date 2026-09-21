@@ -5,6 +5,15 @@ import type { FacebookOAuthStore, FacebookOAuthStoredValue } from "./facebook-oa
 
 const KEY_PREFIX = "nhuu-chat:facebook-oauth:";
 
+function parseStoredValue(stored: unknown): FacebookOAuthStoredValue | undefined {
+  if (typeof stored !== "string" || !stored) return undefined;
+  try {
+    return JSON.parse(decryptSecret(stored)) as FacebookOAuthStoredValue;
+  } catch {
+    return undefined;
+  }
+}
+
 export class RedisFacebookOAuthStore implements FacebookOAuthStore {
   private readonly client: RedisClientType;
 
@@ -23,15 +32,14 @@ export class RedisFacebookOAuthStore implements FacebookOAuthStore {
     await client.set(`${KEY_PREFIX}${token}`, encryptSecret(JSON.stringify(value)), { EX: ttlSeconds });
   }
 
+  async read(token: string): Promise<FacebookOAuthStoredValue | undefined> {
+    const client = await this.connected();
+    return parseStoredValue(await client.get(`${KEY_PREFIX}${token}`));
+  }
+
   async consume(token: string): Promise<FacebookOAuthStoredValue | undefined> {
     const client = await this.connected();
-    const stored = await client.getDel(`${KEY_PREFIX}${token}`);
-    if (!stored) return undefined;
-    try {
-      return JSON.parse(decryptSecret(stored)) as FacebookOAuthStoredValue;
-    } catch {
-      return undefined;
-    }
+    return parseStoredValue(await client.getDel(`${KEY_PREFIX}${token}`));
   }
 
   async close(): Promise<void> {

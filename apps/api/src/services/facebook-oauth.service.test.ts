@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import type { FacebookOAuthStore } from "./facebook-oauth.service.js";
+import type { FacebookOAuthStoredValue, FacebookOAuthStore } from "./facebook-oauth.service.js";
 
 let FacebookOAuthService: typeof import("./facebook-oauth.service.js").FacebookOAuthService;
 
@@ -16,16 +16,28 @@ beforeAll(async () => {
   ({ FacebookOAuthService } = await import("./facebook-oauth.service.js"));
 });
 
-function store(): FacebookOAuthStore & { saved: Array<{ token: string; value: unknown; ttlSeconds: number }> } {
-  const values = new Map<string, unknown>();
-  const saved: Array<{ token: string; value: unknown; ttlSeconds: number }> = [];
+interface TestFacebookOAuthStore extends FacebookOAuthStore {
+  saved: Array<{ token: string; value: FacebookOAuthStoredValue; ttlSeconds: number }>;
+  read(token: string): Promise<FacebookOAuthStoredValue | undefined>;
+  consumeCalls: string[];
+}
+
+function store(): TestFacebookOAuthStore {
+  const values = new Map<string, FacebookOAuthStoredValue>();
+  const saved: Array<{ token: string; value: FacebookOAuthStoredValue; ttlSeconds: number }> = [];
+  const consumeCalls: string[] = [];
   return {
     saved,
+    consumeCalls,
     async save(token, value, ttlSeconds) {
       values.set(token, value);
       saved.push({ token, value, ttlSeconds });
     },
+    async read(token) {
+      return values.get(token);
+    },
     async consume(token) {
+      consumeCalls.push(token);
       const value = values.get(token);
       values.delete(token);
       return value;
@@ -101,5 +113,68 @@ describe("FacebookOAuthService", () => {
       },
       ttlSeconds: 600
     });
+  });
+
+  it("reads the same selection concurrently without consuming it or extending its fixed expiry", async () => {
+    const stateStore = store();
+    await stateStore.save("selection-token", {
+      kind: "selection",
+      userId: "user-1",
+      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true }]
+    }, 600);
+    const service = new FacebookOAuthService({ stateStore });
+
+    const [first, second] = await Promise.all([
+      service.getSelection("user-1", "selection-token"),
+      service.getSelection("user-1", "selection-token")
+    ]);
+
+    expect(first).toEqual([{ id: "page-1", name: "Page One", canPublish: true }]);
+    expect(second).toEqual(first);
+    expect(stateStore.saved).toHaveLength(1);
+    expect(stateStore.consumeCalls).toEqual([]);
+  });
+
+  it("does not invalidate a selection when a different owner tries to select a Page", async () => {
+    const stateStore = store();
+    await stateStore.save("selection-token", {
+      kind: "selection",
+      userId: "user-1",
+      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true }]
+    }, 600);
+    const service = new FacebookOAuthService({ stateStore });
+    const connect = vi.fn().mockResolvedValue({ id: "connection-1" });
+
+    await expect(service.select("user-2", "selection-token", "page-1", connect)).rejects.toMatchObject({
+      code: "FACEBOOK_OAUTH_SELECTION_INVALID"
+    });
+    await expect(service.select("user-1", "selection-token", "page-1", connect)).resolves.toEqual({ id: "connection-1" });
+
+    expect(connect).toHaveBeenCalledOnce();
+    expect(stateStore.consumeCalls).toEqual(["selection-token"]);
+  });
+
+  it("keeps the selection retryable when connection persistence fails", async () => {
+    const stateStore = store();
+    await stateStore.save("selection-token", {
+      kind: "selection",
+      userId: "user-1",
+      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true }]
+    }, 600);
+    const service = new FacebookOAuthService({ stateStore });
+    const connect = vi.fn()
+      .mockRejectedValueOnce(new Error("persistence failed"))
+      .mockResolvedValueOnce({ id: "connection-1" });
+
+    await expect(service.select("user-1", "selection-token", "page-1", connect)).rejects.toThrow("persistence failed");
+    expect(stateStore.consumeCalls).toEqual([]);
+
+    await expect(service.select("user-1", "selection-token", "page-1", connect)).resolves.toEqual({ id: "connection-1" });
+    await expect(service.select("user-1", "selection-token", "page-1", connect)).rejects.toMatchObject({
+      code: "FACEBOOK_OAUTH_SELECTION_INVALID"
+    });
+
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(stateStore.consumeCalls).toEqual(["selection-token"]);
   });
 });
