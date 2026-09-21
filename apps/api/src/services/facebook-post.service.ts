@@ -257,7 +257,7 @@ export class FacebookPostService {
 
   async cancelPost(userId: string, postId: string): Promise<void> {
     // Xóa có điều kiện để trạng thái hợp lệ và snapshot media cùng được chốt trong một thao tác nguyên tử.
-    const deleted = await this.posts.findOneAndDelete({ _id: postId, userId, status: { $in: ["draft", "scheduled"] } }).lean();
+    const deleted = await this.posts.findOneAndDelete({ _id: postId, userId, status: { $in: ["draft", "scheduled", "published", "failed"] } }).lean();
     if (!deleted) {
       throw new AppError(409, "FACEBOOK_POST_STATE_CHANGED", "Facebook post state changed while cancelling");
     }

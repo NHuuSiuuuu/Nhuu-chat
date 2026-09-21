@@ -241,7 +241,7 @@ describe("FacebookPostService", () => {
       expect.anything()
     );
     await service.cancelPost("user-1", "post-1");
-    expect(d.postModel.findOneAndDelete).toHaveBeenCalledWith({ _id: "post-1", userId: "user-1", status: { $in: ["draft", "scheduled"] } });
+    expect(d.postModel.findOneAndDelete).toHaveBeenCalledWith({ _id: "post-1", userId: "user-1", status: { $in: ["draft", "scheduled", "published", "failed"] } });
     expect(d.mediaService.destroy).toHaveBeenCalledWith(media);
   });
 
@@ -255,7 +255,7 @@ describe("FacebookPostService", () => {
       code: "FACEBOOK_POST_MEDIA_CLEANUP_FAILED",
       statusCode: 502
     });
-    expect(d.postModel.findOneAndDelete).toHaveBeenCalledWith({ _id: "post-1", userId: "user-1", status: { $in: ["draft", "scheduled"] } });
+    expect(d.postModel.findOneAndDelete).toHaveBeenCalledWith({ _id: "post-1", userId: "user-1", status: { $in: ["draft", "scheduled", "published", "failed"] } });
   });
 
   it("does not destroy media when an eligible post changes state before the atomic cancellation", async () => {

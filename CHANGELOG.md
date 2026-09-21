@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Refactor trang Đăng bài Facebook Page thành layout sidebar với các tab Soạn thảo, Nháp, Đã lên lịch và Lịch sử; bổ sung sửa/xóa bài, thử lại bài lỗi và xem bài đã đăng trên Facebook.
+- Mở rộng xóa bài Facebook Page theo owner cho cả trạng thái đã đăng và thất bại, đồng thời dọn media liên quan.
 - Sửa modal `Thêm kết nối` luôn nằm trên Header với backdrop `z-[100]`, căn giữa, nền tối, animation scale/fade và cập nhật logo Zalo nguyên bản.
 - Căn lại icon Zalo và Telegram trong menu `Thêm kết nối` theo dạng ô vuông bo góc, đồng nhất với thiết kế tham chiếu.
 - Refactor giao diện modal `Thêm kết nối`: thêm Website, đưa Booking xuống cuối, làm nổi bật trạng thái active/hover và dùng icon thương hiệu kích thước lớn không còn nền xám bao ngoài.

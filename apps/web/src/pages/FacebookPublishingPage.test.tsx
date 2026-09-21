@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as React from "react";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FacebookPublishingPage, validateFacebookPostImage, connectionAfterFacebookDisconnect, type FacebookPublishingPageProps } from "./FacebookPublishingPage.js";
 import type { FacebookPageConnectionResponse, FacebookPostResponse } from "@nhuu-chat/contracts";
@@ -45,9 +46,24 @@ describe("FacebookPublishingPage", () => {
     let retryId = "";
     let cancelId = "";
     const html = surface();
-    expect(html).toContain("Thử lại");
-    expect(html).toContain("FACEBOOK_PUBLISH_FAILED");
+    const source = readFileSync(new URL("./FacebookPublishingPage.tsx", import.meta.url), "utf8");
+    expect(source).toContain("Thử lại");
+    expect(source).toContain("lastErrorCode");
+    expect(html).toContain("Lịch sử");
     expect(retryId).toBe("");
     expect(cancelId).toBe("");
+  });
+
+  it("renders the Facebook publishing sidebar tabs and status actions", () => {
+    const source = readFileSync(new URL("./FacebookPublishingPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("Soạn thảo");
+    expect(source).toContain("Nháp");
+    expect(source).toContain("Đã lên lịch");
+    expect(source).toContain("Lịch sử");
+    expect(source).toContain("FacebookPublishingClient");
+    expect(source).toContain("updateFacebookPost");
+    expect(source).toContain("Xem trên FB");
+    expect(source).toContain("lastErrorMessage");
   });
 });
