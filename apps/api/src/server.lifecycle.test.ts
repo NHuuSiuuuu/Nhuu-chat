@@ -184,21 +184,35 @@ describe("production server bootstrap", () => {
   });
 
   it("starts the Facebook scheduler after listen and stops it during shutdown", async () => {
-    const scheduler = { start: vi.fn(), stop: vi.fn() };
+    const events: string[] = [];
+    const scheduler = {
+      start: vi.fn(() => events.push("scheduler-start")),
+      stop: vi.fn(() => events.push("scheduler-stop"))
+    };
     const handle = await startServer({
       connectDatabase: async () => undefined,
       hydrateKnowledge: async () => undefined,
       setupZaloPersonalRedisLock: async () => async () => undefined,
-      restorePersonalClients: async () => undefined,
+      restorePersonalClients: async () => {
+        events.push("restore-telegram");
+      },
       restoreZaloPersonalClients: async () => undefined,
-      shutdownZaloPersonalClients: async () => undefined,
-      disconnectDatabase: async () => undefined,
-      listen: async () => undefined,
+      shutdownZaloPersonalClients: async () => {
+        events.push("shutdown-zalo");
+      },
+      disconnectDatabase: async () => {
+        events.push("disconnect");
+      },
+      listen: async () => {
+        events.push("listen");
+      },
       facebookPostScheduler: scheduler
     });
 
     expect(scheduler.start).toHaveBeenCalledOnce();
+    expect(events).toEqual(["listen", "scheduler-start", "restore-telegram"]);
     await handle.shutdown();
     expect(scheduler.stop).toHaveBeenCalledOnce();
+    expect(events).toEqual(["listen", "scheduler-start", "restore-telegram", "scheduler-stop", "shutdown-zalo", "disconnect"]);
   });
 });

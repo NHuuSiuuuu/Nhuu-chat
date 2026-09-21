@@ -56,6 +56,10 @@ function safePublishError(error: unknown): { code: string; message: string } {
   return { code: "FACEBOOK_PUBLISH_FAILED", message: "Facebook could not publish the post" };
 }
 
+function persistenceError(): AppError {
+  return new AppError(500, "FACEBOOK_POST_PERSISTENCE_FAILED", "Facebook post state could not be persisted");
+}
+
 export class FacebookPostScheduler {
   private readonly posts: PostModelLike;
   private readonly connections: ConnectionModelLike;
@@ -96,6 +100,23 @@ export class FacebookPostScheduler {
     this.timer = undefined;
   }
 
+  private async persistTerminal(
+    claimed: PostRecord,
+    update: Record<string, unknown>
+  ): Promise<void> {
+    let saved: PostRecord | null;
+    try {
+      saved = await this.posts.findOneAndUpdate(
+        { _id: claimed._id, status: "publishing", publishingLeaseUntil: claimed.publishingLeaseUntil },
+        update,
+        { new: true, runValidators: true }
+      ).lean();
+    } catch {
+      throw persistenceError();
+    }
+    if (!saved) throw new AppError(409, "FACEBOOK_POST_STATE_CHANGED", "Facebook post state changed while publishing");
+  }
+
   async runOnce(): Promise<boolean> {
     if (this.running) return false;
     this.running = true;
@@ -108,46 +129,61 @@ export class FacebookPostScheduler {
         { new: true, runValidators: true }
       ).lean();
       if (!claimed) {
-        const recovered = await this.posts.findOneAndUpdate(
-          { status: "publishing", publishingLeaseUntil: { $lte: now } },
-          {
-            $set: {
-              status: "failed",
-              lastErrorCode: "FACEBOOK_PUBLISH_LEASE_EXPIRED",
-              lastErrorMessage: "Facebook publish lease expired; retry requires manual confirmation",
-              publishingLeaseUntil: null
-            }
-          },
-          { new: true, runValidators: true }
-        ).lean();
+        let recovered: PostRecord | null;
+        try {
+          recovered = await this.posts.findOneAndUpdate(
+            { status: "publishing", publishingLeaseUntil: { $lte: now } },
+            {
+              $set: {
+                status: "failed",
+                lastErrorCode: "FACEBOOK_PUBLISH_LEASE_EXPIRED",
+                lastErrorMessage: "Facebook publish lease expired; retry requires manual confirmation",
+                publishingLeaseUntil: null
+              }
+            },
+            { new: true, runValidators: true }
+          ).lean();
+        } catch {
+          throw persistenceError();
+        }
         return Boolean(recovered);
       }
 
+      let published: { publishedPostId: string };
       try {
         const connection = await this.connections.findOne({ _id: claimed.connectionId, userId: claimed.userId })
           .select("+encryptedPageAccessToken").lean();
         if (!connection || connection.status !== "connected" || !connection.encryptedPageAccessToken) {
           throw new AppError(409, "FACEBOOK_PAGE_NOT_CONNECTED", "Facebook Page is not connected");
         }
-        const published = await this.publisher.publish({
+        published = await this.publisher.publish({
           pageId: connection.pageId,
           pageAccessToken: this.decrypt(connection.encryptedPageAccessToken),
           message: claimed.message,
           ...(claimed.media ? { mediaUrl: claimed.media.secureUrl } : {})
         });
-        await this.posts.findOneAndUpdate(
-          { _id: claimed._id, status: "publishing" },
-          { $set: { status: "published", publishedPostId: published.publishedPostId, publishedAt: this.clock(), lastErrorCode: null, lastErrorMessage: null, publishingLeaseUntil: null } },
-          { new: true, runValidators: true }
-        ).lean();
       } catch (error) {
         const safe = safePublishError(error);
-        await this.posts.findOneAndUpdate(
-          { _id: claimed._id, status: "publishing" },
-          { $set: { status: "failed", lastErrorCode: safe.code, lastErrorMessage: safe.message, publishingLeaseUntil: null } },
-          { new: true, runValidators: true }
-        ).lean();
+        await this.persistTerminal(claimed, {
+          $set: {
+            status: "failed",
+            lastErrorCode: safe.code,
+            lastErrorMessage: safe.message,
+            publishingLeaseUntil: null
+          }
+        });
+        return true;
       }
+      await this.persistTerminal(claimed, {
+        $set: {
+          status: "published",
+          publishedPostId: published.publishedPostId,
+          publishedAt: this.clock(),
+          lastErrorCode: null,
+          lastErrorMessage: null,
+          publishingLeaseUntil: null
+        }
+      });
       return true;
     } finally {
       this.running = false;

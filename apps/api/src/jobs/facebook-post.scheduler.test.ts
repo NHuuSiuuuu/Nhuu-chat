@@ -4,6 +4,7 @@ import { AppError } from "../common/errors.js";
 import { FacebookPostScheduler } from "./facebook-post.scheduler.js";
 
 const now = new Date("2026-09-21T10:00:00.000Z");
+const leaseUntil = new Date(now.getTime() + 120_000);
 
 function row(overrides: Record<string, unknown> = {}) {
   return {
@@ -60,7 +61,7 @@ describe("FacebookPostScheduler", () => {
     expect(d.decryptSecret).toHaveBeenCalledWith("ciphertext");
     expect(d.publisher.publish).toHaveBeenCalledWith({ pageId: "page-1", pageAccessToken: "page-token", message: "Hello" });
     expect(d.postModel.findOneAndUpdate).toHaveBeenNthCalledWith(2,
-      { _id: "post-1", status: "publishing" },
+      { _id: "post-1", status: "publishing", publishingLeaseUntil: leaseUntil },
       { $set: expect.objectContaining({ status: "published", publishedPostId: "page-1_1", publishingLeaseUntil: null }) },
       { new: true, runValidators: true }
     );
@@ -104,7 +105,7 @@ describe("FacebookPostScheduler", () => {
   it("records a safe terminal failure when publishing fails", async () => {
     const d = dependencies();
     d.postModel.findOneAndUpdate
-      .mockReturnValueOnce(query(row({ status: "publishing", attempts: 1 })))
+      .mockReturnValueOnce(query(row({ status: "publishing", attempts: 1, publishingLeaseUntil: leaseUntil })))
       .mockReturnValueOnce(query(row({ status: "failed", attempts: 1, lastErrorCode: "FACEBOOK_PERMISSION_DENIED" })));
     d.connectionModel.findOne.mockReturnValue({ select: vi.fn().mockReturnValue(query(connectedConnection())) });
     d.publisher.publish.mockRejectedValue(new AppError(403, "FACEBOOK_PERMISSION_DENIED", "Facebook Page publishing permission was denied"));
@@ -112,7 +113,7 @@ describe("FacebookPostScheduler", () => {
 
     await expect(scheduler.runOnce()).resolves.toBe(true);
     expect(d.postModel.findOneAndUpdate).toHaveBeenNthCalledWith(2,
-      { _id: "post-1", status: "publishing" },
+      { _id: "post-1", status: "publishing", publishingLeaseUntil: leaseUntil },
       { $set: { status: "failed", lastErrorCode: "FACEBOOK_PERMISSION_DENIED", lastErrorMessage: "Facebook Page publishing permission was denied", publishingLeaseUntil: null } },
       { new: true, runValidators: true }
     );
@@ -121,7 +122,7 @@ describe("FacebookPostScheduler", () => {
   it("does not retry an ambiguous publish timeout", async () => {
     const d = dependencies();
     d.postModel.findOneAndUpdate
-      .mockReturnValueOnce(query(row({ status: "publishing", attempts: 1 })))
+      .mockReturnValueOnce(query(row({ status: "publishing", attempts: 1, publishingLeaseUntil: leaseUntil })))
       .mockReturnValueOnce(query(row({ status: "failed", attempts: 1, lastErrorCode: "FACEBOOK_PUBLISH_TIMEOUT" })))
       .mockReturnValueOnce(query(null))
       .mockReturnValueOnce(query(null));
@@ -153,6 +154,48 @@ describe("FacebookPostScheduler", () => {
 
     await expect(firstRun).resolves.toBe(true);
     expect(d.publisher.publish).toHaveBeenCalledOnce();
+  });
+
+  it("surfaces a state-change error when the published terminal write returns null", async () => {
+    const d = dependencies();
+    d.postModel.findOneAndUpdate
+      .mockReturnValueOnce(query(row({ status: "publishing", attempts: 1, publishingLeaseUntil: leaseUntil })))
+      .mockReturnValueOnce(query(null));
+    d.connectionModel.findOne.mockReturnValue({ select: vi.fn().mockReturnValue(query(connectedConnection())) });
+    d.publisher.publish.mockResolvedValue({ publishedPostId: "page-1_3" });
+    const scheduler = new FacebookPostScheduler({ ...d, now: () => now });
+
+    await expect(scheduler.runOnce()).rejects.toMatchObject({ code: "FACEBOOK_POST_STATE_CHANGED", statusCode: 409 });
+    expect(d.postModel.findOneAndUpdate).toHaveBeenNthCalledWith(2,
+      { _id: "post-1", status: "publishing", publishingLeaseUntil: leaseUntil },
+      expect.objectContaining({ $set: expect.objectContaining({ status: "published" }) }),
+      { new: true, runValidators: true }
+    );
+  });
+
+  it("surfaces a safe persistence error when the published terminal write throws", async () => {
+    const d = dependencies();
+    d.postModel.findOneAndUpdate
+      .mockReturnValueOnce(query(row({ status: "publishing", attempts: 1, publishingLeaseUntil: leaseUntil })))
+      .mockReturnValueOnce({ lean: vi.fn().mockRejectedValue(new Error("database unavailable")) });
+    d.connectionModel.findOne.mockReturnValue({ select: vi.fn().mockReturnValue(query(connectedConnection())) });
+    d.publisher.publish.mockResolvedValue({ publishedPostId: "page-1_4" });
+    const scheduler = new FacebookPostScheduler({ ...d, now: () => now });
+
+    await expect(scheduler.runOnce()).rejects.toMatchObject({ code: "FACEBOOK_POST_PERSISTENCE_FAILED", statusCode: 500 });
+    expect(d.postModel.findOneAndUpdate).toHaveBeenCalledTimes(2);
+  });
+
+  it("surfaces a state-change error when the failed terminal write returns null", async () => {
+    const d = dependencies();
+    d.postModel.findOneAndUpdate
+      .mockReturnValueOnce(query(row({ status: "publishing", attempts: 1, publishingLeaseUntil: leaseUntil })))
+      .mockReturnValueOnce(query(null));
+    d.connectionModel.findOne.mockReturnValue({ select: vi.fn().mockReturnValue(query(connectedConnection())) });
+    d.publisher.publish.mockRejectedValue(new AppError(403, "FACEBOOK_PERMISSION_DENIED", "Facebook Page publishing permission was denied"));
+    const scheduler = new FacebookPostScheduler({ ...d, now: () => now });
+
+    await expect(scheduler.runOnce()).rejects.toMatchObject({ code: "FACEBOOK_POST_STATE_CHANGED", statusCode: 409 });
   });
 
   it("starts one interval and clears it on stop", async () => {
