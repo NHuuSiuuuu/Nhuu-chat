@@ -33,8 +33,23 @@ describe("environment configuration", () => {
     expect(env).toEqual({
       ...validEnvironment,
       PORT: 3000,
-      GEMINI_CHAT_MODEL: "gemini-3.5-flash-lite"
+      GEMINI_CHAT_MODEL: "gemini-3.5-flash-lite",
+      META_GRAPH_API_VERSION: "v26.0",
+      FACEBOOK_POST_SCHEDULER_INTERVAL_MS: 30000,
+      FACEBOOK_POST_LEASE_MS: 120000
     });
+  });
+
+  it("parses Facebook publishing configuration", async () => {
+    const { env } = await importEnv({
+      META_GRAPH_API_VERSION: "v27.0",
+      FACEBOOK_POST_SCHEDULER_INTERVAL_MS: "45000",
+      FACEBOOK_POST_LEASE_MS: "180000"
+    });
+
+    expect(env.META_GRAPH_API_VERSION).toBe("v27.0");
+    expect(env.FACEBOOK_POST_SCHEDULER_INTERVAL_MS).toBe(45000);
+    expect(env.FACEBOOK_POST_LEASE_MS).toBe(180000);
   });
 
   it("accepts the supported secure database protocols", async () => {

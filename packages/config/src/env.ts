@@ -41,7 +41,10 @@ const appEnvSchema = z.object({
   CLOUDINARY_API_KEY: optionalCloudinaryEnv,
   CLOUDINARY_API_SECRET: optionalCloudinaryEnv,
   // Gemini 3.5 Flash Lite is the default low-latency model for reply suggestions.
-  GEMINI_CHAT_MODEL: z.string().min(1).default("gemini-3.5-flash-lite")
+  GEMINI_CHAT_MODEL: z.string().min(1).default("gemini-3.5-flash-lite"),
+  META_GRAPH_API_VERSION: z.string().min(1).default("v26.0"),
+  FACEBOOK_POST_SCHEDULER_INTERVAL_MS: z.coerce.number().int().positive().default(30_000),
+  FACEBOOK_POST_LEASE_MS: z.coerce.number().int().positive().default(120_000)
 });
 
 export type AppEnv = z.infer<typeof appEnvSchema>;

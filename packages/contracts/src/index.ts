@@ -156,6 +156,48 @@ export interface QuickReplyContract {
   attachment?: QuickReplyAttachmentContract;
 }
 
+export type FacebookPostStatus = "draft" | "scheduled" | "publishing" | "published" | "failed";
+
+export interface FacebookPostMedia {
+  secureUrl: string;
+  publicId: string;
+  resourceType: "image";
+  mimeType: string;
+  bytes: number;
+  width?: number;
+  height?: number;
+}
+
+export interface FacebookPageConnectionResponse {
+  id: string;
+  pageId: string;
+  pageName?: string | null;
+  status: "connected" | "invalid";
+  lastValidatedAt?: string | null;
+  lastErrorCode?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FacebookPostResponse {
+  id: string;
+  connectionId: string;
+  pageId: string;
+  message: string;
+  media?: FacebookPostMedia;
+  status: FacebookPostStatus;
+  scheduledAt?: string | null;
+  timezone: "Asia/Ho_Chi_Minh";
+  publishedPostId?: string | null;
+  attempts: number;
+  lastErrorCode?: string | null;
+  lastErrorMessage?: string | null;
+  publishingLeaseUntil?: string | null;
+  publishedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const chatEvents = {
   messageReceived: "chat:message_received",
   conversationUpdated: "chat:conversation_updated",
