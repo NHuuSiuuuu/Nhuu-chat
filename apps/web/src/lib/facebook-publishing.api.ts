@@ -75,11 +75,11 @@ export function listFacebookPosts(status?: FacebookPostResponse["status"], baseU
   return request<FacebookPostResponse[]>(`/api/v1/facebook-page/posts${query}`, { method: "GET" }, { baseUrl });
 }
 
-function postFormData(input: { message?: string; mode?: "draft" | "now" | "scheduled"; scheduledAt?: string; image?: File | null }): FormData {
+function postFormData(input: { message?: string; mode?: "draft" | "now" | "scheduled"; scheduledAt?: string | null; image?: File | null }): FormData {
   const formData = new FormData();
   if (input.message !== undefined) formData.set("message", input.message);
   if (input.mode !== undefined) formData.set("mode", input.mode);
-  if (input.scheduledAt !== undefined) formData.set("scheduledAt", input.scheduledAt);
+  if (input.scheduledAt !== undefined && input.scheduledAt !== null) formData.set("scheduledAt", input.scheduledAt);
   if (input.image) formData.set("image", input.image);
   return formData;
 }
