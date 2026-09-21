@@ -66,4 +66,8 @@ describe("FacebookPublishingPage", () => {
     expect(source).toContain("Xem trên FB");
     expect(source).toContain("lastErrorMessage");
   });
+
+  it("keeps the shared global header above the publishing layout", () => {
+    expect(surface({ user: { email: "owner@example.com", role: "owner", displayName: "Owner" } })).toContain('alt="NhuuChat"');
+  });
 });
