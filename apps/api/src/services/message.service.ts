@@ -14,6 +14,7 @@ import { readProviderSecretByName } from "./provider-secret.service.js";
 type ZaloConversationType = "private" | "group";
 type ZaloOutboundClient = {
   getAccountInfo: () => Promise<{ id?: unknown }>;
+  findUserIdByName?: (name: string) => Promise<string | undefined>;
   sendMessage: (
     threadId: string,
     content: string,
@@ -190,18 +191,29 @@ export async function sendOutboundMessage(
       const zaloAccountId = String(account.id ?? "").trim();
       if (!zaloAccountId) throw new Error("Zalo personal account id is unavailable");
       const conversationAccountId = await resolveZaloConversationAccountId(conversationId, conversation.zaloAccountId);
+      let recipientChannelId = conversation.channelId;
       if (conversationAccountId && conversationAccountId !== zaloAccountId) {
-        throw new AppError(
-          409,
-          "ZALO_PERSONAL_CONVERSATION_ACCOUNT_MISMATCH",
-          "This conversation belongs to a different Zalo account. Reconnect that account or wait for a new message from the current account."
-        );
+        const customerName = getConversationCustomerName(conversation.customerId);
+        const remappedChannelId = conversation.conversationType === "private" && customerName && client.findUserIdByName
+          ? await client.findUserIdByName(customerName)
+          : undefined;
+        if (!remappedChannelId) {
+          throw new AppError(
+            409,
+            "ZALO_PERSONAL_CONVERSATION_ACCOUNT_MISMATCH",
+            "This conversation belongs to a different Zalo account. Reconnect that account or wait for a new message from the current account."
+          );
+        }
+        recipientChannelId = remappedChannelId;
+        await ConversationModel.findByIdAndUpdate(conversationId, {
+          $set: { channelId: remappedChannelId, zaloAccountId }
+        });
       }
       const conversationType: ZaloConversationType = conversation.conversationType === "group" ? "group" : "private";
       // Truyền loại hội thoại đến adapter để group không bị gửi nhầm qua endpoint direct.
       const sent = input.attachment
         ? await (client as unknown as ZaloOutboundClient).sendMessage(
-          conversation.channelId,
+          recipientChannelId,
           content,
           conversationType,
           {
@@ -212,7 +224,7 @@ export async function sendOutboundMessage(
           }
         )
         : await (client as unknown as ZaloOutboundClient).sendMessage(
-          conversation.channelId,
+          recipientChannelId,
           content,
           conversationType
         );
@@ -285,6 +297,12 @@ export async function sendOutboundMessage(
       conversation.assignedAgentId ? String(conversation.assignedAgentId) : ""
     ]
   };
+}
+
+function getConversationCustomerName(customer: unknown): string | undefined {
+  if (!customer || typeof customer !== "object" || !("name" in customer)) return undefined;
+  const name = customer.name;
+  return typeof name === "string" && name.trim() ? name.trim() : undefined;
 }
 
 async function resolveZaloConversationAccountId(conversationId: string, storedAccountId: unknown): Promise<string | undefined> {

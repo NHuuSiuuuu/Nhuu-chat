@@ -394,6 +394,38 @@ describe("sendOutboundMessage", () => {
     expect(dependencyMocks.zaloPersonalSendMessage).not.toHaveBeenCalled();
   });
 
+  it("remaps a legacy private conversation to the matching contact on the current Zalo account", async () => {
+    arrangeConversation(conversation({
+      platform: "zalo_personal",
+      assignedAgentId: null,
+      zaloAccountId: "old-zalo-account",
+      customerId: { _id: "customer-1", name: "Quyên Hoàng" }
+    }));
+    const findCurrentContact = vi.fn().mockResolvedValue("new-zalo-thread");
+    dependencyMocks.getActiveZaloPersonalClient.mockResolvedValue({
+      getAccountInfo: vi.fn().mockResolvedValue({ id: "current-zalo-account" }),
+      findUserIdByName: findCurrentContact,
+      sendMessage: dependencyMocks.zaloPersonalSendMessage
+    });
+    dependencyMocks.zaloPersonalSendMessage.mockResolvedValue({ id: "zalo-9004" });
+    arrangeStoredMessage();
+
+    await sendOutboundMessage(
+      { conversationId: "conversation-1", content: "Hello from Zalo support" },
+      { id: "customer-1", email: "owner@example.com", role: "customer" }
+    );
+
+    expect(findCurrentContact).toHaveBeenCalledWith("Quyên Hoàng");
+    expect(dependencyMocks.zaloPersonalSendMessage).toHaveBeenCalledWith(
+      "new-zalo-thread",
+      "Hello from Zalo support",
+      "private"
+    );
+    expect(dependencyMocks.pauseConversation).toHaveBeenCalledWith("conversation-1", {
+      $set: { channelId: "new-zalo-thread", zaloAccountId: "current-zalo-account" }
+    });
+  });
+
   it("returns the persisted Zalo message when its listener wins the persistence race", async () => {
     arrangeConversation(conversation({
       platform: "zalo_personal",

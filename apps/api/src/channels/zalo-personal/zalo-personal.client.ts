@@ -21,6 +21,7 @@ const ZaloConstructor = (zca as unknown as { Zalo: ZcaConstructor }).Zalo;
 export interface ZaloPersonalApi {
   getContext(): { credentials: unknown };
   getAccountInfo(): Promise<{ id?: unknown; displayName?: unknown; username?: unknown; avatarUrl?: unknown }>;
+  findUserIdByName?(name: string): Promise<string | undefined>;
   getUserProfiles?(userIds: string[]): Promise<Record<string, { avatarUrl?: unknown }>>;
   onMessage(listener: (event: unknown) => Promise<void>): void;
   onError(listener: (error: unknown) => void): void;
@@ -40,6 +41,7 @@ interface ZcaApi {
   getContext(): Record<string, unknown>;
   fetchAccountInfo(): Promise<{ profile?: Record<string, unknown> }>;
   getUserInfo?(userIds: string | string[]): Promise<{ changed_profiles?: Record<string, Record<string, unknown>> }>;
+  getAllFriends?(): Promise<Array<{ userId?: unknown; displayName?: unknown }>>;
   listener: {
     on(event: "message", listener: (event: unknown) => unknown): void;
     on(event: "error", listener: (error: unknown) => unknown): void;
@@ -107,6 +109,13 @@ class ZaloPersonalClientAdapter implements ZaloPersonalClient {
           avatarUrl: profile.avatar ?? profile.avatarUrl
         };
       },
+      findUserIdByName: async (name) => {
+        if (!zcaApi.getAllFriends) return undefined;
+        const normalizedName = normalizeName(name);
+        if (!normalizedName) return undefined;
+        const matches = (await zcaApi.getAllFriends()).filter((friend) => normalizeName(String(friend.displayName ?? "")) === normalizedName);
+        return matches.length === 1 && matches[0]?.userId != null ? String(matches[0].userId) : undefined;
+      },
       getUserProfiles: async (userIds) => {
         if (!zcaApi.getUserInfo) return {};
         const response = await zcaApi.getUserInfo(userIds);
@@ -161,4 +170,8 @@ function extractCredentials(context: Record<string, unknown>): unknown {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function normalizeName(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 }
