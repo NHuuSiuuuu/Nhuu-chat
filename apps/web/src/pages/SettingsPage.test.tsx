@@ -106,6 +106,13 @@ describe("Settings page", () => {
     expect(source).toContain("chỉ gộp các tài khoản đang online");
   });
 
+  it("keeps the Settings sidebar visible and marks important notes with an alert icon", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('name="alert"');
+    expect(source).toContain("lg:sticky lg:top-6");
+  });
+
   it("marks unfinished settings tabs as development placeholders", () => {
     expect(typeof settingsModule.isSettingsPlaceholderTab).toBe("function");
 
