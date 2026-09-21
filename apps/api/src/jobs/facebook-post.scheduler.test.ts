@@ -45,6 +45,7 @@ describe("FacebookPostScheduler", () => {
   it("claims and publishes a due scheduled post", async () => {
     const d = dependencies();
     d.postModel.findOneAndUpdate
+      .mockReturnValueOnce(query(null))
       .mockReturnValueOnce(query(row({ status: "publishing", attempts: 1, publishingLeaseUntil: new Date(now.getTime() + 120_000) })))
       .mockReturnValueOnce(query(row({ status: "published", attempts: 1, publishedPostId: "page-1_1" })));
     d.connectionModel.findOne.mockReturnValue({ select: vi.fn().mockReturnValue(query(connectedConnection())) });
@@ -53,14 +54,14 @@ describe("FacebookPostScheduler", () => {
     const scheduler = new FacebookPostScheduler({ ...d, now: () => now, leaseMs: 120_000 });
 
     await expect(scheduler.runOnce()).resolves.toBe(true);
-    expect(d.postModel.findOneAndUpdate).toHaveBeenNthCalledWith(1,
+    expect(d.postModel.findOneAndUpdate).toHaveBeenNthCalledWith(2,
       { status: "scheduled", scheduledAt: { $lte: now } },
       { $set: { status: "publishing", publishingLeaseUntil: new Date(now.getTime() + 120_000) }, $inc: { attempts: 1 } },
       { new: true, runValidators: true }
     );
     expect(d.decryptSecret).toHaveBeenCalledWith("ciphertext");
     expect(d.publisher.publish).toHaveBeenCalledWith({ pageId: "page-1", pageAccessToken: "page-token", message: "Hello" });
-    expect(d.postModel.findOneAndUpdate).toHaveBeenNthCalledWith(2,
+    expect(d.postModel.findOneAndUpdate).toHaveBeenNthCalledWith(3,
       { _id: "post-1", status: "publishing", publishingLeaseUntil: leaseUntil },
       { $set: expect.objectContaining({ status: "published", publishedPostId: "page-1_1", publishingLeaseUntil: null }) },
       { new: true, runValidators: true }
@@ -89,7 +90,6 @@ describe("FacebookPostScheduler", () => {
   it("moves an expired publishing lease to a safe failed terminal state", async () => {
     const d = dependencies();
     d.postModel.findOneAndUpdate
-      .mockReturnValueOnce(query(null))
       .mockReturnValueOnce(query(row({ status: "failed", lastErrorCode: "FACEBOOK_PUBLISH_LEASE_EXPIRED", publishingLeaseUntil: null })));
     const scheduler = new FacebookPostScheduler({ ...d, now: () => now });
 
@@ -102,9 +102,29 @@ describe("FacebookPostScheduler", () => {
     expect(d.publisher.publish).not.toHaveBeenCalled();
   });
 
+  it("recovers an expired publishing lease before claiming a due scheduled post", async () => {
+    const d = dependencies();
+    const expired = row({ _id: "expired-post", status: "failed", lastErrorCode: "FACEBOOK_PUBLISH_LEASE_EXPIRED", publishingLeaseUntil: null });
+    d.postModel.findOneAndUpdate.mockImplementation((filter) => filter.status === "publishing"
+      ? query(expired)
+      : query(row({ _id: "due-scheduled-post", status: "publishing", attempts: 1 })));
+    const scheduler = new FacebookPostScheduler({ ...d, now: () => now });
+
+    await expect(scheduler.runOnce()).resolves.toBe(true);
+
+    expect(d.postModel.findOneAndUpdate).toHaveBeenCalledOnce();
+    expect(d.postModel.findOneAndUpdate).toHaveBeenCalledWith(
+      { status: "publishing", publishingLeaseUntil: { $lte: now } },
+      { $set: { status: "failed", lastErrorCode: "FACEBOOK_PUBLISH_LEASE_EXPIRED", lastErrorMessage: "Facebook publish lease expired; retry requires manual confirmation", publishingLeaseUntil: null } },
+      { new: true, runValidators: true }
+    );
+    expect(d.publisher.publish).not.toHaveBeenCalled();
+  });
+
   it("records a safe terminal failure when publishing fails", async () => {
     const d = dependencies();
     d.postModel.findOneAndUpdate
+      .mockReturnValueOnce(query(null))
       .mockReturnValueOnce(query(row({ status: "publishing", attempts: 1, publishingLeaseUntil: leaseUntil })))
       .mockReturnValueOnce(query(row({ status: "failed", attempts: 1, lastErrorCode: "FACEBOOK_PERMISSION_DENIED" })));
     d.connectionModel.findOne.mockReturnValue({ select: vi.fn().mockReturnValue(query(connectedConnection())) });
@@ -112,7 +132,7 @@ describe("FacebookPostScheduler", () => {
     const scheduler = new FacebookPostScheduler({ ...d, now: () => now });
 
     await expect(scheduler.runOnce()).resolves.toBe(true);
-    expect(d.postModel.findOneAndUpdate).toHaveBeenNthCalledWith(2,
+    expect(d.postModel.findOneAndUpdate).toHaveBeenNthCalledWith(3,
       { _id: "post-1", status: "publishing", publishingLeaseUntil: leaseUntil },
       { $set: { status: "failed", lastErrorCode: "FACEBOOK_PERMISSION_DENIED", lastErrorMessage: "Facebook Page publishing permission was denied", publishingLeaseUntil: null } },
       { new: true, runValidators: true }
@@ -122,6 +142,7 @@ describe("FacebookPostScheduler", () => {
   it("fails safely without publishing when the connection Page changed", async () => {
     const d = dependencies();
     d.postModel.findOneAndUpdate
+      .mockReturnValueOnce(query(null))
       .mockReturnValueOnce(query(row({ status: "publishing", attempts: 1, publishingLeaseUntil: leaseUntil })))
       .mockReturnValueOnce(query(row({ status: "failed", lastErrorCode: "FACEBOOK_PAGE_ID_MISMATCH", publishingLeaseUntil: null })));
     d.connectionModel.findOne.mockReturnValue({ select: vi.fn().mockReturnValue(query({ ...connectedConnection(), pageId: "page-2" })) });
@@ -130,7 +151,7 @@ describe("FacebookPostScheduler", () => {
     await expect(scheduler.runOnce()).resolves.toBe(true);
 
     expect(d.publisher.publish).not.toHaveBeenCalled();
-    expect(d.postModel.findOneAndUpdate).toHaveBeenNthCalledWith(2,
+    expect(d.postModel.findOneAndUpdate).toHaveBeenNthCalledWith(3,
       { _id: "post-1", status: "publishing", publishingLeaseUntil: leaseUntil },
       { $set: expect.objectContaining({ status: "failed", lastErrorCode: "FACEBOOK_PAGE_ID_MISMATCH", publishingLeaseUntil: null }) },
       { new: true, runValidators: true }
@@ -140,6 +161,7 @@ describe("FacebookPostScheduler", () => {
   it("does not retry an ambiguous publish timeout", async () => {
     const d = dependencies();
     d.postModel.findOneAndUpdate
+      .mockReturnValueOnce(query(null))
       .mockReturnValueOnce(query(row({ status: "publishing", attempts: 1, publishingLeaseUntil: leaseUntil })))
       .mockReturnValueOnce(query(row({ status: "failed", attempts: 1, lastErrorCode: "FACEBOOK_PUBLISH_TIMEOUT" })))
       .mockReturnValueOnce(query(null))
@@ -152,13 +174,14 @@ describe("FacebookPostScheduler", () => {
     await scheduler.runOnce();
 
     expect(d.publisher.publish).toHaveBeenCalledOnce();
-    expect(d.postModel.findOneAndUpdate).toHaveBeenCalledTimes(4);
+    expect(d.postModel.findOneAndUpdate).toHaveBeenCalledTimes(5);
   });
 
   it("does not overlap an in-flight run", async () => {
     const d = dependencies();
     let releasePublish!: (value: { publishedPostId: string }) => void;
     d.postModel.findOneAndUpdate
+      .mockReturnValueOnce(query(null))
       .mockReturnValueOnce(query(row({ status: "publishing", attempts: 1 })))
       .mockReturnValueOnce(query(row({ status: "published", publishedPostId: "page-1_2" })));
     d.connectionModel.findOne.mockReturnValue({ select: vi.fn().mockReturnValue(query(connectedConnection())) });
@@ -177,6 +200,7 @@ describe("FacebookPostScheduler", () => {
   it("surfaces a state-change error when the published terminal write returns null", async () => {
     const d = dependencies();
     d.postModel.findOneAndUpdate
+      .mockReturnValueOnce(query(null))
       .mockReturnValueOnce(query(row({ status: "publishing", attempts: 1, publishingLeaseUntil: leaseUntil })))
       .mockReturnValueOnce(query(null));
     d.connectionModel.findOne.mockReturnValue({ select: vi.fn().mockReturnValue(query(connectedConnection())) });
@@ -184,7 +208,7 @@ describe("FacebookPostScheduler", () => {
     const scheduler = new FacebookPostScheduler({ ...d, now: () => now });
 
     await expect(scheduler.runOnce()).rejects.toMatchObject({ code: "FACEBOOK_POST_STATE_CHANGED", statusCode: 409 });
-    expect(d.postModel.findOneAndUpdate).toHaveBeenNthCalledWith(2,
+    expect(d.postModel.findOneAndUpdate).toHaveBeenNthCalledWith(3,
       { _id: "post-1", status: "publishing", publishingLeaseUntil: leaseUntil },
       expect.objectContaining({ $set: expect.objectContaining({ status: "published" }) }),
       { new: true, runValidators: true }
@@ -194,6 +218,7 @@ describe("FacebookPostScheduler", () => {
   it("surfaces a safe persistence error when the published terminal write throws", async () => {
     const d = dependencies();
     d.postModel.findOneAndUpdate
+      .mockReturnValueOnce(query(null))
       .mockReturnValueOnce(query(row({ status: "publishing", attempts: 1, publishingLeaseUntil: leaseUntil })))
       .mockReturnValueOnce({ lean: vi.fn().mockRejectedValue(new Error("database unavailable")) });
     d.connectionModel.findOne.mockReturnValue({ select: vi.fn().mockReturnValue(query(connectedConnection())) });
@@ -201,12 +226,13 @@ describe("FacebookPostScheduler", () => {
     const scheduler = new FacebookPostScheduler({ ...d, now: () => now });
 
     await expect(scheduler.runOnce()).rejects.toMatchObject({ code: "FACEBOOK_POST_PERSISTENCE_FAILED", statusCode: 500 });
-    expect(d.postModel.findOneAndUpdate).toHaveBeenCalledTimes(2);
+    expect(d.postModel.findOneAndUpdate).toHaveBeenCalledTimes(3);
   });
 
   it("surfaces a state-change error when the failed terminal write returns null", async () => {
     const d = dependencies();
     d.postModel.findOneAndUpdate
+      .mockReturnValueOnce(query(null))
       .mockReturnValueOnce(query(row({ status: "publishing", attempts: 1, publishingLeaseUntil: leaseUntil })))
       .mockReturnValueOnce(query(null));
     d.connectionModel.findOne.mockReturnValue({ select: vi.fn().mockReturnValue(query(connectedConnection())) });

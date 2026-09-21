@@ -241,13 +241,12 @@ describe("FacebookPostService", () => {
       expect.anything()
     );
     await service.cancelPost("user-1", "post-1");
-    expect(d.postModel.findOneAndDelete).toHaveBeenCalledWith({ _id: "post-1", userId: "user-1", status: { $in: ["draft", "scheduled", "failed"] } });
+    expect(d.postModel.findOneAndDelete).toHaveBeenCalledWith({ _id: "post-1", userId: "user-1", status: { $in: ["draft", "scheduled"] } });
     expect(d.mediaService.destroy).toHaveBeenCalledWith(media);
   });
 
-  it("keeps the post when cancellation media cleanup fails", async () => {
+  it("deletes atomically before media cleanup and reports cleanup failure", async () => {
     const d = deps();
-    d.postModel.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(row({ status: "scheduled", media })) });
     d.postModel.findOneAndDelete.mockReturnValue(updateQuery(row({ status: "scheduled", media })));
     d.mediaService.destroy.mockRejectedValue(new Error("cloudinary unavailable"));
     const service = new FacebookPostService(d);
@@ -256,7 +255,19 @@ describe("FacebookPostService", () => {
       code: "FACEBOOK_POST_MEDIA_CLEANUP_FAILED",
       statusCode: 502
     });
-    expect(d.postModel.findOneAndDelete).not.toHaveBeenCalled();
+    expect(d.postModel.findOneAndDelete).toHaveBeenCalledWith({ _id: "post-1", userId: "user-1", status: { $in: ["draft", "scheduled"] } });
+  });
+
+  it("does not destroy media when an eligible post changes state before the atomic cancellation", async () => {
+    const d = deps();
+    d.postModel.findOneAndDelete.mockReturnValue(updateQuery(null));
+    const service = new FacebookPostService(d);
+
+    await expect(service.cancelPost("user-1", "post-1")).rejects.toMatchObject({
+      code: "FACEBOOK_POST_STATE_CHANGED",
+      statusCode: 409
+    });
+    expect(d.mediaService.destroy).not.toHaveBeenCalled();
   });
 
   it("rejects a scheduled time in the past", async () => {

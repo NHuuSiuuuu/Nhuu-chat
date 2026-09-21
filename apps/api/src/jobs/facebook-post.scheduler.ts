@@ -123,31 +123,31 @@ export class FacebookPostScheduler {
     try {
       const now = this.clock();
       const leaseUntil = new Date(now.getTime() + this.leaseMs);
+      let recovered: PostRecord | null;
+      try {
+        recovered = await this.posts.findOneAndUpdate(
+          { status: "publishing", publishingLeaseUntil: { $lte: now } },
+          {
+            $set: {
+              status: "failed",
+              lastErrorCode: "FACEBOOK_PUBLISH_LEASE_EXPIRED",
+              lastErrorMessage: "Facebook publish lease expired; retry requires manual confirmation",
+              publishingLeaseUntil: null
+            }
+          },
+          { new: true, runValidators: true }
+        ).lean();
+      } catch {
+        throw persistenceError();
+      }
+      if (recovered) return true;
+
       const claimed = await this.posts.findOneAndUpdate(
         { status: "scheduled", scheduledAt: { $lte: now } },
         { $set: { status: "publishing", publishingLeaseUntil: leaseUntil }, $inc: { attempts: 1 } },
         { new: true, runValidators: true }
       ).lean();
-      if (!claimed) {
-        let recovered: PostRecord | null;
-        try {
-          recovered = await this.posts.findOneAndUpdate(
-            { status: "publishing", publishingLeaseUntil: { $lte: now } },
-            {
-              $set: {
-                status: "failed",
-                lastErrorCode: "FACEBOOK_PUBLISH_LEASE_EXPIRED",
-                lastErrorMessage: "Facebook publish lease expired; retry requires manual confirmation",
-                publishingLeaseUntil: null
-              }
-            },
-            { new: true, runValidators: true }
-          ).lean();
-        } catch {
-          throw persistenceError();
-        }
-        return Boolean(recovered);
-      }
+      if (!claimed) return false;
 
       let published: { publishedPostId: string };
       try {

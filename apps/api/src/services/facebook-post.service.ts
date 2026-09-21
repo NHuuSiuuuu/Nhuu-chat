@@ -256,19 +256,19 @@ export class FacebookPostService {
   }
 
   async cancelPost(userId: string, postId: string): Promise<void> {
-    const current = await this.posts.findOne({ _id: postId, userId }).lean();
-    if (!current || !["draft", "scheduled", "failed"].includes(current.status)) {
-      throw new AppError(409, "FACEBOOK_POST_INVALID_STATE", "Facebook post cannot be cancelled in its current state");
+    // Xóa có điều kiện để trạng thái hợp lệ và snapshot media cùng được chốt trong một thao tác nguyên tử.
+    const deleted = await this.posts.findOneAndDelete({ _id: postId, userId, status: { $in: ["draft", "scheduled"] } }).lean();
+    if (!deleted) {
+      throw new AppError(409, "FACEBOOK_POST_STATE_CHANGED", "Facebook post state changed while cancelling");
     }
-    if (current.media) {
+    if (deleted.media) {
       try {
-        await this.media.destroy(current.media);
+        await this.media.destroy(deleted.media);
       } catch {
+        // Bản ghi đã xóa là quyết định cuối; lỗi này được trả về để quy trình dọn media bên nhà cung cấp xử lý bù.
         throw new AppError(502, "FACEBOOK_POST_MEDIA_CLEANUP_FAILED", "Facebook post media could not be cleaned up");
       }
     }
-    const deleted = await this.posts.findOneAndDelete({ _id: postId, userId, status: { $in: ["draft", "scheduled", "failed"] } }).lean();
-    if (!deleted) throw new AppError(409, "FACEBOOK_POST_STATE_CHANGED", "Facebook post state changed while cancelling");
   }
 }
 
