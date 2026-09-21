@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Bỏ tiêu đề và phụ đề trùng lặp trong nội dung trang Đăng bài Facebook Page, giữ lại Global Header và layout sidebar.
 - Refactor trang Đăng bài Facebook Page thành layout sidebar với các tab Soạn thảo, Nháp, Đã lên lịch và Lịch sử; bổ sung sửa/xóa bài, thử lại bài lỗi và xem bài đã đăng trên Facebook.
 - Mở rộng xóa bài Facebook Page theo owner cho cả trạng thái đã đăng và thất bại, đồng thời dọn media liên quan.
 - Sửa modal `Thêm kết nối` luôn nằm trên Header với backdrop `z-[100]`, căn giữa, nền tối, animation scale/fade và cập nhật logo Zalo nguyên bản.

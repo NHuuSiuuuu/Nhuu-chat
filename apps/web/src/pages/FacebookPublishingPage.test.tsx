@@ -71,4 +71,10 @@ describe("FacebookPublishingPage", () => {
   it("keeps the shared global header above the publishing layout", () => {
     expect(surface({ user: { email: "owner@example.com", role: "owner", displayName: "Owner" } })).toContain('alt="NhuuChat"');
   });
+
+  it("does not duplicate the publishing title and timezone subtitle below the global header", () => {
+    const html = surface();
+    expect(html).not.toContain("Đăng bài Facebook Page");
+    expect(html).not.toContain("Quản lý bài viết bằng múi giờ Asia/Ho_Chi_Minh.");
+  });
 });
