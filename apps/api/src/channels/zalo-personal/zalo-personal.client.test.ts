@@ -53,8 +53,8 @@ describe("Zalo personal client adapter", () => {
     await client.disconnect();
     expect(listener.start).toHaveBeenCalledOnce();
     expect(listener.stop).toHaveBeenCalledOnce();
-    expect(zcaApi.sendMessage).toHaveBeenCalledWith("hello", "thread-1", 0);
-    expect(zcaApi.sendMessage).toHaveBeenCalledWith("hello group", "group-1", 1);
+    expect(zcaApi.sendMessage).toHaveBeenCalledWith({ msg: "hello" }, "thread-1", 0);
+    expect(zcaApi.sendMessage).toHaveBeenCalledWith({ msg: "hello group" }, "group-1", 1);
     await client.login(api.getContext().credentials);
     expect(zca.login).toHaveBeenCalledWith({ imei: "imei", cookie: { cookies: [{ key: "sid", value: "opaque" }] }, userAgent: "ua" });
     vi.useRealTimers();
@@ -109,6 +109,7 @@ describe("Zalo personal client adapter", () => {
     const api = await client.loginQR(vi.fn());
 
     await expect(api.sendMessage("thread-1", "hello")).resolves.toEqual({ id: "8268519386496" });
+    expect(zcaApi.sendMessage).toHaveBeenCalledWith({ msg: "hello" }, "thread-1", 0);
   });
 
   it("passes a buffer attachment to zca-js with filename and size metadata", async () => {

@@ -131,7 +131,7 @@ class ZaloPersonalClientAdapter implements ZaloPersonalClient {
         const result = await zcaApi.sendMessage(
           attachment
             ? { msg: content, attachments: [{ data: attachment.buffer, filename: attachment.filename, metadata: { totalSize: attachment.size } }] }
-            : content,
+            : { msg: content },
           threadId,
           threadType
         );
