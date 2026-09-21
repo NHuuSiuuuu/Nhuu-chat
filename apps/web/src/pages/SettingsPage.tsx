@@ -143,6 +143,27 @@ const mergedPageNotes = [
   "Với chế độ Gộp trang: chỉ gộp các tài khoản đang online để đảm bảo nhận tin nhắn đầy đủ"
 ];
 
+const overviewAudience = [
+  "Đội ngũ chăm sóc khách hàng cần quản lý Facebook, Instagram, Zalo và Telegram trong một nơi.",
+  "Doanh nghiệp có nhiều tài khoản hoặc nhiều nhân viên cùng xử lý hội thoại.",
+  "Người vận hành cần theo dõi trạng thái kết nối, tin nhắn và dữ liệu khách hàng rõ ràng."
+];
+
+const overviewFeatures = [
+  "Inbox hợp nhất cho tin nhắn text, ảnh và file từ nhiều kênh.",
+  "Quản lý riêng từng tài khoản, hội thoại, nhãn, người phụ trách và trạng thái gửi.",
+  "Dashboard theo dõi tài khoản online/offline, listener và thao tác kết nối.",
+  "Trợ lý AI, chatbot tự động và kho kiến thức RAG hỗ trợ phản hồi theo ngữ cảnh."
+];
+
+const aiAssistantSteps = [
+  "Mở tab Trợ lý AI trong Cài đặt và chọn chatbot muốn cấu hình.",
+  "Chọn model Gemini, bật/tắt trợ lý và điều chỉnh chế độ gợi ý trả lời hoặc phát hiện cảm xúc.",
+  "Viết hướng dẫn, thêm tài liệu kiến thức và mẫu chào để chatbot hiểu sản phẩm, giá và chính sách.",
+  "Dùng khung xem trước để kiểm tra câu trả lời, sau đó bấm Xuất bản khi nội dung đã phù hợp.",
+  "Theo dõi hội thoại thực tế và để nhân viên tiếp quản khi AI không đủ thông tin."
+];
+
 type ChatbotAssistant = Pick<AssistantContract, "id" | "name" | "instructions" | "modelTier" | "enabled" | "fallbackMessage" | "channelScope" | "isDefault">;
 type GreetingTemplateDraft = Pick<AutomationTemplateContract, "name" | "keywords" | "responseTemplate" | "allowAiRewrite" | "priority" | "enabled" | "channelScope">;
 
@@ -863,13 +884,24 @@ interface SettingsPageProps {
   onProfile?: () => void;
 }
 
-function AboutInfoBlock({ title, icon, items, numbered = false }: { title: string; icon: "user" | "layers"; items: string[]; numbered?: boolean }) {
+type AboutIconName = "user" | "layers" | "alert" | "users" | "sparkles" | "note" | "shield";
+
+function AboutInfoBlock({ title, icon, items, numbered = false }: { title: string; icon: AboutIconName; items: string[]; numbered?: boolean }) {
   return <section className="mt-8 first:mt-0" aria-labelledby={`about-${icon}-title`}>
     <h3 className="flex items-center gap-3 text-xl font-bold text-gray-900" id={`about-${icon}-title`}><span className="text-blue-600"><InboxIcon name={icon} size={22} /></span>{title}</h3>
     <ul className={numbered ? "mt-5 list-none p-0" : "mt-5 list-disc pl-5"}>
       {items.map((item, index) => numbered
         ? <li className="flex gap-4 mb-4" key={item}><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-600">{index + 1}</span><span className="text-sm leading-6 text-gray-700">{item}</span></li>
         : <li className="mb-3 text-sm leading-6 text-gray-700" key={item}>{item}</li>)}
+    </ul>
+  </section>;
+}
+
+function AboutBulletGroup({ title, icon, items }: { title: string; icon: AboutIconName; items: string[] }) {
+  return <section className="mt-8 first:mt-0" aria-labelledby={`about-${icon}-${title}`}>
+    <h3 className="flex items-center gap-3 text-xl font-bold text-gray-900" id={`about-${icon}-${title}`}><span className="text-blue-600"><InboxIcon name={icon} size={22} /></span>{title}</h3>
+    <ul className="mt-5 grid gap-3">
+      {items.map((item) => <li className="flex items-start gap-3 text-sm leading-6 text-gray-700" key={item}><span className="mt-1 text-blue-600"><InboxIcon name={icon} size={16} /></span><span>{item}</span></li>)}
     </ul>
   </section>;
 }
@@ -888,7 +920,15 @@ function AboutSettings() {
     </aside>
     <article className="p-6 sm:p-8" aria-label={`Nội dung ${activeSection}`}>
       <div className="max-w-3xl">
-        {activeSection === "Đa tài khoản" ? <>
+        {activeSection === "Tổng quan" ? <>
+          <AboutBulletGroup title="Ứng dụng này được xây dựng dành cho ai?" icon="users" items={overviewAudience} />
+          <AboutBulletGroup title="Tính năng nổi bật" icon="sparkles" items={overviewFeatures} />
+        </> : activeSection === "Trợ lý AI" ? <>
+          <AboutBulletGroup title="Tính năng Trợ lý AI" icon="sparkles" items={content.bullets} />
+          <AboutInfoBlock title="Hướng dẫn sử dụng Trợ lý AI" icon="note" items={aiAssistantSteps} numbered />
+        </> : activeSection === "Bảo mật & dữ liệu" ? <>
+          <AboutBulletGroup title="Bảo mật & dữ liệu" icon="shield" items={content.bullets} />
+        </> : activeSection === "Đa tài khoản" ? <>
           <AboutInfoBlock title="Đăng nhập nhiều tài khoản ở các kênh khác" icon="user" items={multiAccountSteps} numbered />
           <AboutInfoBlock title="Chế độ gộp trang" icon="layers" items={mergedPageSteps} />
           <section className="mt-8" aria-labelledby="about-important-notes">
@@ -916,7 +956,7 @@ function SettingsLayout({ activeTab, onTabChange, children, onLogoClick, onNavig
     }
     onTabChange(item);
   }
-  return <main className="min-h-screen bg-gray-50 text-gray-800"><SettingsDashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} /><div className="pointer-events-none fixed right-4 top-20 z-[70] grid gap-3" aria-live="polite">{developmentToast && <div className="pointer-events-auto"><DevelopmentToast message={developmentToast} onClose={() => setDevelopmentToast(null)} /></div>}</div><div className="mx-6 flex w-auto gap-6 pt-6 pb-8 max-[1024px]:mx-4 max-[1024px]:flex-col max-[1024px]:pt-4"><aside className="h-fit w-[300px] shrink-0 rounded-xl bg-white p-3 shadow-sm lg:sticky lg:top-6 max-[1024px]:w-full"><h1 className="px-3 pb-3 text-lg font-bold">Cài đặt</h1><nav className="grid gap-1" aria-label="Menu cài đặt">{settingsItems.map((item) => <button className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${activeTab === item ? "bg-sky-50 font-semibold text-sky-700" : "text-gray-600 hover:bg-gray-50"} ${isSettingsPlaceholderTab(item) ? "cursor-not-allowed opacity-60" : ""}`} aria-disabled={isSettingsPlaceholderTab(item)} key={item} type="button" onClick={() => handleTabChange(item)}><InboxIcon name={settingsIconByItem[item]} size={17} /> <span>{item}</span>{item === "Trợ lý AI" && <small className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Beta</small>}</button>)}</nav></aside><section className="min-w-0 flex-1 rounded-xl bg-white shadow-sm">{children}</section></div></main>;
+  return <main className="min-h-screen bg-gray-50 text-gray-800"><SettingsDashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} /><div className="pointer-events-none fixed right-4 top-20 z-[70] grid gap-3" aria-live="polite">{developmentToast && <div className="pointer-events-auto"><DevelopmentToast message={developmentToast} onClose={() => setDevelopmentToast(null)} /></div>}</div><div className="mx-6 flex w-auto items-start gap-6 pt-6 pb-8 max-[1024px]:mx-4 max-[1024px]:flex-col max-[1024px]:pt-4"><aside className="h-fit w-[300px] shrink-0 rounded-xl bg-white p-3 shadow-sm lg:sticky lg:top-20 lg:h-[calc(100vh-80px)] lg:overflow-y-auto max-[1024px]:w-full"><h1 className="px-3 pb-3 text-lg font-bold">Cài đặt</h1><nav className="grid gap-1" aria-label="Menu cài đặt">{settingsItems.map((item) => <button className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${activeTab === item ? "bg-sky-50 font-semibold text-sky-700" : "text-gray-600 hover:bg-gray-50"} ${isSettingsPlaceholderTab(item) ? "cursor-not-allowed opacity-60" : ""}`} aria-disabled={isSettingsPlaceholderTab(item)} key={item} type="button" onClick={() => handleTabChange(item)}><InboxIcon name={settingsIconByItem[item]} size={17} /> <span>{item}</span>{item === "Trợ lý AI" && <small className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Beta</small>}</button>)}</nav></aside><section className="min-w-0 flex-1 rounded-xl bg-white shadow-sm">{children}</section></div></main>;
 }
 
 function SettingsDevelopmentPlaceholder({ title }: { title: string }) {

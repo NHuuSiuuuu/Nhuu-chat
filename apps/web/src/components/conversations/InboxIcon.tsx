@@ -1,6 +1,6 @@
 import * as React from "react";
 
-type IconName = "inbox" | "chat" | "user" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "chevron-left" | "chevron-down" | "chevron-up" | "tag" | "edit" | "trash" | "pin" | "monitor" | "phone" | "cloud" | "wrench" | "clock" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more" | "check" | "copy" | "download" | "upload" | "file" | "camera" | "robot" | "layers" | "alert";
+type IconName = "inbox" | "chat" | "user" | "users" | "settings" | "help" | "search" | "filter" | "plus" | "list" | "chevron-left" | "chevron-down" | "chevron-up" | "tag" | "edit" | "trash" | "pin" | "monitor" | "phone" | "cloud" | "wrench" | "clock" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more" | "check" | "copy" | "download" | "upload" | "file" | "camera" | "robot" | "layers" | "alert" | "shield";
 
 export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -45,7 +45,8 @@ export function InboxIcon({ name, size = 18 }: { name: IconName; size?: number }
     camera: <><path d="M4 8h3l1.5-2h7L17 8h3v11H4z" /><circle cx="12" cy="13" r="3" /></>,
     robot: <><rect x="5" y="8" width="14" height="11" rx="3" /><path d="M12 4v4M9 13h.01M15 13h.01M9 16h6" /><path d="M3 12v3M21 12v3" /></>,
     layers: <><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 12 9 5 9-5M3 16l9 5 9-5" /></>,
-    alert: <><path d="m12 4 9 16H3L12 4Z" /><path d="M12 9v5M12 17h.01" /></>
+    alert: <><path d="m12 4 9 16H3L12 4Z" /><path d="M12 9v5M12 17h.01" /></>,
+    shield: <><path d="M12 3 20 6v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-3Z" /><path d="m8.5 12 2.2 2.2 4.8-5" /></>
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }

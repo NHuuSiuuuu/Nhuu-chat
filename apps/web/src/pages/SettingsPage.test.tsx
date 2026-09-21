@@ -110,7 +110,22 @@ describe("Settings page", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
     expect(source).toContain('name="alert"');
-    expect(source).toContain("lg:sticky lg:top-6");
+    expect(source).toContain("lg:sticky lg:top-20");
+  });
+
+  it("organizes overview, AI, and security guidance with SVG-led sections", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("Ứng dụng này được xây dựng dành cho ai?");
+    expect(source).toContain("Tính năng nổi bật");
+    expect(source).toContain("Tính năng Trợ lý AI");
+    expect(source).toContain("Hướng dẫn sử dụng Trợ lý AI");
+    expect(source).toContain('icon="users"');
+    expect(source).toContain('icon="sparkles"');
+    expect(source).toContain('icon="shield"');
+    expect(source).toContain("items-start");
+    expect(source).toContain("lg:h-[calc(100vh-80px)]");
+    expect(source).toContain("lg:overflow-y-auto");
   });
 
   it("marks unfinished settings tabs as development placeholders", () => {
