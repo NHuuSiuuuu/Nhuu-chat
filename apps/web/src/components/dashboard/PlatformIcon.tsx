@@ -2,7 +2,12 @@ import * as React from "react";
 
 import type { ConnectionProviderId } from "../../state/dashboard-ui.js";
 
-export function PlatformIcon({ provider, size = 18, plain = false }: { provider: ConnectionProviderId | "all"; size?: number; plain?: boolean }) {
+export function PlatformIcon({ provider, size = 18, plain = false, menu = false }: { provider: ConnectionProviderId | "all"; size?: number; plain?: boolean; menu?: boolean }) {
+  if (menu) {
+    if (provider === "facebook") return <svg className="block shrink-0" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6" fill="#1877F2" /><path fill="#fff" d="M13.4 20v-7h2.35l.35-2.7H13.4V8.58c0-.78.22-1.3 1.34-1.3h1.43V4.86c-.25-.03-1.1-.1-2.1-.1-2.08 0-3.5 1.27-3.5 3.6v1.94H8.2V13h2.37v7h2.83Z" /></svg>;
+    if (provider === "tiktok") return <svg className="block shrink-0" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6" fill="#111" stroke="#fff" strokeWidth="1.5" /><path fill="#fff" d="M14 4h2c.2 1.8 1.2 3.1 3 3.7v2.1c-1.1-.1-2.1-.5-3-1.1v6.2a5.2 5.2 0 1 1-4.5-5.1v2.1a2.2 2.2 0 1 0 1.5 2V4Z" /></svg>;
+    if (provider === "website") return <svg className="block shrink-0" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6" fill="#111" stroke="#fff" strokeWidth="1.5" /><circle cx="12" cy="12" r="6" fill="none" stroke="#fff" strokeWidth="1.5" /><path fill="none" stroke="#fff" strokeWidth="1.5" d="M6 12h12M12 6c1.6 1.7 1.6 10.3 0 12M12 6c-1.6 1.7-1.6 10.3 0 12" /></svg>;
+  }
   if (plain) {
     if (provider === "pending") return <svg className="block shrink-0" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="#F4B942" strokeLinecap="round" strokeWidth="2" d="M12 5.5v6l3.5 2" /></svg>;
     if (provider === "telegram") return <svg className="block shrink-0" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><path fill="#29B6F6" d="M21.7 3.2 2.9 10.45c-1.28.51-1.27 1.22-.23 1.54l4.82 1.5 1.85 5.68c.23.64.12.9.78.9.51 0 .73-.23.99-.5l2.34-2.27 4.86 3.59c.9.5 1.55.24 1.78-.83l3.18-15.02c.34-1.33-.51-1.93-1.57-1.84Zm-13.5 9.95 10.92-6.9c.41-.25.62-.05.28.26l-8.51 7.74-.34 3.64-.9-.28Z" /></svg>;

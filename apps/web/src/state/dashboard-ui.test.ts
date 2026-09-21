@@ -13,13 +13,14 @@ describe("dashboard connection UI", () => {
       "pending",
       "facebook",
       "zalo",
+      "website",
       "telegram",
       "instagram",
       "threads",
       "tiktok",
       "whatsapp",
-      "booking",
-      "airbnb"
+      "airbnb",
+      "booking"
     ]);
   });
 

@@ -2,6 +2,7 @@ export type ConnectionProviderId =
   | "pending"
   | "facebook"
   | "zalo"
+  | "website"
   | "telegram"
   | "instagram"
   | "threads"
@@ -16,7 +17,7 @@ export const dashboardNavItems = ["Hộp thư", "Đơn hàng", "Bài viết", "T
 
 export const platformIconBoxSize = 32;
 
-export const brandLogoProviderIds = ["pending", "facebook", "zalo", "telegram", "instagram", "threads", "tiktok", "whatsapp", "booking", "airbnb"] as const;
+export const brandLogoProviderIds = ["pending", "facebook", "zalo", "website", "telegram", "instagram", "threads", "tiktok", "whatsapp", "airbnb", "booking"] as const;
 
 export const connectionProviders: Array<{
   id: ConnectionProviderId;
@@ -27,11 +28,12 @@ export const connectionProviders: Array<{
   { id: "pending", label: "Chờ kích hoạt", tone: "pending" },
   { id: "facebook", label: "Facebook", tone: "facebook" },
   { id: "zalo", label: "Zalo", tone: "zalo" },
+  { id: "website", label: "Website", tone: "website" },
   { id: "telegram", label: "Telegram", tone: "telegram" },
   { id: "instagram", label: "Instagram", tone: "instagram" },
   { id: "threads", label: "Threads", tone: "threads", badge: "Beta" },
   { id: "tiktok", label: "TikTok", tone: "tiktok" },
   { id: "whatsapp", label: "WhatsApp", tone: "whatsapp" },
-  { id: "booking", label: "Booking", tone: "booking", badge: "Beta" },
-  { id: "airbnb", label: "Airbnb", tone: "airbnb", badge: "Beta" }
+  { id: "airbnb", label: "Airbnb", tone: "airbnb", badge: "Beta" },
+  { id: "booking", label: "Booking", tone: "booking", badge: "Beta" }
 ];

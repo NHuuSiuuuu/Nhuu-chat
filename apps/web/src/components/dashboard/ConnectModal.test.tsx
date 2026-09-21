@@ -43,4 +43,14 @@ describe("ConnectModal Tailwind migration", () => {
     expect(source).toContain('qr?.status === "error"');
     expect(source).toContain("Mã QR đăng nhập Zalo");
   });
+
+  it("uses the refreshed connection menu treatment", () => {
+    const source = readFileSync(new URL("./ConnectModal.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('provider={item.id} menu size={36}');
+    expect(source).toContain("items-center gap-3 rounded-xl");
+    expect(source).toContain("hover:bg-gray-100");
+    expect(source).toContain("font-semibold text-gray-900");
+    expect(source).toContain("bg-yellow-100/80 text-yellow-700 text-[10px] font-medium px-2 py-0.5 rounded-full");
+  });
 });

@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Refactor giao diện modal `Thêm kết nối`: thêm Website, đưa Booking xuống cuối, làm nổi bật trạng thái active/hover và dùng icon thương hiệu kích thước lớn không còn nền xám bao ngoài.
 - Bổ sung hướng dẫn vận hành Facebook Page V1: kết nối thủ công Page ID/token, giới hạn Development Mode, Graph API `v26.0`, Cloudinary ảnh JPG/PNG/WebP tối đa 5 MiB, trạng thái bài, múi giờ `Asia/Ho_Chi_Minh`/UTC, worker 30 giây, recovery sau restart và xử lý timeout Meta mơ hồ.
 - Bổ sung các biến cấu hình không bí mật cho Facebook Page scheduler; token Page vẫn chỉ nhập lúc kết nối và được mã hóa phía backend.
 - Thêm giao diện đăng bài Facebook Page: kết nối token không lưu trên trình duyệt, soạn text/ảnh, đăng ngay/lưu nháp/hẹn đăng theo múi giờ `Asia/Ho_Chi_Minh`, xem trạng thái và thử lại/hủy lịch an toàn.
