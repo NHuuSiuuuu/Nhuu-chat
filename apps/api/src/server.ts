@@ -203,7 +203,7 @@ export async function startServer(dependencies: ServerDependencies = {}): Promis
     socketServer.close();
     await closeRealtimeServer(socketServer);
     await closeRedisLock?.();
-    await closeFacebookOAuthStore();
+    await closeFacebookOAuthStore().catch(() => undefined);
     await new Promise<void>((resolve) => {
       if (!httpServer.listening) {
         resolve();
