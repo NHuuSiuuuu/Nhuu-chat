@@ -89,9 +89,13 @@ describe("FacebookPublishingPage", () => {
     expect(source).toContain("bg-teal-50 text-teal-700");
   });
 
-  it("keeps the Facebook management sidebar sticky below the global header", () => {
+  it("lets the Facebook management sidebar scroll with the page", () => {
     const source = readFileSync(new URL("./FacebookPublishingPage.tsx", import.meta.url), "utf8");
-    expect(source).toContain("sticky top-24 self-start");
-    expect(source).toContain("h-[calc(100vh-6rem)] overflow-y-auto");
+    expect(source).toContain('className="w-full shrink-0 rounded-2xl bg-white p-3 shadow-sm lg:w-64"');
+    expect(source).not.toContain("sticky");
+    expect(source).not.toContain("top-24");
+    expect(source).not.toContain("self-start");
+    expect(source).not.toContain("h-[calc(100vh-6rem)]");
+    expect(source).not.toContain("overflow-y-auto");
   });
 });

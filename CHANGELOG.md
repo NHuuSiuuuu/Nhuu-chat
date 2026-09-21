@@ -5,7 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
-- Cố định sidebar quản lý Facebook Page bằng `sticky top-24`, giới hạn chiều cao và thêm cuộn độc lập bên trong sidebar.
+- Bỏ cơ chế cố định và cuộn riêng của sidebar quản lý Facebook Page để sidebar cuộn cùng nội dung chính.
 - Cập nhật card quản lý Facebook Page: chọn Page bằng dropdown, đồng bộ Page ID theo lựa chọn, đưa trạng thái kết nối vào card và bỏ các phần tử điều hướng thừa.
 - Bỏ tiêu đề và phụ đề trùng lặp trong nội dung trang Đăng bài Facebook Page, giữ lại Global Header và layout sidebar.
 - Refactor trang Đăng bài Facebook Page thành layout sidebar với các tab Soạn thảo, Nháp, Đã lên lịch và Lịch sử; bổ sung sửa/xóa bài, thử lại bài lỗi và xem bài đã đăng trên Facebook.
