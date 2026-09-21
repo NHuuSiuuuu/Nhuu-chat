@@ -64,8 +64,28 @@ describe("Settings page", () => {
       expect(settingsModule.settingsPathForItem("Thẻ hội thoại")).toBe("/settings/conversation-tags");
       expect(settingsModule.settingsPathForItem("Hỗ trợ trả lời")).toBe("/settings/quick-replies");
       expect(settingsModule.settingsItemFromPath("/settings/ai-assistant")).toBe("Trợ lý AI");
-      expect(settingsModule.settingsItemFromPath("/settings/unknown")).toBe("Cài đặt chung");
+      expect(settingsModule.settingsItemFromPath("/settings/unknown")).toBe("Giới thiệu");
     }
+  });
+
+  it("adds the introduction tab with the requested navigation sections", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('"Giới thiệu"');
+    expect(source).toContain('"Tổng quan"');
+    expect(source).toContain('"Dashboard"');
+    expect(source).toContain('"Đa tài khoản"');
+    expect(source).toContain('"Quản lý tin nhắn"');
+    expect(source).toContain('"Trợ lý AI"');
+    expect(source).toContain('"Bảo mật & dữ liệu"');
+    expect(source).toContain("activeSection");
+    expect(source).toContain("Nhuu-chat");
+    expect(source).toContain("MongoDB");
+  });
+
+  it("maps the introduction tab to a stable settings URL", () => {
+    expect(settingsModule.settingsPathForItem("Giới thiệu" as never)).toBe("/settings/about");
+    expect(settingsModule.settingsItemFromPath("/settings/about")).toBe("Giới thiệu");
   });
 
   it("marks unfinished settings tabs as development placeholders", () => {
@@ -228,7 +248,7 @@ describe("Settings page", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("function SettingsLayout");
-    expect(source.match(/<SettingsLayout/g)?.length).toBe(3);
+    expect(source.match(/<SettingsLayout/g)?.length).toBe(4);
     expect(source).not.toContain('if (activeTab === "Trợ lý AI") return <main');
     expect(source).not.toContain('if (activeTab === "Hỗ trợ trả lời") return <main');
   });

@@ -23,7 +23,7 @@ const suggestionLabelByMode: Record<AiSuggestionMode, string> = { off: "Thủ c�
 const sentimentWindowByLabel: Record<string, AiSentimentWindow> = { "3 tin gần nhất": 3, "6 tin gần nhất": 6, "10 tin gần nhất": 10 };
 const sentimentLabelByWindow: Record<AiSentimentWindow, string> = { 3: "3 tin gần nhất", 6: "6 tin gần nhất", 10: "10 tin gần nhất" };
 const pickerColors = ["#9ca3af", "#ef4444", "#f97316", "#eab308", "#22c55e", "#14b8a6", "#3b82f6", "#8b5cf6", "#ec4899", "#38bdf8"];
-const settingsItems = ["Cài đặt chung", "Thẻ hội thoại", "Trợ lý AI", "Hỗ trợ trả lời", "Giao diện", "Cuộc gọi", "Chế độ xoay vòng", "Đồng bộ", "Công cụ", "Phân quyền", "Lịch sử"] as const;
+const settingsItems = ["Giới thiệu", "Cài đặt chung", "Thẻ hội thoại", "Trợ lý AI", "Hỗ trợ trả lời", "Giao diện", "Cuộc gọi", "Chế độ xoay vòng", "Đồng bộ", "Công cụ", "Phân quyền", "Lịch sử"] as const;
 const settingsIconByItem = {
   "Cài đặt chung": "settings",
   "Thẻ hội thoại": "tag",
@@ -35,7 +35,8 @@ const settingsIconByItem = {
   "Đồng bộ": "cloud",
   "Công cụ": "wrench",
   "Phân quyền": "users",
-  "Lịch sử": "clock"
+  "Lịch sử": "clock",
+  "Giới thiệu": "info"
 } as const;
 type SettingsItem = typeof settingsItems[number];
 const placeholderSettingsItems = new Set<SettingsItem>([
@@ -65,7 +66,8 @@ const settingsSlugByItem: Record<SettingsItem, string> = {
   "Đồng bộ": "sync",
   "Công cụ": "tools",
   "Phân quyền": "permissions",
-  "Lịch sử": "history"
+  "Lịch sử": "history",
+  "Giới thiệu": "about"
 };
 const settingsItemBySlug = Object.fromEntries(Object.entries(settingsSlugByItem).map(([item, slug]) => [slug, item])) as Record<string, SettingsItem>;
 
@@ -84,6 +86,39 @@ export function publicationButtonLabel(enabled: boolean): { button: string; stat
 }
 
 type AiAssistantTab = "Gợi ý trả lời" | "Chatbot tự động";
+
+const aboutSections = ["Tổng quan", "Dashboard", "Đa tài khoản", "Quản lý tin nhắn", "Trợ lý AI", "Bảo mật & dữ liệu"] as const;
+type AboutSection = typeof aboutSections[number];
+
+const aboutSectionContent: Record<AboutSection, { summary: string; bullets: string[] }> = {
+  "Tổng quan": {
+    summary: "Nhuu-chat là hệ thống quản lý chăm sóc khách hàng đa kênh, kết hợp Inbox realtime với trợ lý AI RAG.",
+    bullets: ["Thẻ tài khoản: Mỗi tài khoản hiển thị avatar, tên, trạng thái Online/Offline.", "Kiến trúc tách rõ xác thực, kênh kết nối, khách hàng, hội thoại, tin nhắn và AI.", "Giao diện tập trung vào trạng thái vận hành rõ ràng và không làm mất ngữ cảnh hội thoại."]
+  },
+  Dashboard: {
+    summary: "Dashboard là trang chủ khi mở app, hiển thị trạng thái tất cả tài khoản và các thao tác quản lý nhanh: kết nối, ngắt kết nối, gộp trang và quản trị tài khoản.",
+    bullets: ["Hiển thị các tài khoản/kênh đã kết nối cùng trạng thái hoạt động.", "Kết nối lại: Nhấn nút kết nối trên thẻ để reconnect khi listener bị ngắt", "Gộp trang: Nhấn \"Gộp tài khoản\" để xem hội thoại từ nhiều kênh trong một inbox duy nhất", "Trạng thái tài khoản: Theo dõi nhanh kết nối, listener và khả năng thao tác của từng tài khoản", "Tìm kiếm: Tìm tài khoản theo tên, ID"]
+  },
+  "Đa tài khoản": {
+    summary: "Nhuu-Chat cho phép bạn đăng nhập và quản lý không giới hạn tài khoản trong một giao diện duy nhất. Mỗi tài khoản hoạt động độc lập, an toàn và không ảnh hưởng lẫn nhau.",
+    bullets: ["Thêm tài khoản Nhấn nút \"Kết nối\" ở sidebar → chọn kênh và quét QR Code bằng ứng dụng trên điện thoại.","Phiên đăng nhập được duy trì Sau khi đăng nhập, phiên được lưu bảo mật trên máy cục bộ, không cần xác thực lại lần sau.", "Chuyển đổi tức thì Nhấp vào avatar tài khoản ở sidebar để chuyển đổi giữa các tài khoản không cần đăng xuất.", "Giám sát trạng thái Dashboard hiển thị trạng thái Online/Offline, listener sống/chết của từng tài khoản."]
+  },
+  "Quản lý tin nhắn": {
+    summary: "Toàn bộ hội thoại từ tất cả tài khoản các kênh hiển thị trong một màn hình duy nhất. Hệ thống bộ lọc giúp bạn tập trung vào đúng hội thoại cần xử lý ngay lập tức",
+    bullets: [
+      "Hỗ trợ tin text, ảnh và file theo khả năng của từng kênh.",
+      "Bộ lọc hội thoại: Tất cả · Theo nhãn", "Tìm kiếm thông minh: Tìm theo tên, hoặc nhập số điện thoại để tra cứu ",
+      "Ghim hội thoại: Ghim các hội thoại quan trọng lên đầu danh sách", "Chuyển hội thoại: Chuyển hội thoại sang tài khoản khác để xử lý", "Xem chi tiết hội thoại: Xem thông tin khách hàng, lịch sử hội thoại, nhãn và các thao tác quản lý"]
+  },
+  "Trợ lý AI": {
+    summary: "Trợ lý AI - Tăng tốc chăm sóc khách hàng hỗ trợ gợi ý trả lời và chatbot tự động dựa trên cấu hình từng trợ lý.",
+    bullets: ["Trợ lý AI trong Nhuu-chat cho phép bạn tạo nhiều chatbot AI với tính cách, prompt và mục đích khác nhau. Mỗi trợ lý có thể được gán cho một hội thoại cụ thể hoặc dùng trong Workflow để tự động trả lời tin nhắn.", "Hỗ trợ các mức model Gemini, gợi ý trả lời và chế độ kích hoạt theo hội thoại.", "RAG sử dụng tài liệu kiến thức để giữ câu trả lời theo dữ liệu của doanh nghiệp.", "Có phân tích cảm xúc và cơ chế handoff để nhân viên tiếp quản khi cần."]
+  },
+  "Bảo mật & dữ liệu": {
+    summary: "Hệ thống ưu tiên phân quyền, cô lập dữ liệu và bảo vệ thông tin kết nối.",
+    bullets: ["API yêu cầu xác thực và kiểm tra quyền truy cập theo owner/hội thoại.", "Credentials kênh cá nhân được lưu dưới dạng mã hóa.", "MongoDB lưu dữ liệu nghiệp vụ; Redis hỗ trợ lease và trạng thái realtime, còn media được lưu qua Cloudinary khi cấu hình."]
+  }
+};
 
 type ChatbotAssistant = Pick<AssistantContract, "id" | "name" | "instructions" | "modelTier" | "enabled" | "fallbackMessage" | "channelScope" | "isDefault">;
 type GreetingTemplateDraft = Pick<AutomationTemplateContract, "name" | "keywords" | "responseTemplate" | "allowAiRewrite" | "priority" | "enabled" | "channelScope">;
@@ -805,6 +840,30 @@ interface SettingsPageProps {
   onProfile?: () => void;
 }
 
+function AboutSettings() {
+  const [activeSection, setActiveSection] = useState<AboutSection>(aboutSections[0]);
+  const content = aboutSectionContent[activeSection];
+
+  return <div className="grid min-h-[520px] grid-cols-[minmax(170px,0.32fr)_minmax(0,1fr)] max-[700px]:grid-cols-1">
+    <aside className="border-r border-gray-100 bg-gray-50/70 p-4 max-[700px]:border-r-0 max-[700px]:border-b" aria-label="Menu Giới thiệu">
+      <div className="mb-3 px-2"><p className="text-xs font-bold uppercase tracking-wide text-sky-600">Về Nhuu-chat</p><h2 className="mt-1 text-lg font-bold text-gray-900">Giới thiệu</h2></div>
+      <nav className="grid gap-1">
+        {aboutSections.map((section) => <button className={`rounded-lg px-3 py-2.5 text-left text-sm transition ${activeSection === section ? "bg-white font-semibold text-sky-700 shadow-sm" : "text-gray-600 hover:bg-white"}`} type="button" key={section} onClick={() => setActiveSection(section)} aria-current={activeSection === section ? "page" : undefined}>{section}</button>)}
+      </nav>
+    </aside>
+    <article className="p-6 sm:p-8" aria-label={`Nội dung ${activeSection}`}>
+      <div className="max-w-3xl">
+        {/* <span className="inline-flex rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">Nhuu-chat</span> */}
+        <h2 className="mt-4 text-2xl font-bold text-gray-900">{activeSection}</h2>
+        <p className="mt-3 text-sm leading-7 text-gray-600">{content.summary}</p>
+        <ul className="mt-6 grid gap-3">
+          {content.bullets.map((bullet) => <li className="flex gap-3 text-sm leading-6 text-gray-700" key={bullet}><span className="mt-2 size-1.5 shrink-0 rounded-full bg-sky-500" aria-hidden="true" /><span>{bullet}</span></li>)}
+        </ul>
+      </div>
+    </article>
+  </div>;
+}
+
 function SettingsLayout({ activeTab, onTabChange, children, onLogoClick, onNavigate, user, onLogout, onProfile }: SettingsPageProps & { activeTab: SettingsItem; onTabChange: (item: SettingsItem) => void; children: React.ReactNode }) {
   const [developmentToast, setDevelopmentToast] = useState<string | null>(null);
   function handleTabChange(item: SettingsItem) {
@@ -913,6 +972,7 @@ export function SettingsPage({ token, refresh, onLogoClick, onNavigate, user, on
     }
   }
 
+  if (activeTab === "Giới thiệu") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><AboutSettings /></SettingsLayout>;
   if (activeTab === "Trợ lý AI") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><AiAssistantSettings token={token} refresh={refresh} /></SettingsLayout>;
   if (isSettingsPlaceholderTab(activeTab)) return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><SettingsDevelopmentPlaceholder title={activeTab} /></SettingsLayout>;
   return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><div className="p-6"><h2 className="mb-5 text-2xl font-bold text-gray-900">{activeTab}</h2><div className="rounded-2xl bg-white p-6 shadow-sm"><div className="flex items-start justify-between gap-4"><p className="max-w-2xl text-sm leading-6 text-gray-500">Thẻ dùng để đánh dấu trạng thái hội thoại trong Livechat (vd "Mua hàng", "Đã gửi") — 1 hội thoại có thể gắn nhiều thẻ cùng lúc.</p><button className="shrink-0 rounded-lg bg-sky-600 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500" type="button" onClick={openAddTagModal}><span className="mr-1">+</span> Thêm thẻ</button></div>{error && <p className="mt-4 text-sm text-rose-600" role="alert">{error}</p>}{isLoading ? <p className="mt-7 text-sm text-gray-500">Đang tải thẻ...</p> : <div className="mt-7 flex flex-wrap gap-3">{tags.map((tag) => <span className="group inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:scale-[1.02]" style={{ backgroundColor: tag.color }} key={tag.id}>{tag.name}<span className="flex gap-1 opacity-60 transition group-hover:opacity-100"><button type="button" aria-label={`Sửa ${tag.name}`} onClick={() => openEditTagModal(tag)}><InboxIcon name="edit" size={14} /></button><button type="button" aria-label={`Xóa ${tag.name}`} disabled={deletingId === tag.id} onClick={() => void removeTag(tag)}><InboxIcon name="trash" size={14} /></button></span></span>)}</div>}</div>{isAddTagModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4" role="presentation" onMouseDown={closeTagModal}><section className="w-full max-w-md animate-[composer-dialog-in_180ms_ease-out] rounded-2xl bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="add-tag-title" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-center justify-between"><h3 className="text-lg font-bold" id="add-tag-title">{editingTag ? "Sửa thẻ hội thoại" : "Thêm thẻ hội thoại"}</h3><button className="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-100" type="button" onClick={closeTagModal} aria-label="Đóng"><InboxIcon name="close" /></button></div><form className="mt-5 grid gap-4" onSubmit={saveTag}><label className="grid gap-1.5 text-sm font-semibold">Tên thẻ<input className="rounded-lg border border-gray-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" placeholder="Vd: Mua hàng" value={tagName} onChange={(event) => setTagName(event.target.value)} /></label><fieldset><legend className="mb-2 text-sm font-semibold">Màu thẻ</legend><div className="flex flex-wrap gap-2">{pickerColors.map((color) => <button className={`size-7 rounded-full ${selectedColor === color ? "ring-2 ring-black ring-offset-2" : ""}`} style={{ backgroundColor: color }} type="button" aria-label={`Chọn màu ${color}`} key={color} onClick={() => setSelectedColor(color)} />)}</div><label className="flex w-fit cursor-pointer items-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm font-semibold text-gray-600 hover:border-sky-400 hover:text-sky-700"><input className="size-7 cursor-pointer rounded border-0 p-0" type="color" value={selectedColor} onChange={(event) => setSelectedColor(event.target.value)} aria-label="Tùy chỉnh màu" /><span>Tùy chỉnh màu</span></label></fieldset><button className="w-fit rounded-lg bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700" type="button">Xem trước</button><div className="mt-2 flex justify-end gap-2"><button className="rounded-lg px-4 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-50" type="button" onClick={closeTagModal}>Huỷ</button><button className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60" type="submit" disabled={isSaving}>{isSaving ? "Đang lưu..." : "Lưu"}</button></div></form></section></div>}</div></SettingsLayout>;
