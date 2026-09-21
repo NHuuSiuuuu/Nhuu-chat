@@ -19,11 +19,15 @@ beforeAll(async () => {
 interface TestFacebookOAuthStore extends FacebookOAuthStore {
   saved: Array<{ token: string; value: FacebookOAuthStoredValue; ttlSeconds: number }>;
   read(token: string): Promise<FacebookOAuthStoredValue | undefined>;
+  claim(token: string, claimToken: string, ttlSeconds: number): Promise<FacebookOAuthStoredValue | undefined>;
+  releaseClaim(token: string, claimToken: string): Promise<void>;
+  consumeClaim(token: string, claimToken: string): Promise<FacebookOAuthStoredValue | undefined>;
   consumeCalls: string[];
 }
 
 function store(): TestFacebookOAuthStore {
   const values = new Map<string, FacebookOAuthStoredValue>();
+  const claims = new Map<string, string>();
   const saved: Array<{ token: string; value: FacebookOAuthStoredValue; ttlSeconds: number }> = [];
   const consumeCalls: string[] = [];
   return {
@@ -35,6 +39,23 @@ function store(): TestFacebookOAuthStore {
     },
     async read(token) {
       return values.get(token);
+    },
+    async claim(token, claimToken) {
+      const value = values.get(token);
+      if (!value || claims.has(token)) return undefined;
+      claims.set(token, claimToken);
+      return value;
+    },
+    async releaseClaim(token, claimToken) {
+      if (claims.get(token) === claimToken) claims.delete(token);
+    },
+    async consumeClaim(token, claimToken) {
+      if (claims.get(token) !== claimToken) return undefined;
+      claims.delete(token);
+      consumeCalls.push(token);
+      const value = values.get(token);
+      values.delete(token);
+      return value;
     },
     async consume(token) {
       consumeCalls.push(token);
@@ -175,6 +196,47 @@ describe("FacebookOAuthService", () => {
     });
 
     expect(connect).toHaveBeenCalledTimes(2);
+    expect(stateStore.consumeCalls).toEqual(["selection-token"]);
+  });
+
+  it("allows only one concurrent selection request to reach connection persistence", async () => {
+    const stateStore = store();
+    await stateStore.save("selection-token", {
+      kind: "selection",
+      userId: "user-1",
+      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true }]
+    }, 600);
+    let markConnectionStarted: (() => void) | undefined;
+    const connectionStarted = new Promise<void>((resolve) => {
+      markConnectionStarted = resolve;
+    });
+    let releaseConnection: (() => void) | undefined;
+    const connectionGate = new Promise<void>((resolve) => {
+      releaseConnection = resolve;
+    });
+    const connect = vi.fn(async () => {
+      if (connect.mock.calls.length === 1) {
+        markConnectionStarted?.();
+        await connectionGate;
+      }
+      return { id: "connection-1" };
+    });
+    const randomToken = vi.fn()
+      .mockReturnValueOnce("claim-1")
+      .mockReturnValueOnce("claim-2");
+    const service = new FacebookOAuthService({ stateStore, randomToken });
+
+    const first = service.select("user-1", "selection-token", "page-1", connect);
+    await connectionStarted;
+    const second = service.select("user-1", "selection-token", "page-1", connect);
+
+    try {
+      await expect(second).rejects.toMatchObject({ code: "FACEBOOK_OAUTH_SELECTION_INVALID" });
+    } finally {
+      releaseConnection?.();
+    }
+    await expect(first).resolves.toEqual({ id: "connection-1" });
+    expect(connect).toHaveBeenCalledOnce();
     expect(stateStore.consumeCalls).toEqual(["selection-token"]);
   });
 });
