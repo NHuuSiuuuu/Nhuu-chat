@@ -79,7 +79,7 @@ export class FacebookPageService {
       response = await this.fetchGraph(url.toString(), { method: "GET" });
       body = await response.json();
     } catch {
-      throw new AppError(503, "FACEBOOK_GRAPH_UNAVAILABLE", "Facebook Graph API is temporarily unavailable");
+      throw new AppError(400, "FACEBOOK_PAGE_VALIDATION_FAILED", "Facebook Page credentials could not be validated");
     }
 
     if (!response.ok || graphErrorCode(body) !== undefined) {

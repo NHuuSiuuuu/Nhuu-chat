@@ -108,13 +108,16 @@ describe("FacebookPageService", () => {
     expect(model.deleteOne).toHaveBeenCalledWith({ userId: "user-1" });
   });
 
-  it("uses stable unavailable error for Graph transport failures", async () => {
+  it.each([
+    ["transport failures", () => Promise.reject(new Error("network down"))],
+    ["JSON failures", () => Promise.resolve({ ok: true, json: vi.fn().mockRejectedValue(new Error("malformed JSON")) })]
+  ])("maps Graph %s to a safe 4xx validation error", async (_name, failure) => {
     const { deps, fetchGraph } = dependencies();
-    fetchGraph.mockRejectedValue(new Error("network down"));
+    fetchGraph.mockImplementation(failure as never);
     const service = new FacebookPageService(deps);
 
     await expect(service.connect("user-1", { pageId: "page-123", pageAccessToken: "secret-token" })).rejects.toEqual(
-      new AppError(503, "FACEBOOK_GRAPH_UNAVAILABLE", "Facebook Graph API is temporarily unavailable")
+      new AppError(400, "FACEBOOK_PAGE_VALIDATION_FAILED", "Facebook Page credentials could not be validated")
     );
   });
 });
