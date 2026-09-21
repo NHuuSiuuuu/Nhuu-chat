@@ -186,6 +186,87 @@ describe("FacebookOAuthService", () => {
     expect(fetchGraph).toHaveBeenCalledTimes(2);
   });
 
+  it("bounds a stalled token exchange and aborts its Graph request", async () => {
+    const stateStore = store();
+    await stateStore.save("state-token", { kind: "oauth", userId: "user-1" }, 600);
+    let observedSignal: AbortSignal | null | undefined;
+    const fetchGraph = vi.fn((_input: string, init?: RequestInit) => {
+      observedSignal = init?.signal;
+      return new Promise<Response>(() => undefined);
+    });
+    const service = new FacebookOAuthService({
+      appId: "meta-app-id",
+      appSecret: "meta-app-secret",
+      redirectUri: "https://api.example.com/api/v1/facebook-page/oauth/callback",
+      stateStore,
+      fetchGraph,
+      graphRequestTimeoutMs: 50
+    });
+    vi.useFakeTimers();
+
+    try {
+      const finishPromise = service.finish("state-token", "authorization-code");
+      const errorPromise = finishPromise.catch((caught: unknown) => caught);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(fetchGraph).toHaveBeenCalledOnce();
+      expect(observedSignal?.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(50);
+      const error = await errorPromise;
+
+      expect(error).toMatchObject({ code: "FACEBOOK_OAUTH_CODE_EXCHANGE_FAILED", message: "Facebook OAuth request failed" });
+      expect(observedSignal?.aborted).toBe(true);
+      expect(stateStore.consumeCalls).toEqual(["state-token"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("bounds a stalled token response body and aborts its Graph request", async () => {
+    const stateStore = store();
+    await stateStore.save("state-token", { kind: "oauth", userId: "user-1" }, 600);
+    let observedSignal: AbortSignal | null | undefined;
+    let bodyStarted = false;
+    const fetchGraph = vi.fn(async (_input: string, init?: RequestInit) => {
+      observedSignal = init?.signal;
+      return {
+        ok: true,
+        json: () => {
+          bodyStarted = true;
+          return new Promise<unknown>(() => undefined);
+        }
+      } as Response;
+    });
+    const service = new FacebookOAuthService({
+      appId: "meta-app-id",
+      appSecret: "meta-app-secret",
+      redirectUri: "https://api.example.com/api/v1/facebook-page/oauth/callback",
+      stateStore,
+      fetchGraph,
+      graphRequestTimeoutMs: 50
+    });
+    vi.useFakeTimers();
+
+    try {
+      const finishPromise = service.finish("state-token", "authorization-code");
+      const errorPromise = finishPromise.catch((caught: unknown) => caught);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(bodyStarted).toBe(true);
+      expect(observedSignal?.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(50);
+      const error = await errorPromise;
+
+      expect(error).toMatchObject({ code: "FACEBOOK_OAUTH_CODE_EXCHANGE_FAILED", message: "Facebook OAuth request failed" });
+      expect(observedSignal?.aborted).toBe(true);
+      expect(stateStore.consumeCalls).toEqual(["state-token"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("follows Graph pagination and redacts Page tokens from the browser response", async () => {
     const stateStore = store();
     await stateStore.save("state-token", { kind: "oauth", userId: "user-1" }, 600);
@@ -276,6 +357,54 @@ describe("FacebookOAuthService", () => {
     expect(error).toMatchObject({ code: "FACEBOOK_OAUTH_PAGES_FAILED", message: "Facebook OAuth request failed" });
     expect(JSON.stringify(error)).not.toContain("user-token");
     expect(stateStore.saved).toHaveLength(1);
+  });
+
+  it("bounds a stalled pagination request and aborts it with a sanitized pages error", async () => {
+    const stateStore = store();
+    await stateStore.save("state-token", { kind: "oauth", userId: "user-1" }, 600);
+    let paginationSignal: AbortSignal | null | undefined;
+    const nextUrl = "https://graph.facebook.com/v26.0/me/accounts?after=cursor-1&access_token=user-token";
+    const fetchGraph = vi.fn((input: string, init?: RequestInit) => {
+      const url = new URL(input);
+      if (url.pathname.endsWith("/oauth/access_token")) {
+        return Promise.resolve(new Response(JSON.stringify({ access_token: "user-token" }), { status: 200 }));
+      }
+      if (!url.searchParams.has("after")) {
+        return Promise.resolve(new Response(JSON.stringify({ data: [], paging: { next: nextUrl } }), { status: 200 }));
+      }
+      paginationSignal = init?.signal;
+      return new Promise<Response>(() => undefined);
+    });
+    const service = new FacebookOAuthService({
+      appId: "meta-app-id",
+      appSecret: "meta-app-secret",
+      redirectUri: "https://api.example.com/api/v1/facebook-page/oauth/callback",
+      graphApiVersion: "v26.0",
+      stateStore,
+      fetchGraph,
+      graphRequestTimeoutMs: 50
+    });
+    vi.useFakeTimers();
+
+    try {
+      const finishPromise = service.finish("state-token", "authorization-code");
+      const errorPromise = finishPromise.catch((caught: unknown) => caught);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(fetchGraph).toHaveBeenCalledTimes(3);
+      expect(paginationSignal?.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(50);
+      const error = await errorPromise;
+
+      expect(error).toMatchObject({ code: "FACEBOOK_OAUTH_PAGES_FAILED", message: "Facebook OAuth request failed" });
+      expect(paginationSignal?.aborted).toBe(true);
+      expect(JSON.stringify(error)).not.toContain("user-token");
+      expect(stateStore.consumeCalls).toEqual(["state-token"]);
+      expect(stateStore.saved).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("stops Graph pagination after 25 pages with a sanitized pages error", async () => {

@@ -7,6 +7,7 @@ const OAUTH_STATE_TTL_SECONDS = 600;
 const OAUTH_SELECTION_CLAIM_TTL_SECONDS = 600;
 const FACEBOOK_GRAPH_ORIGIN = "https://graph.facebook.com";
 const FACEBOOK_OAUTH_MAX_PAGE_COUNT = 25;
+const FACEBOOK_GRAPH_REQUEST_TIMEOUT_MS = 10_000;
 
 export interface FacebookOAuthStore {
   save(token: string, value: FacebookOAuthStoredValue, ttlSeconds: number): Promise<void>;
@@ -40,6 +41,7 @@ interface FacebookOAuthServiceDependencies {
   graphApiVersion?: string;
   stateStore: FacebookOAuthStore;
   fetchGraph?: GraphFetch;
+  graphRequestTimeoutMs?: number;
   randomToken?: () => string;
 }
 
@@ -55,14 +57,29 @@ function requiredString(value: unknown, name: string): string {
   return value;
 }
 
-async function graphJson(fetchGraph: GraphFetch, url: URL, failureCode: string): Promise<Record<string, unknown>> {
+// Giới hạn cả thời gian fetch và đọc body, kể cả khi HTTP client bỏ qua AbortSignal.
+async function graphJson(fetchGraph: GraphFetch, url: URL, failureCode: string, timeoutMs: number): Promise<Record<string, unknown>> {
   let response: Response;
   let body: unknown;
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    response = await fetchGraph(url.toString(), { method: "GET" });
-    body = await response.json();
+    ({ response, body } = await Promise.race([
+      (async () => {
+        const graphResponse = await fetchGraph(url.toString(), { method: "GET", signal: controller.signal });
+        return { response: graphResponse, body: await graphResponse.json() };
+      })(),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          controller.abort();
+          reject(new Error("Facebook Graph request timed out"));
+        }, timeoutMs);
+      })
+    ]));
   } catch {
     throw new AppError(502, failureCode, "Facebook OAuth request failed");
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
   if (!response.ok || !body || typeof body !== "object" || "error" in body) {
     throw new AppError(502, failureCode, "Facebook OAuth request failed");
@@ -93,12 +110,12 @@ function graphPagingNext(response: Record<string, unknown>): URL | undefined {
 }
 
 // Thu thập toàn bộ Page trong giới hạn cố định và không lưu kết quả dở dang khi pagination lỗi.
-async function fetchFacebookOAuthPages(fetchGraph: GraphFetch, firstUrl: URL): Promise<unknown[]> {
+async function fetchFacebookOAuthPages(fetchGraph: GraphFetch, firstUrl: URL, timeoutMs: number): Promise<unknown[]> {
   const rawPages: unknown[] = [];
   let pageUrl = firstUrl;
 
   for (let pageCount = 0; pageCount < FACEBOOK_OAUTH_MAX_PAGE_COUNT; pageCount += 1) {
-    const response = await graphJson(fetchGraph, pageUrl, "FACEBOOK_OAUTH_PAGES_FAILED");
+    const response = await graphJson(fetchGraph, pageUrl, "FACEBOOK_OAUTH_PAGES_FAILED", timeoutMs);
     if (Array.isArray(response.data)) rawPages.push(...response.data);
     const nextUrl = graphPagingNext(response);
     if (!nextUrl) return rawPages;
@@ -116,6 +133,7 @@ export class FacebookOAuthService {
   private readonly graphApiVersion: string;
   private readonly stateStore: FacebookOAuthStore;
   private readonly fetchGraph: GraphFetch;
+  private readonly graphRequestTimeoutMs: number;
   private readonly randomToken: () => string;
 
   constructor(dependencies: FacebookOAuthServiceDependencies) {
@@ -125,6 +143,7 @@ export class FacebookOAuthService {
     this.graphApiVersion = dependencies.graphApiVersion ?? process.env.META_GRAPH_API_VERSION ?? "v26.0";
     this.stateStore = dependencies.stateStore;
     this.fetchGraph = dependencies.fetchGraph ?? fetch;
+    this.graphRequestTimeoutMs = dependencies.graphRequestTimeoutMs ?? FACEBOOK_GRAPH_REQUEST_TIMEOUT_MS;
     this.randomToken = dependencies.randomToken ?? randomUUID;
   }
 
@@ -154,14 +173,14 @@ export class FacebookOAuthService {
     tokenUrl.searchParams.set("client_secret", appSecret);
     tokenUrl.searchParams.set("redirect_uri", redirectUri);
     tokenUrl.searchParams.set("code", code);
-    const tokenResponse = await graphJson(this.fetchGraph, tokenUrl, "FACEBOOK_OAUTH_CODE_EXCHANGE_FAILED");
+    const tokenResponse = await graphJson(this.fetchGraph, tokenUrl, "FACEBOOK_OAUTH_CODE_EXCHANGE_FAILED", this.graphRequestTimeoutMs);
     const userAccessToken = tokenResponse.access_token;
     if (typeof userAccessToken !== "string" || !userAccessToken) throw new AppError(502, "FACEBOOK_OAUTH_CODE_EXCHANGE_FAILED", "Facebook did not return an access token");
 
     const pagesUrl = new URL(`https://graph.facebook.com/${this.graphApiVersion}/me/accounts`);
     pagesUrl.searchParams.set("fields", "id,name,access_token,tasks");
     pagesUrl.searchParams.set("access_token", userAccessToken);
-    const rawPages = await fetchFacebookOAuthPages(this.fetchGraph, pagesUrl);
+    const rawPages = await fetchFacebookOAuthPages(this.fetchGraph, pagesUrl, this.graphRequestTimeoutMs);
     const pages = rawPages.flatMap((value): FacebookOAuthPageSecret[] => {
       if (!value || typeof value !== "object") return [];
       const page = value as GraphPage;
