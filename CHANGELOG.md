@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa đăng nhập bị `403 CSRF_ORIGIN_REJECTED` khi frontend và API chạy cùng origin IP/port nhưng origin đó chưa có trong allowlist; middleware nay nhận diện đúng same-origin theo `Host` và vẫn chặn origin cross-site.
 - Chuyển xác thực web sang HttpOnly access/refresh cookie: bỏ lưu JWT trong `localStorage`, thêm session bootstrap, refresh/logout bằng cookie, credentials cho API/Socket.IO và kiểm tra Origin cho request mutation; vẫn giữ Bearer fallback tạm thời cho client cũ.
 - Bổ sung cấu hình `WEB_ALLOWED_ORIGINS` và `AUTH_COOKIE_SAME_SITE`; production yêu cầu HTTPS khi dùng cookie cross-origin.
 - Căn lại ngưỡng sticky sidebar Cài đặt theo vị trí thực tế dưới header để sidebar không bị trôi một đoạn khi bắt đầu cuộn.

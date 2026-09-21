@@ -38,4 +38,17 @@ describe("CORS and CSRF origin protection", () => {
     expect(response.headers["access-control-allow-headers"]).toContain("X-Request-Id");
     expect(response.headers["access-control-allow-methods"]).toContain("PUT");
   });
+
+  it("allows a same-origin mutation even when the deployment origin is not in the cross-origin allowlist", async () => {
+    vi.stubEnv("WEB_ALLOWED_ORIGINS", "http://localhost:5173");
+
+    const response = await request(app())
+      .post("/mutate")
+      .set("Host", "161.248.81.90:5173")
+      .set("Origin", "http://161.248.81.90:5173");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true });
+    expect(response.headers["access-control-allow-origin"]).toBe("http://161.248.81.90:5173");
+  });
 });
