@@ -58,6 +58,7 @@ export class RedisFacebookOAuthStore implements FacebookOAuthStore {
   private readonly client: RedisClientType;
   private readonly operationTimeoutMs: number;
   private readonly shutdownTimeoutMs: number;
+  private connectAttempt: Promise<void> | undefined;
 
   constructor(client?: RedisClientType, options: RedisFacebookOAuthStoreOptions = {}) {
     this.operationTimeoutMs = options.operationTimeoutMs ?? REDIS_OPERATION_TIMEOUT_MS;
@@ -86,16 +87,37 @@ export class RedisFacebookOAuthStore implements FacebookOAuthStore {
     }
   }
 
+  // Đóng client đang mở để hủy socket và giải phóng mọi lệnh Redis còn chờ.
+  private destroyOpenClient(): void {
+    if (!this.client.isOpen) return;
+    try {
+      this.client.destroy();
+    } catch {
+      // Client có thể vừa được socket error đóng giữa lúc kiểm tra và destroy.
+    }
+  }
+
+  // Dùng chung một lần connect và reset client nếu connect/handshake vượt deadline.
+  private connect(): Promise<void> {
+    if (this.connectAttempt) return this.connectAttempt;
+
+    if (this.client.isOpen) this.destroyOpenClient();
+    const attempt = this.execute(() => this.client.connect())
+      .then(() => undefined)
+      .catch((error: unknown) => {
+        this.destroyOpenClient();
+        throw error;
+      })
+      .finally(() => {
+        if (this.connectAttempt === attempt) this.connectAttempt = undefined;
+      });
+    this.connectAttempt = attempt;
+    return attempt;
+  }
+
   private async connected(): Promise<RedisClientType> {
     if (!this.client.isReady) {
-      if (this.client.isOpen) {
-        throw new AppError(
-          503,
-          "FACEBOOK_OAUTH_STORE_UNAVAILABLE",
-          "Facebook OAuth is temporarily unavailable"
-        );
-      }
-      await this.execute(() => this.client.connect());
+      await this.connect();
     }
     return this.client;
   }
@@ -151,14 +173,16 @@ export class RedisFacebookOAuthStore implements FacebookOAuthStore {
   async close(): Promise<void> {
     if (!this.client.isOpen) return;
     if (!this.client.isReady) {
-      this.client.destroy();
+      this.destroyOpenClient();
       return;
     }
 
     try {
-      await withDeadline(() => this.client.quit(), this.shutdownTimeoutMs);
+      await withDeadline(() => this.client.sendCommand(["QUIT"]), this.shutdownTimeoutMs);
     } catch {
-      this.client.destroy();
+      // Shutdown vẫn tiếp tục bằng force-close khi QUIT lỗi hoặc vượt deadline.
+    } finally {
+      this.destroyOpenClient();
     }
   }
 }

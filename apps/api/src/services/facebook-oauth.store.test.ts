@@ -1,4 +1,7 @@
-import type { RedisClientType } from "redis";
+import { once } from "node:events";
+import { createServer, type Socket } from "node:net";
+
+import { createClient, type RedisClientType } from "redis";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RedisFacebookOAuthStore } from "./facebook-oauth.store.js";
@@ -13,7 +16,7 @@ type FakeRedis = {
   get: ReturnType<typeof vi.fn>;
   getDel: ReturnType<typeof vi.fn>;
   eval: ReturnType<typeof vi.fn>;
-  quit: ReturnType<typeof vi.fn>;
+  sendCommand: ReturnType<typeof vi.fn>;
   destroy: ReturnType<typeof vi.fn>;
 };
 
@@ -57,17 +60,115 @@ function fakeRedis(): FakeRedis {
       client.values.delete(valueKey);
       return 1;
     }),
-    quit: vi.fn(async () => {
-      client.isOpen = false;
-      client.isReady = false;
-      return "OK";
-    }),
+    sendCommand: vi.fn(async () => "OK"),
     destroy: vi.fn(() => {
       client.isOpen = false;
       client.isReady = false;
     })
   };
   return client;
+}
+
+type RedisProtocolServer = {
+  url: string;
+  connections: Socket[];
+  close: () => Promise<void>;
+};
+
+function parseRespCommands(input: Buffer): { commands: string[][]; remaining: Buffer } {
+  const commands: string[][] = [];
+  let offset = 0;
+
+  while (offset < input.length) {
+    const commandStart = offset;
+    const countEnd = input.indexOf("\r\n", offset);
+    if (countEnd === -1) break;
+    if (input[offset] !== 42) throw new Error("Expected a RESP array");
+
+    const argumentCount = Number(input.subarray(offset + 1, countEnd).toString());
+    offset = countEnd + 2;
+    const command: string[] = [];
+    let complete = true;
+
+    for (let index = 0; index < argumentCount; index += 1) {
+      const lengthEnd = input.indexOf("\r\n", offset);
+      if (lengthEnd === -1) {
+        complete = false;
+        break;
+      }
+      if (input[offset] !== 36) throw new Error("Expected a RESP bulk string");
+
+      const length = Number(input.subarray(offset + 1, lengthEnd).toString());
+      const valueStart = lengthEnd + 2;
+      const valueEnd = valueStart + length;
+      if (input.length < valueEnd + 2) {
+        complete = false;
+        break;
+      }
+
+      command.push(input.subarray(valueStart, valueEnd).toString());
+      offset = valueEnd + 2;
+    }
+
+    if (!complete) {
+      offset = commandStart;
+      break;
+    }
+    commands.push(command);
+  }
+
+  return { commands, remaining: input.subarray(offset) };
+}
+
+async function startRedisProtocolServer(
+  handleCommand: (command: string[], socket: Socket, connectionNumber: number) => void
+): Promise<RedisProtocolServer> {
+  const connections: Socket[] = [];
+  const server = createServer((socket) => {
+    const connectionNumber = connections.push(socket);
+    let pending: Buffer = Buffer.alloc(0);
+    socket.on("error", () => undefined);
+    socket.on("data", (chunk) => {
+      pending = Buffer.concat([pending, chunk]);
+      const parsed = parseRespCommands(pending);
+      pending = parsed.remaining;
+      for (const command of parsed.commands) handleCommand(command, socket, connectionNumber);
+    });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Test Redis server did not bind a TCP port");
+
+  return {
+    url: `redis://127.0.0.1:${address.port}`,
+    connections,
+    close: async () => {
+      for (const socket of connections) socket.destroy();
+      if (!server.listening) return;
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  };
+}
+
+function replyToRedisCommand(command: string[], socket: Socket): void {
+  switch (command[0]?.toUpperCase()) {
+    case "GET":
+      socket.write("$-1\r\n");
+      break;
+    case "QUIT":
+      socket.end("+OK\r\n");
+      break;
+    default:
+      socket.write("+OK\r\n");
+  }
+}
+
+async function socketClosedWithin(socket: Socket, timeoutMs = 250): Promise<boolean> {
+  if (socket.destroyed) return true;
+  return (await settleWithin(once(socket, "close"), timeoutMs)).status === "resolved";
 }
 
 async function settleWithin<T>(promise: Promise<T>, timeoutMs = 100): Promise<
@@ -182,7 +283,7 @@ describe("RedisFacebookOAuthStore", () => {
       operationTimeoutMs: 5
     });
 
-    const result = await settleWithin(invoke(store));
+    const result = await settleWithin<unknown>(invoke(store));
 
     expect(result.status).toBe("rejected");
     if (result.status !== "rejected") return;
@@ -210,16 +311,65 @@ describe("RedisFacebookOAuthStore", () => {
     });
   });
 
+  it("shares one in-flight Redis connection across concurrent requests", async () => {
+    const redis = fakeRedis();
+    let finishConnect: (() => void) | undefined;
+    redis.connect.mockImplementation(() => {
+      redis.isOpen = true;
+      return new Promise<void>((resolve) => {
+        finishConnect = () => {
+          redis.isReady = true;
+          resolve();
+        };
+      });
+    });
+    const store = new RedisFacebookOAuthStore(redis as unknown as RedisClientType);
+
+    const reads = Promise.all([store.read("state-1"), store.read("state-2")]);
+    await vi.waitFor(() => expect(redis.connect).toHaveBeenCalledOnce());
+    finishConnect?.();
+
+    await expect(reads).resolves.toEqual([undefined, undefined]);
+    expect(redis.connect).toHaveBeenCalledOnce();
+  });
+
+  it("destroys a timed-out real Redis handshake and reconnects on a later request", async () => {
+    const redisServer = await startRedisProtocolServer((command, socket, connectionNumber) => {
+      if (connectionNumber > 1) replyToRedisCommand(command, socket);
+    });
+    const redis = createClient({
+      url: redisServer.url,
+      socket: { reconnectStrategy: false }
+    });
+    const store = new RedisFacebookOAuthStore(redis, {
+      operationTimeoutMs: 50,
+      shutdownTimeoutMs: 50
+    });
+
+    try {
+      await expect(store.read("stalled-handshake")).rejects.toMatchObject({
+        code: "FACEBOOK_OAUTH_STORE_UNAVAILABLE"
+      });
+      expect(redisServer.connections).toHaveLength(1);
+      await expect(socketClosedWithin(redisServer.connections[0]!)).resolves.toBe(true);
+
+      await expect(store.read("retry")).resolves.toBeUndefined();
+      expect(redisServer.connections).toHaveLength(2);
+    } finally {
+      await store.close().catch(() => undefined);
+      await redisServer.close();
+    }
+  });
+
   it("destroys an open but unready Redis client without waiting for QUIT", async () => {
     const redis = fakeRedis();
     redis.isOpen = true;
-    redis.quit.mockImplementation(() => new Promise(() => undefined));
     const store = new RedisFacebookOAuthStore(redis as unknown as RedisClientType, {
       shutdownTimeoutMs: 5
     });
 
     await expect(settleWithin(store.close())).resolves.toMatchObject({ status: "resolved" });
-    expect(redis.quit).not.toHaveBeenCalled();
+    expect(redis.sendCommand).not.toHaveBeenCalled();
     expect(redis.destroy).toHaveBeenCalledOnce();
   });
 
@@ -227,13 +377,13 @@ describe("RedisFacebookOAuthStore", () => {
     const redis = fakeRedis();
     redis.isOpen = true;
     redis.isReady = true;
-    redis.quit.mockImplementation(() => new Promise(() => undefined));
+    redis.sendCommand.mockImplementation(() => new Promise(() => undefined));
     const store = new RedisFacebookOAuthStore(redis as unknown as RedisClientType, {
       shutdownTimeoutMs: 5
     });
 
     await expect(settleWithin(store.close())).resolves.toMatchObject({ status: "resolved" });
-    expect(redis.quit).toHaveBeenCalledOnce();
+    expect(redis.sendCommand).toHaveBeenCalledWith(["QUIT"]);
     expect(redis.destroy).toHaveBeenCalledOnce();
   });
 
@@ -241,12 +391,43 @@ describe("RedisFacebookOAuthStore", () => {
     const redis = fakeRedis();
     redis.isOpen = true;
     redis.isReady = true;
-    redis.quit.mockRejectedValue(new Error("socket closed"));
+    redis.sendCommand.mockRejectedValue(new Error("socket closed"));
     const store = new RedisFacebookOAuthStore(redis as unknown as RedisClientType, {
       shutdownTimeoutMs: 5
     });
 
     await expect(store.close()).resolves.toBeUndefined();
     expect(redis.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("force-closes a real Redis socket when QUIT does not answer", async () => {
+    let quitReceived = false;
+    const redisServer = await startRedisProtocolServer((command, socket) => {
+      if (command[0]?.toUpperCase() === "QUIT") {
+        quitReceived = true;
+        return;
+      }
+      replyToRedisCommand(command, socket);
+    });
+    const redis = createClient({
+      url: redisServer.url,
+      socket: { reconnectStrategy: false }
+    });
+    const store = new RedisFacebookOAuthStore(redis, {
+      operationTimeoutMs: 50,
+      shutdownTimeoutMs: 50
+    });
+
+    try {
+      await expect(store.read("ready-client")).resolves.toBeUndefined();
+      const socket = redisServer.connections[0]!;
+
+      await expect(store.close()).resolves.toBeUndefined();
+
+      expect(quitReceived).toBe(true);
+      await expect(socketClosedWithin(socket)).resolves.toBe(true);
+    } finally {
+      await redisServer.close();
+    }
   });
 });
