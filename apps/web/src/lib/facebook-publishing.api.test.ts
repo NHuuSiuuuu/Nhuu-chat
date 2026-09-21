@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { connectFacebookPage, createFacebookPost, FacebookPublishingApiError, listFacebookPosts } from "./facebook-publishing.api.js";
+import { cancelFacebookPost, connectFacebookPage, createFacebookPost, FacebookPublishingApiError, listFacebookPosts, removeFacebookPage, retryFacebookPost, updateFacebookPost } from "./facebook-publishing.api.js";
 
 describe("Facebook publishing API", () => {
   it("connects with cookie credentials and does not put the token in a URL", async () => {
@@ -34,6 +34,46 @@ describe("Facebook publishing API", () => {
 
     await expect(listFacebookPosts(undefined, "/api")).rejects.toBeInstanceOf(FacebookPublishingApiError);
     await expect(listFacebookPosts(undefined, "/api")).rejects.toMatchObject({ code: "FACEBOOK_PUBLISHING_REQUEST_FAILED", status: 503 });
+    fetchMock.mockRestore();
+  });
+
+  it("clears a schedule with JSON null because the backend update schema accepts null", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ id: "post-1", status: "draft" }), { status: 200 }));
+
+    await updateFacebookPost("post-1", { scheduledAt: null }, "/api");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/api/v1/facebook-page/posts/post-1", expect.objectContaining({
+      method: "PATCH",
+      credentials: "include",
+      body: JSON.stringify({ scheduledAt: null })
+    }));
+    expect((fetchMock.mock.calls[0]?.[1] as RequestInit).headers).toEqual({ "content-type": "application/json" });
+    fetchMock.mockRestore();
+  });
+
+  it("handles delete 204 and sends the retry payload", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "post-1", status: "scheduled" }), { status: 200 }));
+
+    await removeFacebookPage("/api");
+    await cancelFacebookPost("post-1", "/api");
+    await retryFacebookPost("post-1", "scheduled", "/api");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/api/v1/facebook-page/connection", expect.objectContaining({ method: "DELETE", credentials: "include" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/api/v1/facebook-page/posts/post-1", expect.objectContaining({ method: "DELETE", credentials: "include" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/api/v1/facebook-page/posts/post-1/retry", expect.objectContaining({ method: "POST", body: JSON.stringify({ mode: "scheduled" }) }));
+    fetchMock.mockRestore();
+  });
+
+  it.each([
+    ["FACEBOOK_PAGE_TOKEN_INVALID", "Token Facebook Page không hợp lệ hoặc đã hết hạn."],
+    ["FACEBOOK_PAGE_ID_MISMATCH", "Facebook Page không khớp với Page ID đã nhập."]
+  ])("maps backend error code %s to a safe message", async (code, message) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ error: { code } }), { status: 400 }));
+
+    await expect(connectFacebookPage({ pageId: "page-1", pageAccessToken: "secret" }, "/api")).rejects.toMatchObject({ code, message });
     fetchMock.mockRestore();
   });
 });

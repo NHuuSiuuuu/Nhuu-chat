@@ -20,9 +20,9 @@ type RequestOptions = { baseUrl?: string; signal?: AbortSignal };
 
 const safeMessages: Record<string, string> = {
   FACEBOOK_PAGE_NOT_CONNECTED: "Chưa kết nối Facebook Page.",
-  FACEBOOK_PAGE_INVALID_TOKEN: "Token Facebook Page không hợp lệ hoặc đã hết hạn.",
+  FACEBOOK_PAGE_TOKEN_INVALID: "Token Facebook Page không hợp lệ hoặc đã hết hạn.",
   FACEBOOK_PAGE_PERMISSION_DENIED: "Token không có quyền quản lý Facebook Page này.",
-  FACEBOOK_PAGE_MISMATCH: "Facebook Page không khớp với Page ID đã nhập.",
+  FACEBOOK_PAGE_ID_MISMATCH: "Facebook Page không khớp với Page ID đã nhập.",
   FACEBOOK_POST_INVALID_STATE: "Bài viết không thể thực hiện thao tác ở trạng thái hiện tại.",
   FACEBOOK_POST_SCHEDULE_IN_PAST: "Thời gian hẹn đăng phải ở tương lai.",
   INVALID_ATTACHMENT: "Ảnh phải là JPEG, PNG hoặc WebP và không quá 5 MiB.",
@@ -89,8 +89,10 @@ export function createFacebookPost(input: { message: string; mode: "draft" | "no
 }
 
 export function updateFacebookPost(id: string, input: { message?: string; mode?: "draft" | "scheduled"; scheduledAt?: string | null; image?: File | null }, baseUrl?: string): Promise<FacebookPostResponse> {
+  if (input.scheduledAt === null) {
+    return request<FacebookPostResponse>(`/api/v1/facebook-page/posts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ ...input, scheduledAt: null }) }, { baseUrl });
+  }
   const formData = postFormData(input);
-  if (input.scheduledAt === null) formData.set("scheduledAt", "");
   return request<FacebookPostResponse>(`/api/v1/facebook-page/posts/${encodeURIComponent(id)}`, { method: "PATCH", body: formData }, { baseUrl });
 }
 

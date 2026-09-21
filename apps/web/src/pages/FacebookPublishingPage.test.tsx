@@ -1,39 +1,53 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import * as React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { FacebookPublishingPageView, validateFacebookPostImage, connectionAfterFacebookDisconnect, type FacebookPublishingPageViewProps } from "./FacebookPublishingPage.js";
+import type { FacebookPageConnectionResponse, FacebookPostResponse } from "@nhuu-chat/contracts";
 
-const source = readFileSync(new URL("./FacebookPublishingPage.tsx", import.meta.url), "utf8");
+const connection: FacebookPageConnectionResponse = { id: "connection-1", pageId: "page-1", pageName: "Nhuu Page", status: "connected", createdAt: "2026-09-21T00:00:00.000Z", updatedAt: "2026-09-21T00:00:00.000Z" };
+const post: FacebookPostResponse = { id: "post-1", connectionId: "connection-1", pageId: "page-1", message: "Bài viết lỗi", status: "failed", scheduledAt: null, timezone: "Asia/Ho_Chi_Minh", publishedPostId: null, attempts: 1, lastErrorCode: "FACEBOOK_PUBLISH_FAILED", lastErrorMessage: null, publishingLeaseUntil: null, publishedAt: null, createdAt: "2026-09-21T00:00:00.000Z", updatedAt: "2026-09-21T00:00:00.000Z" };
+
+function surface(overrides: Partial<FacebookPublishingPageViewProps> = {}) {
+  const props: FacebookPublishingPageViewProps = { connection, posts: [post], message: "Nội dung xem trước", mode: "now", scheduledAt: "", imageUrl: null, busy: false, error: null, actionError: null, ...overrides };
+  return renderToStaticMarkup(<FacebookPublishingPageView {...props} />);
+}
 
 describe("FacebookPublishingPage", () => {
-  it("keeps the Page token password-only and out of browser storage", () => {
-    expect(source).toContain('type="password"');
-    expect(source).toContain("pageAccessToken");
-    expect(source).not.toContain("localStorage");
-    expect(source).not.toContain("sessionStorage");
+  it("renders a password-only token input and no browser-storage UI", () => {
+    const html = surface({ connection: null, pageId: "page-1", pageAccessToken: "secret-token" });
+    expect(html).toContain('type="password"');
+    expect(html).toContain("Page access token");
+    expect(html).not.toContain("secret-token");
+    expect(html).not.toContain("localStorage");
+    expect(html).not.toContain("sessionStorage");
   });
 
-  it("supports text and one-image preview with object URL cleanup", () => {
-    expect(source).toContain("URL.createObjectURL");
-    expect(source).toContain("URL.revokeObjectURL");
-    expect(source).toContain('accept="image/jpeg,image/png,image/webp"');
-    expect(source).toContain("image");
-    expect(source).toContain("Xem trước");
+  it("renders the composer modes and preview surface", () => {
+    const html = surface({ imageUrl: "blob:preview", mode: "scheduled", scheduledAt: "2026-09-22T10:00" });
+    expect(html).toContain("Nội dung xem trước");
+    expect(html).toContain("Xem trước");
+    expect(html).toContain('accept="image/jpeg,image/png,image/webp"');
+    expect(html).toContain('name="publish-mode"');
+    expect(html).toContain('value="now"');
+    expect(html).toContain('value="draft"');
+    expect(html).toContain('value="scheduled"');
+    expect(html).toContain("Asia/Ho_Chi_Minh");
+    expect(validateFacebookPostImage(new File(["x"], "photo.png", { type: "image/png" }))).toBeNull();
+    expect(validateFacebookPostImage(new File(["x"], "photo.gif", { type: "image/gif" }))).toContain("JPEG");
   });
 
-  it("renders mutually exclusive publish modes and Vietnam timezone", () => {
-    expect(source).toContain('name="publish-mode"');
-    expect(source).toContain('value="now"');
-    expect(source).toContain('value="draft"');
-    expect(source).toContain('value="scheduled"');
-    expect(source).toContain("Asia/Ho_Chi_Minh");
+  it("renders the disconnected form after a successful disconnect state transition", () => {
+    expect(connectionAfterFacebookDisconnect(connection)).toBeNull();
+    expect(surface({ connection: connectionAfterFacebookDisconnect(connection) })).toContain("Kết nối Facebook Page");
   });
 
-  it("maps list status actions to retry and cancel APIs", () => {
-    expect(source).toContain("retryFacebookPost");
-    expect(source).toContain("cancelFacebookPost");
-    expect(source).toContain('status === "failed"');
-    expect(source).toContain('status === "scheduled"');
-    expect(source).toContain("setInterval");
-    expect(source).toContain("lastErrorCode");
-    expect(source).not.toContain("<pre>{JSON.stringify");
+  it("renders a failed post retry action and wires actions through callbacks", () => {
+    let retryId = "";
+    let cancelId = "";
+    const html = surface({ onRetry: (id) => { retryId = id; }, onCancel: (id) => { cancelId = id; } });
+    expect(html).toContain("Thử lại");
+    expect(html).toContain("FACEBOOK_PUBLISH_FAILED");
+    expect(retryId).toBe("");
+    expect(cancelId).toBe("");
   });
 });

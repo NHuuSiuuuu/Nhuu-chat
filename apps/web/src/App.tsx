@@ -31,7 +31,8 @@ function pageFromPath(pathname: string): RoutePage {
   if (pathname === "/settings" || pathname.startsWith("/settings/")) return "settings";
   if (pathname === "/profile") return "profile";
   if (pathname === "/posts") return "posts";
-  if (pathname === "/orders" || pathname === "/posts" || pathname === "/analytics") return "development";
+  // The old development branch was `if (pathname === "/orders" || pathname === "/posts" || pathname === "/analytics") return "development"`; /posts now has its own page.
+  if (pathname === "/orders" || pathname === "/analytics") return "development";
   return "dashboard";
 }
 
