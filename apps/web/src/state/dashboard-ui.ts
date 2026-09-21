@@ -11,7 +11,7 @@ export type ConnectionProviderId =
   | "booking"
   | "airbnb";
 
-export const initialConnectionProvider: ConnectionProviderId = "telegram";
+export const initialConnectionProvider: ConnectionProviderId = "facebook";
 
 export const dashboardNavItems = ["Hộp thư", "Đơn hàng", "Bài viết", "Thống kê", "Cài đặt"] as const;
 

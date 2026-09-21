@@ -4,8 +4,8 @@ import { brandLogoProviderIds, connectionProviders, dashboardNavItems, initialCo
 import { connectModalCloseDurationMs } from "./modal-ui.js";
 
 describe("dashboard connection UI", () => {
-  it("starts the connection modal on Telegram", () => {
-    expect(initialConnectionProvider).toBe("telegram");
+  it("starts the connection modal on Facebook", () => {
+    expect(initialConnectionProvider).toBe("facebook");
   });
 
   it("shows the approved provider options in the dashboard modal", () => {
