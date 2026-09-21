@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa kết nối Zalo cá nhân không tự rơi vào `ZALO_PERSONAL_REDIS_LEASE_LOST` khi Redis gián đoạn ngắn: bật reconnect và retry gia hạn lease trong TTL.
 - Sửa Skeleton Loading bài viết để khớp card thực tế và bỏ polling tự động gọi API bài viết mỗi 5 giây.
 - Thêm Skeleton Loading cho trang Bài viết: giữ Global Header/Sidebar ổn định và hiển thị 3 khung bài viết trong lúc chờ API.
 - Bỏ cơ chế cố định và cuộn riêng của sidebar quản lý Facebook Page để sidebar cuộn cùng nội dung chính.

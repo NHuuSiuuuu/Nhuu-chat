@@ -119,14 +119,17 @@ async function setupZaloPersonalRedisLock(): Promise<() => Promise<void>> {
     return async () => undefined;
   }
 
+  let initialConnection = true;
   const client = createClient({
     url: process.env.REDIS_URL,
-    socket: { reconnectStrategy: false },
+    // Kết nối ban đầu phải fail-fast; sau khi đã kết nối, Redis được phép tự reconnect khi mạng chập chờn.
+    socket: { reconnectStrategy: (retries) => initialConnection ? false : Math.min(retries * 250, 5_000) },
     disableOfflineQueue: true
   });
   client.on("error", () => undefined);
   try {
     await client.connect();
+    initialConnection = false;
     setZaloPersonalRedisLock(createZaloPersonalRedisLock(client));
   } catch {
     if (env.NODE_ENV === "development") {

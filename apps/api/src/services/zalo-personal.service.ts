@@ -18,6 +18,7 @@ const QR_TTL_MS = 100_000;
 const NATIVE_LOGIN_CLEANUP_TIMEOUT_MS = 2_000;
 const LIFECYCLE_LOCK_TTL_MS = 30_000;
 const LIFECYCLE_RENEW_INTERVAL_MS = LIFECYCLE_LOCK_TTL_MS / 2;
+const REDIS_RENEW_RETRY_DELAY_MS = 500;
 const RESTORE_ATTEMPTS = 2;
 
 type PublicStatus = ZaloPersonalStatus["status"];
@@ -677,18 +678,33 @@ function startHeldLeaseRenewal(userId: string, lease: ZaloPersonalRedisLease): v
 
 // Redis command bị treo cũng phải được xem là mất lease trước khi TTL hết hạn.
 async function renewWithDeadline(renew: () => Promise<boolean>): Promise<boolean> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      renew(),
-      new Promise<boolean>((resolve) => {
-        timeout = setTimeout(() => resolve(false), LIFECYCLE_RENEW_INTERVAL_MS);
-        timeout.unref?.();
-      })
-    ]);
-  } finally {
-    if (timeout) clearTimeout(timeout);
+  const deadline = Date.now() + LIFECYCLE_RENEW_INTERVAL_MS;
+  while (Date.now() < deadline) {
+    const remainingMs = deadline - Date.now();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const retained = await Promise.race([
+        renew(),
+        new Promise<boolean>((resolve) => {
+          timeout = setTimeout(() => resolve(false), remainingMs);
+          timeout.unref?.();
+        })
+      ]);
+      if (retained) return true;
+      return false;
+    } catch {
+      // Lỗi kết nối thoáng qua được thử lại trong cùng TTL; token không còn hợp lệ vẫn trả false và fence ngay.
+      const retryDelay = Math.min(REDIS_RENEW_RETRY_DELAY_MS, Math.max(0, deadline - Date.now()));
+      if (retryDelay <= 0) return false;
+      await new Promise<void>((resolve) => {
+        const retryTimer = setTimeout(resolve, retryDelay);
+        retryTimer.unref?.();
+      });
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
   }
+  return false;
 }
 
 // Mất lease phải fence runtime ngay lập tức, không xếp sau một operation Mongo đang bị treo.
