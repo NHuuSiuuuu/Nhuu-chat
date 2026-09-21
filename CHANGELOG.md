@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Bổ sung đăng nhập Facebook bằng OAuth trong modal Dashboard: lấy danh sách Page do tài khoản quản lý, chỉ cho chọn Page có quyền đăng bài và lưu kết nối qua service hiện có; giữ nguyên luồng nhập thủ công Page ID và Page Access Token.
 - Sửa chatbot giữ ngữ cảnh khi khách trả lời viết tắt như “sv” hoặc xác nhận “có”, bổ sung lượt khách trước vào truy vấn knowledge để không trả fallback dù dữ liệu phù hợp đã có.
 - Sửa AI gợi ý trả về rỗng khi model Gemini chính quá tải: tự chuyển sang model dự phòng khả dụng và cho phép nút làm mới gọi gợi ý ở mọi chế độ đang bật.
 - Sửa gửi tin Zalo cá nhân bằng cách truyền text theo payload `{ msg }` mà `zca-js` yêu cầu; trước đó truyền chuỗi khiến Zalo trả mã tham số không hợp lệ `114`.

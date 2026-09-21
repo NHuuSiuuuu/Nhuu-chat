@@ -45,6 +45,23 @@ describe("ConnectModal Tailwind migration", () => {
     expect(source).toContain("Mã QR đăng nhập Zalo");
   });
 
+  it("supports opening directly on a selected personal connection provider", () => {
+    const source = readFileSync(new URL("./ConnectModal.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("initialProvider");
+    expect(source).toContain("initialProvider === \"telegram\"");
+    expect(source).toContain("initialProvider === \"zalo\"");
+  });
+
+  it("offers Facebook OAuth and keeps manual Page credentials outside this modal flow", () => {
+    const source = readFileSync(new URL("./ConnectModal.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("Đăng nhập bằng tài khoản Facebook");
+    expect(source).toContain("listFacebookOAuthPages");
+    expect(source).toContain("selectFacebookOAuthPage");
+    expect(source).toContain("Luồng nhập Page ID và Page Access Token thủ công vẫn được giữ nguyên");
+  });
+
   it("uses the refreshed connection menu treatment", () => {
     const source = readFileSync(new URL("./ConnectModal.tsx", import.meta.url), "utf8");
 

@@ -30,7 +30,13 @@ const safeMessages: Record<string, string> = {
   FACEBOOK_POST_SCHEDULE_IN_PAST: "Thời gian hẹn đăng phải ở tương lai.",
   INVALID_ATTACHMENT: "Ảnh phải là JPEG, PNG hoặc WebP và không quá 5 MiB.",
   INVALID_REQUEST: "Thông tin gửi lên chưa hợp lệ.",
-  FACEBOOK_PUBLISH_FAILED: "Facebook chưa thể đăng bài. Bạn có thể thử lại sau."
+  FACEBOOK_PUBLISH_FAILED: "Facebook chưa thể đăng bài. Bạn có thể thử lại sau.",
+  FACEBOOK_OAUTH_NOT_CONFIGURED: "Facebook OAuth chưa được cấu hình trên máy chủ.",
+  FACEBOOK_OAUTH_STATE_INVALID: "Phiên đăng nhập Facebook đã hết hạn. Hãy thử lại.",
+  FACEBOOK_OAUTH_CALLBACK_INVALID: "Phản hồi đăng nhập Facebook không hợp lệ.",
+  FACEBOOK_OAUTH_FAILED: "Không thể đăng nhập Facebook. Hãy thử lại.",
+  FACEBOOK_OAUTH_SELECTION_INVALID: "Danh sách Page đã hết hạn. Hãy đăng nhập Facebook lại.",
+  FACEBOOK_OAUTH_PAGE_NOT_PUBLISHABLE: "Tài khoản Facebook không có quyền đăng bài trên Page này."
 };
 
 function endpoint(baseUrl: string, path: string): string {
@@ -79,6 +85,27 @@ export function connectFacebookPage(input: { pageId: string; pageAccessToken: st
 
 export function removeFacebookPage(baseUrl?: string): Promise<void> {
   return request<void>("/api/v1/facebook-page/connection", { method: "DELETE" }, { baseUrl });
+}
+
+export function startFacebookOAuth(baseUrl?: string): Promise<{ authorizationUrl: string }> {
+  return request<{ authorizationUrl: string }>("/api/v1/facebook-page/oauth/start", { method: "GET" }, { baseUrl });
+}
+
+export interface FacebookOAuthPage {
+  id: string;
+  name: string;
+  canPublish: boolean;
+}
+
+export function listFacebookOAuthPages(selection: string, baseUrl?: string): Promise<FacebookOAuthPage[]> {
+  return request<FacebookOAuthPage[]>(`/api/v1/facebook-page/oauth/pages?selection=${encodeURIComponent(selection)}`, { method: "GET" }, { baseUrl });
+}
+
+export function selectFacebookOAuthPage(selectionToken: string, pageId: string, baseUrl?: string): Promise<FacebookPageConnectionResponse> {
+  return request<FacebookPageConnectionResponse>("/api/v1/facebook-page/oauth/select", {
+    method: "POST",
+    body: JSON.stringify({ selectionToken, pageId })
+  }, { baseUrl });
 }
 
 export function listFacebookPosts(status?: FacebookPostResponse["status"], baseUrl?: string): Promise<FacebookPostResponse[]> {

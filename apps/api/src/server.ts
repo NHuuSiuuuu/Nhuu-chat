@@ -11,6 +11,7 @@ import { hydrateKnowledgeVectorStore } from "./ai/knowledge-runtime.js";
 import { connectDatabase, disconnectDatabase } from "./db/mongoose.js";
 import { closeRealtimeServer, createRealtimeServer } from "./realtime/socket.js";
 import { facebookPostScheduler, type FacebookPostScheduler } from "./jobs/facebook-post.scheduler.js";
+import { closeFacebookOAuthStore } from "./services/facebook-oauth.store.js";
 import { restoreActivePersonalClients } from "./services/telegram-personal.service.js";
 import {
   restoreActiveZaloPersonalClients,
@@ -202,6 +203,7 @@ export async function startServer(dependencies: ServerDependencies = {}): Promis
     socketServer.close();
     await closeRealtimeServer(socketServer);
     await closeRedisLock?.();
+    await closeFacebookOAuthStore();
     await new Promise<void>((resolve) => {
       if (!httpServer.listening) {
         resolve();
