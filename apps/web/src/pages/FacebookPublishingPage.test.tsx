@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { FacebookPublishingPageView, validateFacebookPostImage, connectionAfterFacebookDisconnect, type FacebookPublishingPageViewProps } from "./FacebookPublishingPage.js";
+import { FacebookPublishingPage, validateFacebookPostImage, connectionAfterFacebookDisconnect, type FacebookPublishingPageProps } from "./FacebookPublishingPage.js";
 import type { FacebookPageConnectionResponse, FacebookPostResponse } from "@nhuu-chat/contracts";
 
 const connection: FacebookPageConnectionResponse = { id: "connection-1", pageId: "page-1", pageName: "Nhuu Page", status: "connected", createdAt: "2026-09-21T00:00:00.000Z", updatedAt: "2026-09-21T00:00:00.000Z" };
 const post: FacebookPostResponse = { id: "post-1", connectionId: "connection-1", pageId: "page-1", message: "Bài viết lỗi", status: "failed", scheduledAt: null, timezone: "Asia/Ho_Chi_Minh", publishedPostId: null, attempts: 1, lastErrorCode: "FACEBOOK_PUBLISH_FAILED", lastErrorMessage: null, publishingLeaseUntil: null, publishedAt: null, createdAt: "2026-09-21T00:00:00.000Z", updatedAt: "2026-09-21T00:00:00.000Z" };
 
-function surface(overrides: Partial<FacebookPublishingPageViewProps> = {}) {
-  const props: FacebookPublishingPageViewProps = { connection, posts: [post], message: "Nội dung xem trước", mode: "now", scheduledAt: "", imageUrl: null, busy: false, error: null, actionError: null, ...overrides };
-  return renderToStaticMarkup(<FacebookPublishingPageView {...props} />);
+function surface(overrides: Partial<FacebookPublishingPageProps> = {}) {
+  const props: FacebookPublishingPageProps = { initialConnection: connection, initialPosts: [post], initialMessage: "Nội dung xem trước", initialMode: "now", initialScheduledAt: "", initialImageUrl: null, initialLoading: false, ...overrides };
+  return renderToStaticMarkup(<FacebookPublishingPage {...props} />);
 }
 
 describe("FacebookPublishingPage", () => {
   it("renders a password-only token input and no browser-storage UI", () => {
-    const html = surface({ connection: null, pageId: "page-1", pageAccessToken: "secret-token" });
+    const html = surface({ initialConnection: null });
     expect(html).toContain('type="password"');
     expect(html).toContain("Page access token");
     expect(html).not.toContain("secret-token");
@@ -23,7 +23,7 @@ describe("FacebookPublishingPage", () => {
   });
 
   it("renders the composer modes and preview surface", () => {
-    const html = surface({ imageUrl: "blob:preview", mode: "scheduled", scheduledAt: "2026-09-22T10:00" });
+    const html = surface({ initialImageUrl: "blob:preview", initialMode: "scheduled", initialScheduledAt: "2026-09-22T10:00" });
     expect(html).toContain("Nội dung xem trước");
     expect(html).toContain("Xem trước");
     expect(html).toContain('accept="image/jpeg,image/png,image/webp"');
@@ -38,13 +38,13 @@ describe("FacebookPublishingPage", () => {
 
   it("renders the disconnected form after a successful disconnect state transition", () => {
     expect(connectionAfterFacebookDisconnect(connection)).toBeNull();
-    expect(surface({ connection: connectionAfterFacebookDisconnect(connection) })).toContain("Kết nối Facebook Page");
+    expect(surface({ initialConnection: connectionAfterFacebookDisconnect(connection) })).toContain("Kết nối Facebook Page");
   });
 
   it("renders a failed post retry action and wires actions through callbacks", () => {
     let retryId = "";
     let cancelId = "";
-    const html = surface({ onRetry: (id) => { retryId = id; }, onCancel: (id) => { cancelId = id; } });
+    const html = surface();
     expect(html).toContain("Thử lại");
     expect(html).toContain("FACEBOOK_PUBLISH_FAILED");
     expect(retryId).toBe("");

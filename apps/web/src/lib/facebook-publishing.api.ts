@@ -89,10 +89,10 @@ export function createFacebookPost(input: { message: string; mode: "draft" | "no
 }
 
 export function updateFacebookPost(id: string, input: { message?: string; mode?: "draft" | "scheduled"; scheduledAt?: string | null; image?: File | null }, baseUrl?: string): Promise<FacebookPostResponse> {
-  if (input.scheduledAt === null) {
+  if (input.scheduledAt === null && !input.image) {
     return request<FacebookPostResponse>(`/api/v1/facebook-page/posts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ ...input, scheduledAt: null }) }, { baseUrl });
   }
-  const formData = postFormData(input);
+  const formData = postFormData({ ...input, ...(input.scheduledAt === null ? { scheduledAt: "null" } : {}) });
   return request<FacebookPostResponse>(`/api/v1/facebook-page/posts/${encodeURIComponent(id)}`, { method: "PATCH", body: formData }, { baseUrl });
 }
 

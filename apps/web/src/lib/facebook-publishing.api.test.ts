@@ -51,6 +51,19 @@ describe("Facebook publishing API", () => {
     fetchMock.mockRestore();
   });
 
+  it("keeps multipart when clearing a schedule while replacing its image", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ id: "post-1", status: "draft" }), { status: 200 }));
+    const image = new File(["image"], "replacement.png", { type: "image/png" });
+
+    await updateFacebookPost("post-1", { scheduledAt: null, image }, "/api");
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(init.body).toBeInstanceOf(FormData);
+    expect((init.body as FormData).get("scheduledAt")).toBe("null");
+    expect((init.body as FormData).get("image")).toBe(image);
+    fetchMock.mockRestore();
+  });
+
   it("handles delete 204 and sends the retry payload", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
@@ -74,6 +87,17 @@ describe("Facebook publishing API", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ error: { code } }), { status: 400 }));
 
     await expect(connectFacebookPage({ pageId: "page-1", pageAccessToken: "secret" }, "/api")).rejects.toMatchObject({ code, message });
+    fetchMock.mockRestore();
+  });
+
+  it.each([
+    ["remove", () => removeFacebookPage("/api"), "FACEBOOK_PAGE_NOT_CONNECTED"],
+    ["cancel", () => cancelFacebookPost("post-1", "/api"), "FACEBOOK_POST_INVALID_STATE"],
+    ["retry", () => retryFacebookPost("post-1", "now", "/api"), "FACEBOOK_POST_INVALID_STATE"]
+  ])("preserves rejected %s action error codes and safe messages", async (_name, action, code) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ error: { code } }), { status: 409 }));
+
+    await expect(action()).rejects.toMatchObject({ code, status: 409, message: expect.any(String) });
     fetchMock.mockRestore();
   });
 });
