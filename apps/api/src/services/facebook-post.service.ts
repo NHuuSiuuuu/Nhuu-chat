@@ -45,7 +45,7 @@ export type CreatePostInput = {
   media?: FacebookPostMedia;
 };
 
-export type UpdatePostInput = { message?: string; mode?: "draft" | "scheduled"; scheduledAt?: string; file?: Express.Multer.File };
+export type UpdatePostInput = { message?: string; mode?: "draft" | "scheduled"; scheduledAt?: string | null; file?: Express.Multer.File };
 export type ListPostFilters = { status?: FacebookPostResponse["status"] };
 
 const TIMEZONE = "Asia/Ho_Chi_Minh" as const;
@@ -65,11 +65,23 @@ function toResponse(record: PostRecord): FacebookPostResponse {
 }
 
 function localVietnameseTime(value: string): Date {
-  const hasZone = /(?:Z|[+-]\d\d:\d\d)$/.test(value);
-  const localValue = hasZone ? value : `${value}${/^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(value) ? ":00" : ""}+07:00`;
-  const parsed = new Date(localValue);
-  if (Number.isNaN(parsed.getTime())) throw new AppError(400, "INVALID_REQUEST", "scheduledAt is invalid");
-  return parsed;
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(Z|[+-]\d{2}:\d{2})?$/);
+  if (!match) throw new AppError(400, "INVALID_REQUEST", "scheduledAt is invalid");
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, offset] = match;
+  if (offset && offset !== "+07:00") throw new AppError(400, "INVALID_REQUEST", "scheduledAt must use Asia/Ho_Chi_Minh");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText ?? "0");
+  const localTimestamp = Date.UTC(year, month - 1, day, hour, minute, second);
+  const check = new Date(localTimestamp);
+  if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day
+    || check.getUTCHours() !== hour || check.getUTCMinutes() !== minute || check.getUTCSeconds() !== second) {
+    throw new AppError(400, "INVALID_REQUEST", "scheduledAt is invalid");
+  }
+  return new Date(localTimestamp - 7 * 60 * 60 * 1000);
 }
 
 function safePublishError(error: unknown): { code: string; message: string } {
@@ -140,16 +152,16 @@ export class FacebookPostService {
   async createPost(userId: string, input: CreatePostInput): Promise<FacebookPostResponse> {
     const message = input.message.trim();
     if (!message) throw new AppError(400, "INVALID_REQUEST", "Post message is required");
+    const scheduled = input.mode === "scheduled" ? this.scheduledDate(input.scheduledAt) : null;
     const connection = await this.connection(userId);
     let media = input.media;
     if (input.file) media = await this.media.upload(userId, input.file);
-    const scheduled = input.mode === "scheduled" ? this.scheduledDate(input.scheduledAt) : null;
     const status = input.mode === "now" ? "publishing" : input.mode;
     let record: PostRecord;
     try {
       record = await this.posts.create({ userId, connectionId: connection._id, pageId: connection.pageId, message, media: media ?? null, status, scheduledAt: scheduled, timezone: TIMEZONE, attempts: input.mode === "now" ? 1 : 0 });
     } catch (error) {
-      if (media) await this.media.destroy(media).catch(() => undefined);
+      if (media) await Promise.resolve(this.media.destroy(media)).catch(() => undefined);
       throw error;
     }
     if (input.mode !== "now") return toResponse(record);
@@ -162,16 +174,43 @@ export class FacebookPostService {
     if (current.status !== "draft" && current.status !== "scheduled") throw new AppError(409, "FACEBOOK_POST_INVALID_STATE", "Facebook post cannot be updated in its current state");
     const update: Record<string, unknown> = {};
     if (input.message !== undefined) { if (!input.message.trim()) throw new AppError(400, "INVALID_REQUEST", "Post message is required"); update.message = input.message.trim(); }
-    if (input.mode === "scheduled") {
-      update.status = "scheduled";
-      update.scheduledAt = this.scheduledDate(input.scheduledAt ?? (current.scheduledAt ? new Date(current.scheduledAt).toISOString() : undefined));
+    const hasSchedule = Object.prototype.hasOwnProperty.call(input, "scheduledAt");
+    if (input.mode === "draft" && hasSchedule && input.scheduledAt !== null) {
+      throw new AppError(400, "INVALID_REQUEST", "Draft posts cannot have a scheduled time");
     }
-    if (input.mode === "draft") update.status = "draft";
-    if (input.scheduledAt !== undefined) update.scheduledAt = this.scheduledDate(input.scheduledAt);
-    if (input.mode === "draft") update.scheduledAt = null;
-    if (input.file) update.media = await this.media.upload(userId, input.file);
-    const saved = await this.posts.findOneAndUpdate({ _id: postId, userId, status: { $in: ["draft", "scheduled"] } }, { $set: update }, { new: true, runValidators: true }).lean();
-    if (!saved) throw new AppError(409, "FACEBOOK_POST_STATE_CHANGED", "Facebook post state changed while updating");
+    if (input.mode === "scheduled" && hasSchedule && input.scheduledAt === null) {
+      throw new AppError(400, "INVALID_REQUEST", "Scheduled posts require a scheduled time");
+    }
+    if (input.mode === "draft" || (hasSchedule && input.scheduledAt === null)) {
+      update.status = "draft";
+      update.scheduledAt = null;
+    } else if (input.mode === "scheduled" || (hasSchedule && input.scheduledAt !== null)) {
+      update.status = "scheduled";
+      if (input.scheduledAt !== undefined && input.scheduledAt !== null) {
+        update.scheduledAt = this.scheduledDate(input.scheduledAt);
+      } else if (!current.scheduledAt || new Date(current.scheduledAt).getTime() <= this.clock().getTime()) {
+        throw new AppError(400, "FACEBOOK_POST_SCHEDULE_IN_PAST", "Scheduled time must be in the future");
+      } else {
+        update.scheduledAt = current.scheduledAt;
+      }
+    }
+    let newMedia: FacebookPostMedia | undefined;
+    if (input.file) {
+      newMedia = await this.media.upload(userId, input.file);
+      update.media = newMedia;
+    }
+    let saved: PostRecord | null;
+    try {
+      saved = await this.posts.findOneAndUpdate({ _id: postId, userId, status: { $in: ["draft", "scheduled"] } }, { $set: update }, { new: true, runValidators: true }).lean();
+    } catch (error) {
+      if (newMedia) await Promise.resolve(this.media.destroy(newMedia)).catch(() => undefined);
+      throw error;
+    }
+    if (!saved) {
+      if (newMedia) await Promise.resolve(this.media.destroy(newMedia)).catch(() => undefined);
+      throw new AppError(409, "FACEBOOK_POST_STATE_CHANGED", "Facebook post state changed while updating");
+    }
+    if (newMedia && current.media && current.media.publicId !== newMedia.publicId) await Promise.resolve(this.media.destroy(current.media)).catch(() => undefined);
     return toResponse(saved);
   }
 

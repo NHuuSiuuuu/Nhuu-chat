@@ -18,7 +18,7 @@ export const facebookPostCreateSchema = z.object({
 export const facebookPostUpdateSchema = z.object({
   message: z.string().trim().min(1).max(63206).optional(),
   mode: z.enum(["draft", "scheduled"]).optional(),
-  scheduledAt: scheduledAt.optional()
+  scheduledAt: scheduledAt.nullable().optional()
 }).refine((value) => value.message !== undefined || value.mode !== undefined || value.scheduledAt !== undefined, {
   message: "At least one post field is required"
 });

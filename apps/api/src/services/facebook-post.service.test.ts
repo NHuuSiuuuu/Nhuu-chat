@@ -84,6 +84,28 @@ describe("FacebookPostService", () => {
     expect(d.postModel.create).toHaveBeenCalledWith(expect.objectContaining({ status: "scheduled", scheduledAt: new Date("2026-09-22T03:00:00.000Z") }));
   });
 
+  it("validates a schedule before uploading media", async () => {
+    const d = deps();
+    d.connectionModel.findOne.mockReturnValue(connectionQuery({ _id: "connection-1", pageId: "page-1", status: "connected" }));
+    const service = new FacebookPostService({ ...d, now: () => new Date("2026-09-21T10:00:00.000Z") });
+
+    await expect(service.createPost("user-1", { message: "Hello", mode: "scheduled", scheduledAt: "2026-09-21T09:00", file: {} as Express.Multer.File })).rejects.toMatchObject({ code: "FACEBOOK_POST_SCHEDULE_IN_PAST" });
+    expect(d.mediaService.upload).not.toHaveBeenCalled();
+    expect(d.mediaService.destroy).not.toHaveBeenCalled();
+  });
+
+  it("destroys newly uploaded media when draft persistence fails", async () => {
+    const d = deps();
+    const uploaded = { ...media, publicId: "new-media" };
+    d.connectionModel.findOne.mockReturnValue(connectionQuery({ _id: "connection-1", pageId: "page-1", status: "connected" }));
+    d.mediaService.upload.mockResolvedValue(uploaded);
+    d.postModel.create.mockRejectedValue(new Error("database unavailable"));
+    const service = new FacebookPostService(d);
+
+    await expect(service.createPost("user-1", { message: "Hello", mode: "draft", file: {} as Express.Multer.File })).rejects.toThrow("database unavailable");
+    expect(d.mediaService.destroy).toHaveBeenCalledWith(uploaded);
+  });
+
   it("publishes immediately and records the published ID and attempt", async () => {
     const d = deps();
     d.connectionModel.findOne.mockReturnValue(connectionQuery({ _id: "connection-1", pageId: "page-1", status: "connected", encryptedPageAccessToken: "cipher" }));
@@ -116,6 +138,65 @@ describe("FacebookPostService", () => {
 
     await expect(service.updatePost("user-2", "post-1", { message: "Nope" })).rejects.toMatchObject({ code: "FACEBOOK_POST_NOT_FOUND", statusCode: 404 });
     expect(d.postModel.findOne).toHaveBeenCalledWith({ _id: "post-1", userId: "user-2" });
+  });
+
+  it("schedules a draft when a future time is supplied", async () => {
+    const d = deps();
+    d.postModel.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(row({ status: "draft", scheduledAt: null })) });
+    d.postModel.findOneAndUpdate.mockReturnValue(updateQuery(row({ status: "scheduled", scheduledAt: new Date("2026-09-22T03:00:00.000Z") })));
+    const service = new FacebookPostService({ ...d, now: () => new Date("2026-09-21T10:00:00.000Z") });
+
+    await expect(service.updatePost("user-1", "post-1", { scheduledAt: "2026-09-22T10:00" })).resolves.toMatchObject({ status: "scheduled" });
+    expect(d.postModel.findOneAndUpdate).toHaveBeenCalledWith(expect.anything(), { $set: expect.objectContaining({ status: "scheduled", scheduledAt: new Date("2026-09-22T03:00:00.000Z") }) }, expect.anything());
+  });
+
+  it("returns a scheduled post to draft when its schedule is cleared", async () => {
+    const d = deps();
+    d.postModel.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(row({ status: "scheduled", scheduledAt: new Date("2026-09-22T03:00:00.000Z") })) });
+    d.postModel.findOneAndUpdate.mockReturnValue(updateQuery(row({ status: "draft", scheduledAt: null })));
+    const service = new FacebookPostService(d);
+
+    await expect(service.updatePost("user-1", "post-1", { scheduledAt: null })).resolves.toMatchObject({ status: "draft", scheduledAt: null });
+    expect(d.postModel.findOneAndUpdate).toHaveBeenCalledWith(expect.anything(), { $set: expect.objectContaining({ status: "draft", scheduledAt: null }) }, expect.anything());
+  });
+
+  it("cleans new media and preserves old media when replacement persistence fails", async () => {
+    const d = deps();
+    const oldMedia = { ...media, publicId: "old-media" };
+    const newMedia = { ...media, publicId: "new-media" };
+    d.postModel.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(row({ status: "draft", media: oldMedia })) });
+    d.mediaService.upload.mockResolvedValue(newMedia);
+    d.postModel.findOneAndUpdate.mockReturnValue(updateQuery(null));
+    const service = new FacebookPostService(d);
+
+    await expect(service.updatePost("user-1", "post-1", { message: "Updated", file: {} as Express.Multer.File })).rejects.toMatchObject({ code: "FACEBOOK_POST_STATE_CHANGED" });
+    expect(d.mediaService.destroy).toHaveBeenCalledWith(newMedia);
+    expect(d.mediaService.destroy).not.toHaveBeenCalledWith(oldMedia);
+  });
+
+  it("destroys replaced old media only after a successful update", async () => {
+    const d = deps();
+    const oldMedia = { ...media, publicId: "old-media" };
+    const newMedia = { ...media, publicId: "new-media" };
+    d.postModel.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(row({ status: "draft", media: oldMedia })) });
+    d.mediaService.upload.mockResolvedValue(newMedia);
+    d.postModel.findOneAndUpdate.mockReturnValue(updateQuery(row({ status: "draft", media: newMedia })));
+    const service = new FacebookPostService(d);
+
+    await service.updatePost("user-1", "post-1", { file: {} as Express.Multer.File });
+    expect(d.mediaService.destroy).toHaveBeenCalledWith(oldMedia);
+  });
+
+  it.each([
+    "2026-02-30T10:00",
+    "2026-09-22T10:00Z",
+    "2026-09-22T10:00+08:00"
+  ])("rejects invalid or non-Vietnam schedule %s", async (scheduledAt) => {
+    const d = deps();
+    d.connectionModel.findOne.mockReturnValue(connectionQuery({ _id: "connection-1", pageId: "page-1", status: "connected" }));
+    const service = new FacebookPostService({ ...d, now: () => new Date("2026-09-21T10:00:00.000Z") });
+
+    await expect(service.createPost("user-1", { message: "Hello", mode: "scheduled", scheduledAt })).rejects.toMatchObject({ code: "INVALID_REQUEST", statusCode: 400 });
   });
 
   it.each(["published", "publishing"])("rejects updates to %s posts", async (status) => {
