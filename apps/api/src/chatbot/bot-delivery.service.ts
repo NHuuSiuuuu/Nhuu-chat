@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { chatEvents } from "@nhuu-chat/contracts";
 import { OutboundQueue } from "../jobs/outbound.queue.js";
 import { OutboundWorker } from "../jobs/outbound.worker.js";
+import { describeExternalError } from "../common/external-error.js";
 import { BotProcessingModel } from "../models/bot-processing.model.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { MessageModel } from "../models/message.model.js";
@@ -116,7 +117,9 @@ export class BotDeliveryService {
           const status = failed ? "failed" : handoff ? "handed_off" : "sent";
           const errorCode = failed ? "DELIVERY_FAILED" : undefined;
           // Cập nhật trạng thái gửi, bàn giao và snippet cùng transaction trước khi phát realtime.
-          const persisted = await MessageModel.db.transaction(async (session) => {
+          let persisted: { message: any; conversation: any };
+          try {
+            persisted = await MessageModel.db.transaction(async (session) => {
             const message = await MessageModel.findOneAndUpdate(
               { _id: botMessageId },
               {
@@ -160,8 +163,16 @@ export class BotDeliveryService {
               .lean();
             if (!message || !updatedProcessing || !updatedConversation)
               throw new Error("PERSISTENCE_FAILED");
-            return { message, conversation: updatedConversation };
-          });
+              return { message, conversation: updatedConversation };
+            });
+          } catch (error) {
+            console.error("BOT_DELIVERY_PERSISTENCE_FAILED", {
+              conversationId: input.conversationId,
+              platform: input.platform,
+              error: describeExternalError(error)
+            });
+            throw error;
+          }
           outcome = { status };
           // Lỗi socket không đổi kết quả gửi đã lưu và tuyệt đối không kích hoạt retry.
           try {

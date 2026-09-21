@@ -253,6 +253,25 @@ describe("Zalo personal QR session lifecycle", () => {
     expect(api.startListener).toHaveBeenCalledOnce();
   });
 
+  it("synchronizes the persisted Zalo account id with restored credentials", async () => {
+    const restoredClient = createQrClient();
+    restoredClient.login.mockResolvedValue(api);
+    api.getAccountInfo.mockResolvedValue({ id: "runtime-account", displayName: "Runtime", username: "runtime" });
+    dependencies.createClient.mockReturnValue(restoredClient);
+    dependencies.findOne.mockReturnValue({
+      select: () => ({ lean: async () => ({ encryptedCredentials: "ciphertext:stored", status: "connected", lastErrorCode: null }) })
+    });
+    dependencies.decryptSecret.mockReturnValue(JSON.stringify({ imei: "imei-1" }));
+
+    const { getActiveZaloPersonalClient } = await import("./zalo-personal.service.js");
+    await getActiveZaloPersonalClient("owner-runtime-account");
+
+    expect(dependencies.updateOne).toHaveBeenCalledWith(
+      { ownerId: "owner-runtime-account" },
+      expect.objectContaining({ $set: expect.objectContaining({ zaloUserId: "runtime-account" }) })
+    );
+  });
+
   it("keeps the connected owner and encrypted session when listener shutdown fails", async () => {
     const { getActiveZaloPersonalClient, getZaloPersonalSessionStatus, logoutZaloPersonal, startZaloPersonalQr } = await import("./zalo-personal.service.js");
     const connectedQr = await startZaloPersonalQr("owner-stop-failure");

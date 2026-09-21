@@ -403,11 +403,13 @@ async function restoreZaloPersonalClient(userId: string, encryptedCredentials: s
       attachZaloPersonalMessageSync(userId, api);
       await api.startListener();
       const account = await api.getAccountInfo().catch(() => undefined);
+      const runtimeAccountId = stringValue(account?.id);
       await ZaloPersonalSessionModel.updateOne(
         { ownerId: userId },
         {
           $set: {
             status: "connected",
+            ...(runtimeAccountId ? { zaloUserId: runtimeAccountId } : {}),
             lastSeenAt: new Date(),
             lastErrorCode: null,
             ...(account?.avatarUrl ? { avatarUrl: nullableString(account.avatarUrl) } : {}),
