@@ -34,6 +34,7 @@ describe("ConnectModal Tailwind migration", () => {
     expect(source).toContain('"/api/v1/channels/zalo-personal/qr"');
     expect(source).toContain("/api/v1/channels/zalo-personal/qr/${zaloQr.id}");
     expect(source).toContain('if (item.id === "zalo") void startZalo()');
+    expect(source).toContain('if (item.id === "telegram") void startTelegram()');
     expect(source).toContain('zaloQr.status !== "waiting_qr"');
     expect(source).toContain("zaloQr?.id, zaloQr?.status");
     expect(source).toContain("qr?.id, qr?.status");
