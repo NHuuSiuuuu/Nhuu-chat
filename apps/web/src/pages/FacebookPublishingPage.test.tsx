@@ -77,4 +77,15 @@ describe("FacebookPublishingPage", () => {
     expect(html).not.toContain("Đăng bài Facebook Page");
     expect(html).not.toContain("Quản lý bài viết bằng múi giờ Asia/Ho_Chi_Minh.");
   });
+
+  it("renders page selection and keeps connection status inside the page card", () => {
+    const html = surface();
+    const source = readFileSync(new URL("./FacebookPublishingPage.tsx", import.meta.url), "utf8");
+    expect(html).not.toContain("← Dashboard");
+    expect(html).toContain('aria-label="Chọn Facebook Page"');
+    expect(source).toContain("selectedPageId");
+    expect(source).toContain("setSelectedPageId");
+    expect(source).toContain("Page ID:");
+    expect(source).toContain("bg-teal-50 text-teal-700");
+  });
 });

@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Cập nhật card quản lý Facebook Page: chọn Page bằng dropdown, đồng bộ Page ID theo lựa chọn, đưa trạng thái kết nối vào card và bỏ các phần tử điều hướng thừa.
 - Bỏ tiêu đề và phụ đề trùng lặp trong nội dung trang Đăng bài Facebook Page, giữ lại Global Header và layout sidebar.
 - Refactor trang Đăng bài Facebook Page thành layout sidebar với các tab Soạn thảo, Nháp, Đã lên lịch và Lịch sử; bổ sung sửa/xóa bài, thử lại bài lỗi và xem bài đã đăng trên Facebook.
 - Mở rộng xóa bài Facebook Page theo owner cho cả trạng thái đã đăng và thất bại, đồng thời dọn media liên quan.
