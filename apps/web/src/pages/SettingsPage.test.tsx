@@ -110,7 +110,14 @@ describe("Settings page", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
     expect(source).toContain('name="alert"');
-    expect(source).toContain("lg:sticky lg:top-20");
+    expect(source).toContain("lg:sticky lg:top-[88px]");
+  });
+
+  it("aligns the sticky sidebar threshold with its initial position below the header", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("lg:sticky lg:top-[88px]");
+    expect(source).toContain("lg:h-[calc(100vh-112px)]");
   });
 
   it("organizes overview, AI, and security guidance with SVG-led sections", () => {
@@ -124,7 +131,7 @@ describe("Settings page", () => {
     expect(source).toContain('icon="sparkles"');
     expect(source).toContain('icon="shield"');
     expect(source).toContain("items-start");
-    expect(source).toContain("lg:h-[calc(100vh-80px)]");
+    expect(source).toContain("lg:h-[calc(100vh-112px)]");
     expect(source).toContain("lg:overflow-y-auto");
   });
 
