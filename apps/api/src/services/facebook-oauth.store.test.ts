@@ -1,5 +1,5 @@
 import type { RedisClientType } from "redis";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RedisFacebookOAuthStore } from "./facebook-oauth.store.js";
 
@@ -39,6 +39,8 @@ function fakeRedis(): FakeRedis {
 }
 
 describe("RedisFacebookOAuthStore", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   beforeEach(() => {
     vi.stubEnv("ENCRYPTION_KEY", "an-encryption-key-that-is-32-characters");
   });
