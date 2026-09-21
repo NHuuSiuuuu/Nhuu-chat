@@ -29,8 +29,15 @@ describe("AI settings", () => {
     const triggers: AiSuggestionTrigger[] = ["manual", "conversation_open", "customer_message"];
 
     expect(triggers.filter((trigger) => shouldGenerateSuggestions("manual", trigger))).toEqual(["manual"]);
-    expect(triggers.filter((trigger) => shouldGenerateSuggestions("on_open", trigger))).toEqual(["conversation_open"]);
-    expect(triggers.filter((trigger) => shouldGenerateSuggestions("on_customer_message", trigger))).toEqual(["customer_message"]);
+    expect(triggers.filter((trigger) => shouldGenerateSuggestions("on_open", trigger))).toEqual(["manual", "conversation_open"]);
+    expect(triggers.filter((trigger) => shouldGenerateSuggestions("on_customer_message", trigger))).toEqual(["manual", "customer_message"]);
+    expect(shouldGenerateSuggestions("off", "manual")).toBe(false);
+  });
+
+  it("allows an explicit manual refresh unless suggestions are disabled", () => {
+    expect(shouldGenerateSuggestions("on_open", "manual")).toBe(true);
+    expect(shouldGenerateSuggestions("on_customer_message", "manual")).toBe(true);
+    expect(shouldGenerateSuggestions("manual", "manual")).toBe(true);
     expect(shouldGenerateSuggestions("off", "manual")).toBe(false);
   });
 });

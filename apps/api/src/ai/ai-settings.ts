@@ -38,7 +38,8 @@ export function shouldGenerateSuggestions(
   trigger: AiSuggestionTrigger
 ): boolean {
   if (mode === "off") return false;
-  if (trigger === "manual") return mode === "manual";
+  // Nút làm mới là yêu cầu chủ động của nhân viên, không bị giới hạn bởi lịch tự động.
+  if (trigger === "manual") return true;
   if (trigger === "conversation_open") return mode === "on_open";
   return mode === "on_customer_message";
 }

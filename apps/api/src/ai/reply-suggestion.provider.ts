@@ -5,6 +5,7 @@ import { modelTierToGeminiModel, type AiModelTier } from "./ai-settings.js";
 const MAX_SUGGESTIONS = 3;
 const MAX_SUGGESTION_LENGTH = 240;
 const REQUEST_TIMEOUT_MS = 10_000;
+const TRANSIENT_FALLBACK_MODEL = "gemini-3.1-flash-lite";
 
 type SuggestionsPayload = {
   suggestions: unknown;
@@ -40,6 +41,11 @@ function normalizeSuggestions(payload: unknown): string[] {
   return suggestions;
 }
 
+function isTransientModelFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\b(?:429|500|502|503|504)\b|UNAVAILABLE|DEADLINE_EXCEEDED|high demand|temporarily unavailable/i.test(message);
+}
+
 export class GeminiReplySuggestionProvider {
   private readonly client: GoogleGenAI;
 
@@ -53,6 +59,21 @@ export class GeminiReplySuggestionProvider {
 
   // Generates short customer-service replies and bounds the external provider call.
   async suggest(input: { conversationContext: string; modelTier?: AiModelTier }): Promise<string[]> {
+    const primaryModel = input.modelTier ? modelTierToGeminiModel(input.modelTier) : env.GEMINI_CHAT_MODEL;
+    const models = primaryModel === TRANSIENT_FALLBACK_MODEL ? [primaryModel] : [primaryModel, TRANSIENT_FALLBACK_MODEL];
+    for (const [index, model] of models.entries()) {
+      try {
+        return await this.requestSuggestions(model, input.conversationContext);
+      } catch (error) {
+        if (index === 0 && models.length > 1 && isTransientModelFailure(error)) continue;
+        if (error instanceof SyntaxError) throw new Error("Gemini response was not valid JSON");
+        throw error;
+      }
+    }
+    throw new Error("Gemini request failed");
+  }
+
+  private async requestSuggestions(model: string, conversationContext: string): Promise<string[]> {
     const abortController = new AbortController();
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
@@ -64,8 +85,8 @@ export class GeminiReplySuggestionProvider {
         }, REQUEST_TIMEOUT_MS);
       });
       const request = this.client.models.generateContent({
-        model: input.modelTier ? modelTierToGeminiModel(input.modelTier) : env.GEMINI_CHAT_MODEL,
-        contents: `Generate short, polite Vietnamese customer-service replies based on the conversation context. Do not invent prices, policies, order status, or claim unsupported actions.\n\nConversation context (oldest to newest):\n${input.conversationContext}`,
+        model,
+        contents: `Generate short, polite Vietnamese customer-service replies based on the conversation context. Do not invent prices, policies, order status, or claim unsupported actions.\n\nConversation context (oldest to newest):\n${conversationContext}`,
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -95,11 +116,6 @@ export class GeminiReplySuggestionProvider {
       }
 
       return normalizeSuggestions(payload);
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        throw new Error("Gemini response was not valid JSON");
-      }
-      throw error;
     } finally {
       if (timeoutId !== undefined) {
         clearTimeout(timeoutId);

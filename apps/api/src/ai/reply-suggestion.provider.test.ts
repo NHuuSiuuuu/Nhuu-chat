@@ -111,6 +111,25 @@ describe("Gemini reply suggestion provider", () => {
     expect(generateContent.mock.calls[0][0].model).toBe("gemini-3.5-flash");
   });
 
+  it("falls back to an available low-latency model when the selected model is temporarily unavailable", async () => {
+    generateContent
+      .mockRejectedValueOnce(new Error('{"error":{"code":503,"status":"UNAVAILABLE"}}'))
+      .mockResolvedValueOnce({
+        text: JSON.stringify({ suggestions: ["Gợi ý dự phòng"] })
+      });
+    const { GeminiReplySuggestionProvider } = await importProvider();
+    const provider = new GeminiReplySuggestionProvider();
+
+    await expect(
+      provider.suggest({ conversationContext: "Khách hàng: Xin chào", modelTier: "smart" })
+    ).resolves.toEqual(["Gợi ý dự phòng"]);
+
+    expect(generateContent.mock.calls.map(([request]) => request.model)).toEqual([
+      "gemini-3.5-flash",
+      "gemini-3.1-flash-lite"
+    ]);
+  });
+
   it("filters non-strings and empty values and caps suggestions at 240 characters", async () => {
     generateContent.mockResolvedValue({
       text: JSON.stringify({
