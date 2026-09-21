@@ -50,3 +50,67 @@
 - [ ] Implement tối thiểu nếu test phát hiện lỗi production.
 - [ ] Chạy test xanh, build và diff check.
 - [ ] Commit riêng task.
+
+### Task 4: Sửa lifecycle selection OAuth
+
+**Files:**
+- Modify: `apps/api/src/services/facebook-oauth.service.ts`
+- Modify: `apps/api/src/services/facebook-oauth.service.test.ts`
+
+**Acceptance:** đọc danh sách không gia hạn quá hạn; sai owner không xóa selection; chọn Page có thể retry khi persistence thất bại; selection thành công chỉ consume một lần.
+
+### Task 5: Tăng độ bền Redis OAuth
+
+**Files:**
+- Modify: `apps/api/src/services/facebook-oauth.store.ts`
+- Modify: `apps/api/src/services/facebook-oauth.store.test.ts`
+- Modify: `apps/api/src/server.ts`
+
+**Acceptance:** Redis operation có timeout, lỗi được chuyển thành lỗi hữu hạn/sanitized và shutdown không bị treo khi Redis unavailable.
+
+### Task 6: Hoàn thiện Page pagination và trạng thái modal
+
+**Files:**
+- Modify: `apps/api/src/services/facebook-oauth.service.ts`
+- Modify: `apps/api/src/services/facebook-oauth.service.test.ts`
+- Modify: `apps/web/src/components/dashboard/ConnectModal.tsx`
+- Modify: `apps/web/src/components/dashboard/ConnectModal.test.tsx`
+
+**Acceptance:** lấy đủ các trang Graph API với giới hạn an toàn; modal có success state, xử lý selection hết hạn và cho phép đăng nhập lại.
+
+### Task 7: Bổ sung behavioral security tests
+
+**Files:**
+- Modify: `apps/api/src/controllers/facebook-page.controller.test.ts`
+- Modify: `apps/api/src/services/facebook-oauth.service.test.ts`
+- Modify: `apps/web/src/components/dashboard/ConnectModal.test.tsx`
+
+**Acceptance:** test executable cho replay/expired state, wrong-owner, non-publishable Page, callback error redirect và modal completion.
+
+### Task 8: Làm bền vòng đời Redis OAuth
+
+**Acceptance:** timeout khi connect/handshake không để client ở trạng thái kẹt; shutdown luôn đóng socket hữu hạn; có test mô phỏng đúng lifecycle của Redis client.
+
+### Task 9: Làm nhất quán thao tác chọn Page OAuth
+
+**Acceptance:** sau khi lưu kết nối thành công, lỗi dọn selection không làm báo thất bại hoặc cho phép persistence lặp; trạng thái claim/consume được xử lý idempotent trong giới hạn kiến trúc hiện tại.
+
+### Task 10: Giới hạn thời gian gọi Meta Graph
+
+**Acceptance:** token exchange và từng request phân trang có abort/deadline hữu hạn, lỗi được chuẩn hóa, state đã consume không làm callback treo vô hạn.
+
+### Task 11: Hoàn thiện retry và tài liệu OAuth
+
+**Acceptance:** lỗi tạm thời khi chọn Page giữ picker để retry; selection hết hạn vẫn yêu cầu đăng nhập lại; không có Page publishable có hướng dẫn/recovery; README không còn mâu thuẫn với tính năng.
+
+### Task 12: Hủy Redis connect đang chờ khi shutdown
+
+**Acceptance:** shutdown hủy/đóng được cả kết nối Redis đã bắt đầu nhưng còn chờ DNS/TCP; không mở socket sau khi `close()` hoàn tất; có regression test lifecycle thực tế.
+
+### Task 13: Giới hạn Graph validation khi chọn Page
+
+**Acceptance:** thao tác OAuth select Page không bị treo ở bước validate Page; timeout/network được chuẩn hóa và không lưu kết nối muộn sau khi request đã hủy; luồng nhập thủ công vẫn giữ nguyên contract.
+
+### Task 14: Đồng bộ tài liệu wiki OAuth
+
+**Acceptance:** tài liệu wiki không còn nói Facebook OAuth ngoài MVP khi phần hướng dẫn đã mô tả luồng này; vẫn nêu đúng phạm vi Instagram OAuth chưa hỗ trợ.
