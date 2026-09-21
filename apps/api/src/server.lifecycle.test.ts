@@ -182,4 +182,23 @@ describe("production server bootstrap", () => {
     await first?.release();
     expect(await lock.acquire("zalo:owner-1", 1_000)).toBeDefined();
   });
+
+  it("starts the Facebook scheduler after listen and stops it during shutdown", async () => {
+    const scheduler = { start: vi.fn(), stop: vi.fn() };
+    const handle = await startServer({
+      connectDatabase: async () => undefined,
+      hydrateKnowledge: async () => undefined,
+      setupZaloPersonalRedisLock: async () => async () => undefined,
+      restorePersonalClients: async () => undefined,
+      restoreZaloPersonalClients: async () => undefined,
+      shutdownZaloPersonalClients: async () => undefined,
+      disconnectDatabase: async () => undefined,
+      listen: async () => undefined,
+      facebookPostScheduler: scheduler
+    });
+
+    expect(scheduler.start).toHaveBeenCalledOnce();
+    await handle.shutdown();
+    expect(scheduler.stop).toHaveBeenCalledOnce();
+  });
 });

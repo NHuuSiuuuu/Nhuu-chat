@@ -10,6 +10,7 @@ import { createApp } from "./app.js";
 import { hydrateKnowledgeVectorStore } from "./ai/knowledge-runtime.js";
 import { connectDatabase, disconnectDatabase } from "./db/mongoose.js";
 import { closeRealtimeServer, createRealtimeServer } from "./realtime/socket.js";
+import { facebookPostScheduler, type FacebookPostScheduler } from "./jobs/facebook-post.scheduler.js";
 import { restoreActivePersonalClients } from "./services/telegram-personal.service.js";
 import {
   restoreActiveZaloPersonalClients,
@@ -31,6 +32,7 @@ export interface ServerDependencies {
   setupZaloPersonalRedisLock?: () => Promise<() => Promise<void>>;
   disconnectDatabase?: () => Promise<void>;
   listen?: (server: HttpServer, port: number) => Promise<void>;
+  facebookPostScheduler?: Pick<FacebookPostScheduler, "start" | "stop">;
 }
 
 export interface ServerHandle {
@@ -173,6 +175,7 @@ export async function startServer(dependencies: ServerDependencies = {}): Promis
   const shutdownZalo = dependencies.shutdownZaloPersonalClients ?? shutdownActiveZaloPersonalClients;
   const setupRedisLock = dependencies.setupZaloPersonalRedisLock ?? setupZaloPersonalRedisLock;
   const disconnect = dependencies.disconnectDatabase ?? disconnectDatabase;
+  const scheduler = dependencies.facebookPostScheduler ?? (!dependencies.listen ? facebookPostScheduler : undefined);
   await connect(env.MONGODB_URI);
   let closeRedisLock: (() => Promise<void>) | undefined;
   try {
@@ -190,6 +193,7 @@ export async function startServer(dependencies: ServerDependencies = {}): Promis
   const socketServer = createRealtimeServer(httpServer);
 
   const shutdown = async () => {
+    scheduler?.stop();
     // Listener Zalo phải dừng trước khi đóng Redis lease và database.
     await shutdownZalo();
     socketServer.close();
@@ -221,6 +225,8 @@ export async function startServer(dependencies: ServerDependencies = {}): Promis
       void shutdown();
     });
   }
+
+  scheduler?.start();
 
   // Chỉ restore listener sau khi HTTP bind thành công, tránh process lỗi giữ kết nối Zalo cạnh tranh.
   await restoreWithStartupDeadline(restore, "Telegram personal");
