@@ -373,11 +373,12 @@ describe("FacebookOAuthService", () => {
       pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true }]
     }, 600);
     const service = new FacebookOAuthService({ stateStore });
+    const persistenceError = new Error("persistence failed");
     const connect = vi.fn()
-      .mockRejectedValueOnce(new Error("persistence failed"))
+      .mockRejectedValueOnce(persistenceError)
       .mockResolvedValueOnce({ id: "connection-1" });
 
-    await expect(service.select("user-1", "selection-token", "page-1", connect)).rejects.toThrow("persistence failed");
+    await expect(service.select("user-1", "selection-token", "page-1", connect)).rejects.toBe(persistenceError);
     expect(stateStore.consumeCalls).toEqual([]);
 
     await expect(service.select("user-1", "selection-token", "page-1", connect)).resolves.toEqual({ id: "connection-1" });
@@ -387,6 +388,54 @@ describe("FacebookOAuthService", () => {
 
     expect(connect).toHaveBeenCalledTimes(2);
     expect(stateStore.consumeCalls).toEqual(["selection-token"]);
+  });
+
+  it("returns the persisted connection when claim consumption returns undefined and keeps replay blocked", async () => {
+    const stateStore = store();
+    await stateStore.save("selection-token", {
+      kind: "selection",
+      userId: "user-1",
+      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true }]
+    }, 600);
+    stateStore.consumeClaim = vi.fn().mockResolvedValue(undefined);
+    const service = new FacebookOAuthService({ stateStore });
+    const connection = { id: "connection-1" };
+    let persistenceCalls = 0;
+    const connect = async () => {
+      persistenceCalls += 1;
+      return connection;
+    };
+
+    await expect(service.select("user-1", "selection-token", "page-1", connect)).resolves.toBe(connection);
+    await expect(service.select("user-1", "selection-token", "page-1", connect)).rejects.toMatchObject({
+      code: "FACEBOOK_OAUTH_SELECTION_INVALID"
+    });
+
+    expect(persistenceCalls).toBe(1);
+  });
+
+  it("returns the persisted connection when claim consumption fails and keeps replay blocked", async () => {
+    const stateStore = store();
+    await stateStore.save("selection-token", {
+      kind: "selection",
+      userId: "user-1",
+      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true }]
+    }, 600);
+    stateStore.consumeClaim = vi.fn().mockRejectedValue(new Error("Redis unavailable"));
+    const service = new FacebookOAuthService({ stateStore });
+    const connection = { id: "connection-1" };
+    let persistenceCalls = 0;
+    const connect = async () => {
+      persistenceCalls += 1;
+      return connection;
+    };
+
+    await expect(service.select("user-1", "selection-token", "page-1", connect)).resolves.toBe(connection);
+    await expect(service.select("user-1", "selection-token", "page-1", connect)).rejects.toMatchObject({
+      code: "FACEBOOK_OAUTH_SELECTION_INVALID"
+    });
+
+    expect(persistenceCalls).toBe(1);
   });
 
   it("allows only one concurrent selection request to reach connection persistence", async () => {

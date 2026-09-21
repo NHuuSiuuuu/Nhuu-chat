@@ -180,23 +180,25 @@ export class FacebookOAuthService {
     return saved.pages.map(({ accessToken: _accessToken, ...page }) => page);
   }
 
+  // Chỉ mở lại claim khi persistence chưa thành công; cleanup sau persistence là best-effort.
   async select(userId: string, selectionToken: string, pageId: string, connect: (userId: string, input: { pageId: string; pageAccessToken: string }) => Promise<unknown>): Promise<unknown> {
     const claimToken = this.randomToken();
     const saved = await this.stateStore.claim(selectionToken, claimToken, OAUTH_SELECTION_CLAIM_TTL_SECONDS);
     if (!saved) throw new AppError(400, "FACEBOOK_OAUTH_SELECTION_INVALID", "Facebook Page selection is invalid or expired");
 
+    let connection: unknown;
     try {
       if (saved.kind !== "selection" || saved.userId !== userId) throw new AppError(400, "FACEBOOK_OAUTH_SELECTION_INVALID", "Facebook Page selection is invalid or expired");
       const page = saved.pages.find((candidate) => candidate.id === pageId);
       if (!page || !page.canPublish) throw new AppError(400, "FACEBOOK_OAUTH_PAGE_NOT_PUBLISHABLE", "The selected Facebook Page cannot publish content");
-      const connection = await connect(userId, { pageId: page.id, pageAccessToken: page.accessToken });
-      const consumed = await this.stateStore.consumeClaim(selectionToken, claimToken);
-      if (!consumed) throw new AppError(400, "FACEBOOK_OAUTH_SELECTION_INVALID", "Facebook Page selection is invalid or expired");
-      return connection;
+      connection = await connect(userId, { pageId: page.id, pageAccessToken: page.accessToken });
     } catch (error) {
       await this.stateStore.releaseClaim(selectionToken, claimToken).catch(() => undefined);
       throw error;
     }
+
+    await this.stateStore.consumeClaim(selectionToken, claimToken).catch(() => undefined);
+    return connection;
   }
 }
 
