@@ -136,6 +136,128 @@ describe("FacebookOAuthService", () => {
     });
   });
 
+  it("follows Graph pagination and redacts Page tokens from the browser response", async () => {
+    const stateStore = store();
+    await stateStore.save("state-token", { kind: "oauth", userId: "user-1" }, 600);
+    const nextUrl = "https://graph.facebook.com/v26.0/me/accounts?after=cursor-1&access_token=user-token";
+    const fetchGraph = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "user-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: [{ id: "page-1", name: "Page One", access_token: "page-token-1", tasks: ["CREATE_CONTENT"] }],
+        paging: { next: nextUrl }
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: [{ id: "page-2", name: "Page Two", access_token: "page-token-2", tasks: ["MODERATE_CONTENT"] }]
+      }), { status: 200 }));
+    const service = new FacebookOAuthService({
+      appId: "meta-app-id",
+      appSecret: "meta-app-secret",
+      redirectUri: "https://api.example.com/api/v1/facebook-page/oauth/callback",
+      graphApiVersion: "v26.0",
+      stateStore,
+      fetchGraph,
+      randomToken: () => "selection-token"
+    });
+
+    const result = await service.finish("state-token", "authorization-code");
+
+    expect(result.pages).toEqual([
+      { id: "page-1", name: "Page One", canPublish: true },
+      { id: "page-2", name: "Page Two", canPublish: false }
+    ]);
+    expect(fetchGraph).toHaveBeenCalledTimes(3);
+    expect(fetchGraph.mock.calls[2]?.[0]).toBe(nextUrl);
+    expect(JSON.stringify(result)).not.toContain("user-token");
+    expect(JSON.stringify(result)).not.toContain("page-token");
+    expect(stateStore.saved.at(-1)?.value).toMatchObject({
+      kind: "selection",
+      pages: [
+        { id: "page-1", accessToken: "page-token-1" },
+        { id: "page-2", accessToken: "page-token-2" }
+      ]
+    });
+  });
+
+  it("rejects non-Graph pagination URLs with a sanitized pages error", async () => {
+    const stateStore = store();
+    await stateStore.save("state-token", { kind: "oauth", userId: "user-1" }, 600);
+    const fetchGraph = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "user-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: [],
+        paging: { next: "https://graph.facebook.com.evil.example/me/accounts?access_token=stolen-token" }
+      }), { status: 200 }));
+    const service = new FacebookOAuthService({
+      appId: "meta-app-id",
+      appSecret: "meta-app-secret",
+      redirectUri: "https://api.example.com/api/v1/facebook-page/oauth/callback",
+      stateStore,
+      fetchGraph
+    });
+
+    const error = await service.finish("state-token", "authorization-code").catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({ code: "FACEBOOK_OAUTH_PAGES_FAILED", message: "Facebook OAuth request failed" });
+    expect(fetchGraph).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(error)).not.toContain("stolen-token");
+    expect(stateStore.saved).toHaveLength(1);
+  });
+
+  it("sanitizes failures while fetching a later Graph Page", async () => {
+    const stateStore = store();
+    await stateStore.save("state-token", { kind: "oauth", userId: "user-1" }, 600);
+    const fetchGraph = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "user-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: [],
+        paging: { next: "https://graph.facebook.com/v26.0/me/accounts?after=cursor-1&access_token=user-token" }
+      }), { status: 200 }))
+      .mockRejectedValueOnce(new Error("request failed with access_token=user-token"));
+    const service = new FacebookOAuthService({
+      appId: "meta-app-id",
+      appSecret: "meta-app-secret",
+      redirectUri: "https://api.example.com/api/v1/facebook-page/oauth/callback",
+      stateStore,
+      fetchGraph
+    });
+
+    const error = await service.finish("state-token", "authorization-code").catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({ code: "FACEBOOK_OAUTH_PAGES_FAILED", message: "Facebook OAuth request failed" });
+    expect(JSON.stringify(error)).not.toContain("user-token");
+    expect(stateStore.saved).toHaveLength(1);
+  });
+
+  it("stops Graph pagination after 25 pages with a sanitized pages error", async () => {
+    const stateStore = store();
+    await stateStore.save("state-token", { kind: "oauth", userId: "user-1" }, 600);
+    const fetchGraph = vi.fn(async (input: string) => {
+      const url = new URL(input);
+      if (url.pathname.endsWith("/oauth/access_token")) {
+        return new Response(JSON.stringify({ access_token: "user-token" }), { status: 200 });
+      }
+      const cursor = Number(url.searchParams.get("after") ?? "0");
+      return new Response(JSON.stringify({
+        data: [],
+        paging: { next: `https://graph.facebook.com/v26.0/me/accounts?after=${cursor + 1}&access_token=user-token` }
+      }), { status: 200 });
+    });
+    const service = new FacebookOAuthService({
+      appId: "meta-app-id",
+      appSecret: "meta-app-secret",
+      redirectUri: "https://api.example.com/api/v1/facebook-page/oauth/callback",
+      stateStore,
+      fetchGraph
+    });
+
+    const error = await service.finish("state-token", "authorization-code").catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({ code: "FACEBOOK_OAUTH_PAGES_FAILED", message: "Facebook OAuth request failed" });
+    expect(fetchGraph).toHaveBeenCalledTimes(26);
+    expect(JSON.stringify(error)).not.toContain("user-token");
+    expect(stateStore.saved).toHaveLength(1);
+  });
+
   it("reads the same selection concurrently without consuming it or extending its fixed expiry", async () => {
     const stateStore = store();
     await stateStore.save("selection-token", {

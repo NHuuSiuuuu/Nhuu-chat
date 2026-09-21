@@ -1,5 +1,14 @@
 import { readFileSync } from "node:fs";
+import * as React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+
+import * as connectModal from "./ConnectModal.js";
+
+function facebookFlowSurface(flow: connectModal.FacebookOAuthFlow): string {
+  const Content = connectModal.FacebookConnectContent;
+  return renderToStaticMarkup(<Content flow={flow} loading={false} onSelectPage={() => undefined} onStart={() => undefined} onSelect={() => undefined} />);
+}
 
 describe("ConnectModal Tailwind migration", () => {
   it("removes handwritten modal stylesheet imports", () => {
@@ -63,6 +72,41 @@ describe("ConnectModal Tailwind migration", () => {
     expect(source).not.toMatch(/Page ID\s*<input/);
     expect(source).not.toMatch(/Page access token\s*<input/);
     expect(source).not.toContain("pageAccessToken");
+  });
+
+  it("replaces the Page picker with an explicit success state after selection", () => {
+    const selecting: connectModal.FacebookOAuthFlow = {
+      status: "selecting",
+      selection: "selection-token",
+      pages: [{ id: "page-1", name: "Page One", canPublish: true }],
+      selectedPageId: "page-1"
+    };
+
+    const connected = connectModal.facebookOAuthFlowReducer(selecting, { type: "connected" });
+    const html = facebookFlowSurface(connected);
+
+    expect(connected).toEqual({ status: "connected" });
+    expect(html).toContain("Đã kết nối Facebook Page thành công");
+    expect(html).not.toContain("Page One");
+    expect(html).not.toContain("Chọn Facebook Page");
+  });
+
+  it("clears an expired selection and offers Facebook login again", () => {
+    const selecting: connectModal.FacebookOAuthFlow = {
+      status: "selecting",
+      selection: "expired-selection-token",
+      pages: [{ id: "page-1", name: "Stale Page", canPublish: true }],
+      selectedPageId: "page-1"
+    };
+
+    const restart = connectModal.facebookOAuthFlowReducer(selecting, { type: "restart", error: "Phiên chọn Page đã hết hạn." });
+    const html = facebookFlowSurface(restart);
+
+    expect(restart).toEqual({ status: "restart", error: "Phiên chọn Page đã hết hạn." });
+    expect(html).toContain("Phiên chọn Page đã hết hạn.");
+    expect(html).toContain("Đăng nhập lại bằng Facebook");
+    expect(html).not.toContain("Stale Page");
+    expect(html).not.toContain("Chọn Facebook Page");
   });
 
   it("uses the refreshed connection menu treatment", () => {

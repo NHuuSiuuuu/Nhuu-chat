@@ -5,6 +5,8 @@ import { facebookOAuthStore } from "./facebook-oauth.store.js";
 
 const OAUTH_STATE_TTL_SECONDS = 600;
 const OAUTH_SELECTION_CLAIM_TTL_SECONDS = 600;
+const FACEBOOK_GRAPH_ORIGIN = "https://graph.facebook.com";
+const FACEBOOK_OAUTH_MAX_PAGE_COUNT = 25;
 
 export interface FacebookOAuthStore {
   save(token: string, value: FacebookOAuthStoredValue, ttlSeconds: number): Promise<void>;
@@ -68,6 +70,45 @@ async function graphJson(fetchGraph: GraphFetch, url: URL, failureCode: string):
   return body as Record<string, unknown>;
 }
 
+function facebookOAuthPagesError(): AppError {
+  return new AppError(502, "FACEBOOK_OAUTH_PAGES_FAILED", "Facebook OAuth request failed");
+}
+
+// Chỉ theo liên kết phân trang HTTPS do Graph API trả về để không gửi token sang host khác.
+function graphPagingNext(response: Record<string, unknown>): URL | undefined {
+  if (response.paging === undefined || response.paging === null) return undefined;
+  if (typeof response.paging !== "object") throw facebookOAuthPagesError();
+  const next = (response.paging as Record<string, unknown>).next;
+  if (next === undefined || next === null) return undefined;
+  if (typeof next !== "string" || !next.trim()) throw facebookOAuthPagesError();
+
+  let nextUrl: URL;
+  try {
+    nextUrl = new URL(next);
+  } catch {
+    throw facebookOAuthPagesError();
+  }
+  if (nextUrl.origin !== FACEBOOK_GRAPH_ORIGIN) throw facebookOAuthPagesError();
+  return nextUrl;
+}
+
+// Thu thập toàn bộ Page trong giới hạn cố định và không lưu kết quả dở dang khi pagination lỗi.
+async function fetchFacebookOAuthPages(fetchGraph: GraphFetch, firstUrl: URL): Promise<unknown[]> {
+  const rawPages: unknown[] = [];
+  let pageUrl = firstUrl;
+
+  for (let pageCount = 0; pageCount < FACEBOOK_OAUTH_MAX_PAGE_COUNT; pageCount += 1) {
+    const response = await graphJson(fetchGraph, pageUrl, "FACEBOOK_OAUTH_PAGES_FAILED");
+    if (Array.isArray(response.data)) rawPages.push(...response.data);
+    const nextUrl = graphPagingNext(response);
+    if (!nextUrl) return rawPages;
+    if (pageCount === FACEBOOK_OAUTH_MAX_PAGE_COUNT - 1) throw facebookOAuthPagesError();
+    pageUrl = nextUrl;
+  }
+
+  throw facebookOAuthPagesError();
+}
+
 export class FacebookOAuthService {
   private readonly appId: string | undefined;
   private readonly appSecret: string | undefined;
@@ -120,8 +161,7 @@ export class FacebookOAuthService {
     const pagesUrl = new URL(`https://graph.facebook.com/${this.graphApiVersion}/me/accounts`);
     pagesUrl.searchParams.set("fields", "id,name,access_token,tasks");
     pagesUrl.searchParams.set("access_token", userAccessToken);
-    const pagesResponse = await graphJson(this.fetchGraph, pagesUrl, "FACEBOOK_OAUTH_PAGES_FAILED");
-    const rawPages = Array.isArray(pagesResponse.data) ? pagesResponse.data : [];
+    const rawPages = await fetchFacebookOAuthPages(this.fetchGraph, pagesUrl);
     const pages = rawPages.flatMap((value): FacebookOAuthPageSecret[] => {
       if (!value || typeof value !== "object") return [];
       const page = value as GraphPage;
