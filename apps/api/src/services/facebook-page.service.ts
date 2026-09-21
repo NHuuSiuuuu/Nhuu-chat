@@ -5,6 +5,8 @@ import { encryptSecret } from "../common/crypto.js";
 import { AppError } from "../common/errors.js";
 import { FacebookPageConnectionModel } from "../models/facebook-page-connection.model.js";
 
+const FACEBOOK_GRAPH_REQUEST_TIMEOUT_MS = 10_000;
+
 type GraphFetch = (input: string, init?: RequestInit) => Promise<Response>;
 
 interface FacebookPageConnectionRecord {
@@ -29,6 +31,7 @@ export interface FacebookPageServiceDependencies {
   fetchGraph?: GraphFetch;
   encryptSecret?: (value: string) => string;
   graphApiVersion?: string;
+  graphRequestTimeoutMs?: number;
 }
 
 function stringId(value: unknown): string {
@@ -61,14 +64,17 @@ export class FacebookPageService {
   private readonly fetchGraph: GraphFetch;
   private readonly encrypt: (value: string) => string;
   private readonly graphApiVersion: string;
+  private readonly graphRequestTimeoutMs: number;
 
   constructor(dependencies: FacebookPageServiceDependencies = {}) {
     this.model = dependencies.model ?? FacebookPageConnectionModel;
     this.fetchGraph = dependencies.fetchGraph ?? fetch;
     this.encrypt = dependencies.encryptSecret ?? encryptSecret;
     this.graphApiVersion = dependencies.graphApiVersion ?? env.META_GRAPH_API_VERSION;
+    this.graphRequestTimeoutMs = dependencies.graphRequestTimeoutMs ?? FACEBOOK_GRAPH_REQUEST_TIMEOUT_MS;
   }
 
+  // Xác thực Page trong deadline hữu hạn trước khi mã hóa và lưu token.
   async connect(userId: string, input: { pageId: string; pageAccessToken: string }): Promise<FacebookPageConnectionResponse> {
     const url = new URL(`https://graph.facebook.com/${this.graphApiVersion}/${encodeURIComponent(input.pageId)}`);
     url.searchParams.set("fields", "id,name");
@@ -76,11 +82,25 @@ export class FacebookPageService {
 
     let response: Response;
     let body: unknown;
+    const controller = new AbortController();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
-      response = await this.fetchGraph(url.toString(), { method: "GET" });
-      body = await response.json();
+      ({ response, body } = await Promise.race([
+        (async () => {
+          const graphResponse = await this.fetchGraph(url.toString(), { method: "GET", signal: controller.signal });
+          return { response: graphResponse, body: await graphResponse.json() };
+        })(),
+        new Promise<never>((_resolve, reject) => {
+          timeout = setTimeout(() => {
+            controller.abort();
+            reject(new Error("Facebook Page validation timed out"));
+          }, this.graphRequestTimeoutMs);
+        })
+      ]));
     } catch {
       throw new AppError(400, "FACEBOOK_PAGE_VALIDATION_FAILED", "Facebook Page credentials could not be validated");
+    } finally {
+      if (timeout) clearTimeout(timeout);
     }
 
     if (!response.ok || graphErrorCode(body) !== undefined) {

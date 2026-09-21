@@ -130,4 +130,91 @@ describe("FacebookPageService", () => {
       new AppError(400, "FACEBOOK_PAGE_VALIDATION_FAILED", "Facebook Page credentials could not be validated")
     );
   });
+
+  it("bounds a stalled Graph fetch, aborts it, and ignores late completion", async () => {
+    const { deps, model, fetchGraph } = dependencies();
+    let observedSignal: AbortSignal | null | undefined;
+    let resolveFetch!: (response: Response) => void;
+    fetchGraph.mockImplementation((_input: string, init?: RequestInit) => {
+      observedSignal = init?.signal;
+      return new Promise<Response>((resolve) => {
+        resolveFetch = resolve;
+      });
+    });
+    const service = new FacebookPageService({ ...deps, graphRequestTimeoutMs: 50 });
+    vi.useFakeTimers();
+
+    try {
+      const connection = service.connect("user-1", { pageId: "page-123", pageAccessToken: "secret-token" });
+      const errorPromise = connection.catch((caught: unknown) => caught);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(observedSignal?.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(50);
+
+      expect(observedSignal?.aborted).toBe(true);
+      await expect(errorPromise).resolves.toEqual(
+        new AppError(400, "FACEBOOK_PAGE_VALIDATION_FAILED", "Facebook Page credentials could not be validated")
+      );
+
+      resolveFetch({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({ id: "page-123", name: "Nhuu Store" })
+      } as unknown as Response);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(deps.encryptSecret).not.toHaveBeenCalled();
+      expect(model.findOneAndUpdate).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("bounds stalled Graph body parsing, aborts it, and ignores late completion", async () => {
+    const { deps, model, fetchGraph } = dependencies();
+    let observedSignal: AbortSignal | null | undefined;
+    let bodyStarted = false;
+    let resolveBody!: (body: unknown) => void;
+    fetchGraph.mockImplementation(async (_input: string, init?: RequestInit) => {
+      observedSignal = init?.signal;
+      return {
+        ok: true,
+        status: 200,
+        json: () => {
+          bodyStarted = true;
+          return new Promise<unknown>((resolve) => {
+            resolveBody = resolve;
+          });
+        }
+      } as Response;
+    });
+    const service = new FacebookPageService({ ...deps, graphRequestTimeoutMs: 50 });
+    vi.useFakeTimers();
+
+    try {
+      const connection = service.connect("user-1", { pageId: "page-123", pageAccessToken: "secret-token" });
+      const errorPromise = connection.catch((caught: unknown) => caught);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(bodyStarted).toBe(true);
+      expect(observedSignal?.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(50);
+
+      expect(observedSignal?.aborted).toBe(true);
+      await expect(errorPromise).resolves.toEqual(
+        new AppError(400, "FACEBOOK_PAGE_VALIDATION_FAILED", "Facebook Page credentials could not be validated")
+      );
+
+      resolveBody({ id: "page-123", name: "Nhuu Store" });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(deps.encryptSecret).not.toHaveBeenCalled();
+      expect(model.findOneAndUpdate).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
