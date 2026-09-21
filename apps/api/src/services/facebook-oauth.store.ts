@@ -56,20 +56,24 @@ function withDeadline<T>(operation: () => Promise<T>, timeoutMs: number): Promis
 
 export class RedisFacebookOAuthStore implements FacebookOAuthStore {
   private readonly client: RedisClientType;
+  private readonly connectAbortController: AbortController | undefined;
   private readonly operationTimeoutMs: number;
   private readonly shutdownTimeoutMs: number;
   private connectAttempt: Promise<void> | undefined;
   private closeAttempt: Promise<void> | undefined;
+  private activeConnects = 0;
   private isClosing = false;
 
   constructor(client?: RedisClientType, options: RedisFacebookOAuthStoreOptions = {}) {
     this.operationTimeoutMs = options.operationTimeoutMs ?? REDIS_OPERATION_TIMEOUT_MS;
     this.shutdownTimeoutMs = options.shutdownTimeoutMs ?? REDIS_SHUTDOWN_TIMEOUT_MS;
+    this.connectAbortController = client ? undefined : new AbortController();
     this.client = client ?? createClient({
       url: process.env.REDIS_URL ?? "redis://localhost:6379",
       socket: {
         connectTimeout: this.operationTimeoutMs,
-        reconnectStrategy: false
+        reconnectStrategy: false,
+        signal: this.connectAbortController?.signal
       },
       disableOfflineQueue: true
     });
@@ -101,13 +105,12 @@ export class RedisFacebookOAuthStore implements FacebookOAuthStore {
     if (this.isClosing) throw this.unavailableError();
   }
 
-  // Đóng client đang mở để hủy socket và giải phóng mọi lệnh Redis còn chờ.
-  private destroyOpenClient(): void {
-    if (!this.client.isOpen) return;
+  // Gọi API public kể cả khi trạng thái đang đổi để không bỏ lỡ socket vừa mở.
+  private destroyClient(): void {
     try {
       this.client.destroy();
     } catch {
-      // Client có thể vừa được socket error đóng giữa lúc kiểm tra và destroy.
+      // Client đã đóng trước khi destroy được thực thi.
     }
   }
 
@@ -116,15 +119,26 @@ export class RedisFacebookOAuthStore implements FacebookOAuthStore {
     if (this.connectAttempt) return this.connectAttempt;
     if (this.isClosing) return Promise.reject(this.unavailableError());
 
-    if (this.client.isOpen) this.destroyOpenClient();
+    if (this.client.isOpen) this.destroyClient();
+    let invalidated = false;
+    this.activeConnects += 1;
+    const rawConnect = Promise.resolve()
+      .then(() => {
+        this.ensureNotClosing();
+        return this.client.connect();
+      })
+      .finally(() => {
+        this.activeConnects -= 1;
+        if (invalidated || this.isClosing) this.destroyClient();
+      });
     const attempt = this.execute(async () => {
-      this.ensureNotClosing();
-      await this.client.connect();
+      await rawConnect;
       this.ensureNotClosing();
     })
       .then(() => undefined)
       .catch((error: unknown) => {
-        this.destroyOpenClient();
+        invalidated = true;
+        this.destroyClient();
         throw error;
       })
       .finally(() => {
@@ -201,7 +215,7 @@ export class RedisFacebookOAuthStore implements FacebookOAuthStore {
     } catch {
       // Shutdown vẫn tiếp tục bằng force-close khi connect/QUIT lỗi hoặc vượt deadline.
     } finally {
-      this.destroyOpenClient();
+      this.destroyClient();
     }
   }
 
@@ -209,6 +223,10 @@ export class RedisFacebookOAuthStore implements FacebookOAuthStore {
   close(): Promise<void> {
     if (this.closeAttempt) return this.closeAttempt;
     this.isClosing = true;
+    if (this.activeConnects > 0) {
+      this.connectAbortController?.abort();
+      this.destroyClient();
+    }
     this.closeAttempt = this.closeClient();
     return this.closeAttempt;
   }

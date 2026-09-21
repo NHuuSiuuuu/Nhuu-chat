@@ -1,5 +1,5 @@
 import { once } from "node:events";
-import { createServer, type Socket } from "node:net";
+import { createConnection, createServer, type Socket } from "node:net";
 
 import { createClient, type RedisClientType } from "redis";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -359,6 +359,56 @@ describe("RedisFacebookOAuthStore", () => {
       expect(redis.isOpen).toBe(false);
     } finally {
       if (redis.isOpen) redis.destroy();
+      await redisServer.close();
+    }
+  });
+
+  it("destroys a socket that opens after a cancelled connect outlives close", async () => {
+    const redisServer = await startRedisProtocolServer(replyToRedisCommand);
+    const redis = fakeRedis();
+    let connectAfterClose: (() => void) | undefined;
+    let clientSocket: Socket | undefined;
+    redis.connect.mockImplementation(() => new Promise<void>((resolve, reject) => {
+      connectAfterClose = () => {
+        const { port } = new URL(redisServer.url);
+        clientSocket = createConnection({ host: "127.0.0.1", port: Number(port) });
+        clientSocket.once("connect", () => {
+          redis.isOpen = true;
+          redis.isReady = true;
+          resolve();
+        });
+        clientSocket.once("error", reject);
+      };
+    }));
+    redis.destroy.mockImplementation(() => {
+      redis.isOpen = false;
+      redis.isReady = false;
+      clientSocket?.destroy();
+    });
+    const store = new RedisFacebookOAuthStore(redis as unknown as RedisClientType, {
+      operationTimeoutMs: 5,
+      shutdownTimeoutMs: 5
+    });
+
+    try {
+      const readResult = settleWithin(store.read("late-connect"));
+      await vi.waitFor(() => expect(redis.connect).toHaveBeenCalledOnce());
+      const result = await readResult;
+      expect(result.status).toBe("rejected");
+      if (result.status === "rejected") {
+        expect(result.error).toMatchObject({
+          code: "FACEBOOK_OAUTH_STORE_UNAVAILABLE"
+        });
+      }
+      await expect(store.close()).resolves.toBeUndefined();
+
+      connectAfterClose?.();
+      await vi.waitFor(() => expect(redisServer.connections).toHaveLength(1));
+
+      await expect(socketClosedWithin(redisServer.connections[0]!)).resolves.toBe(true);
+      expect(redis.isOpen).toBe(false);
+    } finally {
+      clientSocket?.destroy();
       await redisServer.close();
     }
   });
