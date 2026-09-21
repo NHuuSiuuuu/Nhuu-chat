@@ -307,7 +307,7 @@ Các test quan trọng của Inbox kiểm tra tự cuộn, unread state, metadat
 - Thanh toán trong phần Trợ lý AI hiện mới là UI cố định; tích hợp ví và tính phí thực tế chưa triển khai.
 - Nút `+ Tạo đơn`, ghi chú và một số toolbar hiện mới là UI placeholder; chưa có luồng persistence/order backend hoàn chỉnh.
 - Gửi media trong message đã hỗ trợ một ảnh/file cho Zalo cá nhân và Telegram cá nhân; upload video chưa có nút riêng trong bản đầu.
-- Meta/Instagram OAuth, Zalo cá nhân production UI/live smoke/reconnect đầy đủ, WebRTC và load test thực tế chưa thuộc MVP hiện tại.
+- Instagram OAuth, Zalo cá nhân production UI/live smoke/reconnect đầy đủ, WebRTC và load test thực tế chưa thuộc MVP hiện tại.
 
 ## 8. Kế hoạch tiếp theo
 
