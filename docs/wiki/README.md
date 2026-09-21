@@ -186,6 +186,16 @@ Các route `/api/v1/quick-replies` yêu cầu role `admin` hoặc `agent`, nhưn
 
 `attachment` chỉ nhận MIME type `image/*`, tối đa 5 MiB (5 × 1024 × 1024 byte). Backend stream ảnh từ memory lên Cloudinary vào `nhuu-chat/quick-replies/<userId>` và lưu URL bảo mật, public ID, resource type, MIME type, số byte cùng metadata kích thước ảnh. Khi thay ảnh, xóa mẫu hoặc dọn upload mồ côi sau khi MongoDB thất bại, asset Cloudinary tương ứng được xóa theo cơ chế best-effort; lỗi cleanup được ghi log và không rollback trạng thái MongoDB đã quyết định. Nếu chưa cấu hình Cloudinary, các thao tác không kèm ảnh vẫn không cần khởi tạo media service, còn request có ảnh sẽ lỗi cấu hình.
 
+### Đăng bài Facebook Page V1
+
+Mỗi user chỉ có một kết nối Facebook Page trong V1. Người vận hành nhập thủ công `Page ID` và `Page access token` trong màn hình đăng bài; API xác thực metadata Page qua Meta Graph API trước khi lưu token đã mã hóa. Token không được trả về frontend, lưu trong browser, ghi log hoặc đưa vào `.env`; chỉ giải mã trong memory khi publish. Dùng HTTPS, giới hạn quyền truy cập vận hành và thu hồi token tại Meta nếu có dấu hiệu lộ.
+
+Cấu hình Cloudinary đủ `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` và `CLOUDINARY_API_SECRET`. Bài bắt buộc có text, tùy chọn tối đa một ảnh `JPG`/`PNG`/`WebP` không quá 5 MiB; ảnh được lưu qua Cloudinary và MongoDB chỉ giữ metadata/URL an toàn. Graph API mặc định là `v26.0`, qua `META_GRAPH_API_VERSION`. Khi Meta App còn ở Development Mode, chỉ tài khoản/Page và vai trò được cấp trong app mới có thể kiểm thử; cần hoàn tất cấu hình/quyền và quy trình Meta phù hợp trước khi mở cho người dùng production.
+
+Chế độ và trạng thái được hỗ trợ: lưu `draft`, đăng `now`, hẹn `scheduled`, sau đó `publishing`, `published` hoặc `failed`. Nhập/hiển thị lịch theo `Asia/Ho_Chi_Minh`; MongoDB lưu thời điểm dưới dạng UTC. Worker kiểm tra mỗi 30 giây (`FACEBOOK_POST_SCHEDULER_INTERVAL_MS=30000`), chạy recovery ngay khi API khởi động, và dùng lease mặc định 120 giây (`FACEBOOK_POST_LEASE_MS=120000`), nên bài đến hạn trong lúc server tắt sẽ được xử lý sau restart.
+
+Retry chỉ là thao tác thủ công trên bài `failed`. Timeout Meta là kết quả mơ hồ: Meta có thể đã tạo bài dù client không nhận được phản hồi, nên phải kiểm tra Page/Meta trước khi retry để tránh trùng bài. Lease hết hạn cũng cần xác nhận thủ công. Ngoài phạm vi V1: OAuth/App Review, nhiều Page trên một user, video, nhiều ảnh, lịch lặp, chỉnh sửa/xóa bài đã publish và các tính năng bulk/calendar nâng cao.
+
 ### Gửi media outbound
 
 `POST /api/v1/messages/send` tiếp nhận JSON cho tin text hoặc `multipart/form-data` với các field `conversationId`, `type`, `content` và một file `attachment`. Backend giới hạn 20 MB, chặn `.exe`, `.js`, `.sh` cùng MIME nguy hiểm, upload media vào Cloudinary rồi gửi buffer qua connector. `telegram_personal` dùng GramJS `sendFile`; `zalo_personal` dùng attachment buffer của `zca-js`. Chỉ hai kênh cá nhân này được phép gửi media; Facebook, Instagram, Telegram Bot và Zalo khác vẫn text-only. Video chưa có nút riêng trong bản đầu.

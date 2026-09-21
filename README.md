@@ -118,6 +118,16 @@ Các route `/api/v1/quick-replies` chỉ cho `admin` và `agent`, đồng thời
 
 `POST` và `PATCH` dùng `multipart/form-data`; `attachment` phải là ảnh (`image/*`) và không vượt quá 5 MiB. Backend nhận file trong memory rồi stream lên Cloudinary vào thư mục riêng `nhuu-chat/quick-replies/<userId>`, lưu metadata `secureUrl`, `publicId`, loại tài nguyên, MIME type, kích thước và kích thước ảnh. Khi thay hoặc xóa mẫu, asset cũ được dọn khỏi Cloudinary; upload mồ côi sau khi MongoDB ghi thất bại cũng được dọn best-effort, còn lỗi dọn media không làm thay đổi kết quả persistence.
 
+### Đăng bài Facebook Page V1
+
+V1 cho phép mỗi user kết nối đúng một Facebook Page và đăng bài gồm text bắt buộc cùng tối đa một ảnh. Kết nối dùng `Page ID` và `Page access token` nhập thủ công tại màn hình Đăng bài; backend gọi Graph API để kiểm tra Page trước khi mã hóa token và lưu vào MongoDB. Không đặt Page ID/token trong `.env`, frontend storage, log hoặc response. Token chỉ được giải mã trong memory ngay trước khi gọi Meta. Cần dùng HTTPS và giữ Page access token như credential có quyền đăng bài; khi nghi ngờ lộ token, thu hồi/cấp token mới tại Meta rồi kết nối lại.
+
+Trước khi dùng, cấu hình Cloudinary đủ `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` và `CLOUDINARY_API_SECRET`. Ảnh được upload qua Cloudinary trước khi đăng; chỉ nhận `image/jpeg`, `image/png` hoặc `image/webp`, tối đa 5 MiB (5 × 1024 × 1024 byte), một ảnh cho mỗi bài. Text là bắt buộc. V1 dùng Meta Graph API `v26.0` mặc định (`META_GRAPH_API_VERSION` có thể đổi theo cấu hình). Khi app còn ở Development Mode, chỉ người dùng, Page và vai trò được cấp trong app mới có thể dùng, nên chưa phải luồng production/public.
+
+Có ba cách lưu bài: `draft` (bản nháp, chưa gọi Meta), `scheduled` (hẹn đăng), và `now` (đăng ngay, chuyển qua `publishing`). Trạng thái kết quả là `publishing`, `published` hoặc `failed`; đây là toàn bộ tập trạng thái được hỗ trợ. Thời gian nhập/hiển thị dùng `Asia/Ho_Chi_Minh`, còn MongoDB persistence dùng `Date` UTC. Worker kiểm tra bài đến hạn mỗi 30 giây (`FACEBOOK_POST_SCHEDULER_INTERVAL_MS=30000`) và chạy một lượt recovery khi API khởi động, vì vậy bài `scheduled` quá hạn khi server tắt sẽ được xử lý sau restart. Lease mặc định là 120 giây (`FACEBOOK_POST_LEASE_MS=120000`) để phát hiện worker chết.
+
+Bài `failed` có thể retry thủ công; không có retry tự động cho lỗi timeout của Meta vì request có thể đã được Meta nhận dù client không nhận được phản hồi. Hãy kiểm tra Page và bài đã publish trên Meta trước khi bấm retry để tránh đăng trùng. Lease hết hạn cũng chuyển bài sang `failed` và yêu cầu xác nhận thủ công. V1 chưa có OAuth/App Review, chưa hỗ trợ nhiều Page trên một user, video, nhiều ảnh, link preview, lịch lặp/recurring schedules, chỉnh sửa hoặc xóa bài đã publish, hay bulk/calendar nâng cao.
+
 ### Gửi ảnh và file từ Inbox
 
 Composer hỗ trợ chọn một ảnh hoặc file, nhập chú thích tùy chọn rồi gửi tới hội thoại Zalo cá nhân hoặc Telegram cá nhân. Backend giới hạn 20 MB mỗi lần gửi, chặn `.exe`, `.js`, `.sh` và MIME nguy hiểm, lưu media qua Cloudinary để message còn tải được sau khi reload, đồng thời gửi buffer trực tiếp qua connector cá nhân. Các kênh khác vẫn chỉ hỗ trợ text.
