@@ -76,4 +76,14 @@ describe("ConnectModal Tailwind migration", () => {
     expect(source).toContain("scale-100");
     expect(source).toContain("bg-white rounded-2xl shadow-xl overflow-hidden");
   });
+
+  it("uses a custom animated QR loader without a dashed placeholder", () => {
+    const source = readFileSync(new URL("./ConnectModal.tsx", import.meta.url), "utf8");
+
+    expect(source).not.toContain("border-dashed");
+    expect(source).toContain("function QrLoadingState");
+    expect(source).toContain('<animate attributeName="y"');
+    expect(source).toContain('<QrLoadingState platform="Telegram" loading={loading} />');
+    expect(source).toContain('<QrLoadingState platform="Zalo" loading={loading} />');
+  });
 });
