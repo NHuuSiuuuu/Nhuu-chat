@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa chatbot giữ ngữ cảnh khi khách trả lời viết tắt như “sv” hoặc xác nhận “có”, bổ sung lượt khách trước vào truy vấn knowledge để không trả fallback dù dữ liệu phù hợp đã có.
 - Sửa AI gợi ý trả về rỗng khi model Gemini chính quá tải: tự chuyển sang model dự phòng khả dụng và cho phép nút làm mới gọi gợi ý ở mọi chế độ đang bật.
 - Sửa gửi tin Zalo cá nhân bằng cách truyền text theo payload `{ msg }` mà `zca-js` yêu cầu; trước đó truyền chuỗi khiến Zalo trả mã tham số không hợp lệ `114`.
 - Bổ sung log chẩn đoán an toàn cho lỗi gửi Zalo và lỗi gợi ý Gemini, giữ lại mã/tên/thông báo lỗi bên ngoài mà không ghi nội dung tin nhắn hoặc credential.

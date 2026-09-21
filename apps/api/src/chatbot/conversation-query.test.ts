@@ -7,7 +7,14 @@ describe("conversation knowledge query", () => {
     expect(buildKnowledgeQuery("có", [
       { role: "customer", content: "mất gốc" },
       { role: "bot", content: "Bạn có muốn em tư vấn học phí và lịch học không ạ?" }
-    ])).toBe("Bạn có muốn em tư vấn học phí và lịch học không ạ?\ncó");
+    ])).toBe("mất gốc\nBạn có muốn em tư vấn học phí và lịch học không ạ?\ncó");
+  });
+
+  it("expands the customer abbreviation sv while preserving the conversation topic", () => {
+    expect(buildKnowledgeQuery("sv", [
+      { role: "customer", content: "tôi muốn học khóa học" },
+      { role: "bot", content: "Anh/Chị đang tìm hiểu tiếng Anh cho đối tượng nào ạ?" }
+    ])).toBe("tôi muốn học khóa học\nAnh/Chị đang tìm hiểu tiếng Anh cho đối tượng nào ạ?\nsinh viên");
   });
 
   it("uses the current message alone for a normal question", () => {
