@@ -89,6 +89,17 @@ describe("Facebook page controller", () => {
     expect(redirectResponse.redirect).toHaveBeenCalledWith(302, "https://app.example.com/dashboard?facebook_oauth=select&selection=selection-1");
   });
 
+  it("redirects callback failures with a safe code instead of exposing error details", async () => {
+    vi.stubEnv("WEB_APP_URL", "https://app.example.com");
+    serviceMocks.finish.mockRejectedValue(new Error("provider failed with access_token=secret-token"));
+    const redirectResponse = { redirect: vi.fn() };
+
+    await finishFacebookOAuth({ query: { state: "state-1", code: "code-1" } } as never, redirectResponse as never, vi.fn());
+
+    expect(redirectResponse.redirect).toHaveBeenCalledWith(302, "https://app.example.com/dashboard?facebook_oauth=error&code=FACEBOOK_OAUTH_FAILED");
+    expect(redirectResponse.redirect.mock.calls[0]?.[1]).not.toContain("secret-token");
+  });
+
   it("uses the authenticated owner when listing and selecting an OAuth Page", async () => {
     serviceMocks.getSelection.mockResolvedValue([{ id: "page-1", name: "Page One", canPublish: true }]);
     const listResponse = responseRecorder();
