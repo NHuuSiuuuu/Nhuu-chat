@@ -72,6 +72,16 @@ describe("FacebookPublishingPage", () => {
     expect(surface({ user: { email: "owner@example.com", role: "owner", displayName: "Owner" } })).toContain('alt="NhuuChat"');
   });
 
+  it("keeps the header and sidebar visible while post data is loading", () => {
+    const html = surface({ initialLoading: true, initialPosts: [] });
+    expect(html).toContain('alt="NhuuChat"');
+    expect(html).toContain('aria-label="Menu đăng bài Facebook"');
+    expect(html).toContain('aria-label="Đang tải bài viết"');
+    expect(html.match(/aria-label="Đang tải bài viết"/g)).toHaveLength(3);
+    expect(html).toContain("animate-pulse");
+    expect(html).toContain("bg-gray-200");
+  });
+
   it("does not duplicate the publishing title and timezone subtitle below the global header", () => {
     const html = surface();
     expect(html).not.toContain("Đăng bài Facebook Page");

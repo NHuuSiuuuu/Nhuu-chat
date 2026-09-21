@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm Skeleton Loading cho trang Bài viết: giữ Global Header/Sidebar ổn định và hiển thị 3 khung bài viết trong lúc chờ API.
 - Bỏ cơ chế cố định và cuộn riêng của sidebar quản lý Facebook Page để sidebar cuộn cùng nội dung chính.
 - Cập nhật card quản lý Facebook Page: chọn Page bằng dropdown, đồng bộ Page ID theo lựa chọn, đưa trạng thái kết nối vào card và bỏ các phần tử điều hướng thừa.
 - Bỏ tiêu đề và phụ đề trùng lặp trong nội dung trang Đăng bài Facebook Page, giữ lại Global Header và layout sidebar.
