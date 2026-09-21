@@ -1,7 +1,44 @@
 import { describe, expect, it, vi } from "vitest";
-import { cancelFacebookPost, connectFacebookPage, createFacebookPost, FacebookPublishingApiError, getFacebookPageConnection, listFacebookPosts, removeFacebookPage, retryFacebookPost, updateFacebookPost } from "./facebook-publishing.api.js";
+import { cancelFacebookPost, connectFacebookPage, createFacebookPost, FacebookPublishingApiError, getFacebookPageConnection, listFacebookOAuthPages, listFacebookPosts, removeFacebookPage, retryFacebookPost, selectFacebookOAuthPage, startFacebookOAuth, updateFacebookPost } from "./facebook-publishing.api.js";
 
 describe("Facebook publishing API", () => {
+  it("starts Facebook OAuth with a credentialed GET request", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ authorizationUrl: "https://facebook.example/oauth" }), { status: 200 }));
+
+    await startFacebookOAuth("/api");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/api/v1/facebook-page/oauth/start", expect.objectContaining({
+      method: "GET",
+      credentials: "include"
+    }));
+    fetchMock.mockRestore();
+  });
+
+  it("lists OAuth Pages with an encoded selection query and cookie credentials", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify([]), { status: 200 }));
+
+    await listFacebookOAuthPages("selection token", "/api");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/api/v1/facebook-page/oauth/pages?selection=selection%20token", expect.objectContaining({
+      method: "GET",
+      credentials: "include"
+    }));
+    fetchMock.mockRestore();
+  });
+
+  it("selects an OAuth Page with the expected JSON body and cookie credentials", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ id: "connection-1" }), { status: 201 }));
+
+    await selectFacebookOAuthPage("selection-token", "page-1", "/api");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/api/v1/facebook-page/oauth/select", expect.objectContaining({
+      method: "POST",
+      credentials: "include",
+      body: JSON.stringify({ selectionToken: "selection-token", pageId: "page-1" })
+    }));
+    fetchMock.mockRestore();
+  });
+
   it("refreshes the cookie session once before retrying a 401 request", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "AUTHENTICATION_REQUIRED" } }), { status: 401 }))

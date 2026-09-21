@@ -60,6 +60,9 @@ describe("ConnectModal Tailwind migration", () => {
     expect(source).toContain("listFacebookOAuthPages");
     expect(source).toContain("selectFacebookOAuthPage");
     expect(source).toContain("Luồng nhập Page ID và Page Access Token thủ công vẫn được giữ nguyên");
+    expect(source).not.toMatch(/Page ID\s*<input/);
+    expect(source).not.toMatch(/Page access token\s*<input/);
+    expect(source).not.toContain("pageAccessToken");
   });
 
   it("uses the refreshed connection menu treatment", () => {
