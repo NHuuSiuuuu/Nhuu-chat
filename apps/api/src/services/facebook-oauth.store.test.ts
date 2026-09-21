@@ -333,6 +333,36 @@ describe("RedisFacebookOAuthStore", () => {
     expect(redis.connect).toHaveBeenCalledOnce();
   });
 
+  it("does not open a Redis socket when close wins before a scheduled connect", async () => {
+    const redisServer = await startRedisProtocolServer(replyToRedisCommand);
+    const redis = createClient({
+      url: redisServer.url,
+      socket: { reconnectStrategy: false }
+    });
+    const store = new RedisFacebookOAuthStore(redis, {
+      operationTimeoutMs: 50,
+      shutdownTimeoutMs: 50
+    });
+    const readResult = settleWithin(store.read("shutdown-race"), 250);
+
+    try {
+      await expect(store.close()).resolves.toBeUndefined();
+      const result = await readResult;
+
+      expect(result.status).toBe("rejected");
+      if (result.status === "rejected") {
+        expect(result.error).toMatchObject({
+          code: "FACEBOOK_OAUTH_STORE_UNAVAILABLE"
+        });
+      }
+      expect(redisServer.connections).toHaveLength(0);
+      expect(redis.isOpen).toBe(false);
+    } finally {
+      if (redis.isOpen) redis.destroy();
+      await redisServer.close();
+    }
+  });
+
   it("destroys a timed-out real Redis handshake and reconnects on a later request", async () => {
     const redisServer = await startRedisProtocolServer((command, socket, connectionNumber) => {
       if (connectionNumber > 1) replyToRedisCommand(command, socket);
