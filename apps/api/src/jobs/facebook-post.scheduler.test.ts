@@ -119,6 +119,24 @@ describe("FacebookPostScheduler", () => {
     );
   });
 
+  it("fails safely without publishing when the connection Page changed", async () => {
+    const d = dependencies();
+    d.postModel.findOneAndUpdate
+      .mockReturnValueOnce(query(row({ status: "publishing", attempts: 1, publishingLeaseUntil: leaseUntil })))
+      .mockReturnValueOnce(query(row({ status: "failed", lastErrorCode: "FACEBOOK_PAGE_ID_MISMATCH", publishingLeaseUntil: null })));
+    d.connectionModel.findOne.mockReturnValue({ select: vi.fn().mockReturnValue(query({ ...connectedConnection(), pageId: "page-2" })) });
+    const scheduler = new FacebookPostScheduler({ ...d, now: () => now });
+
+    await expect(scheduler.runOnce()).resolves.toBe(true);
+
+    expect(d.publisher.publish).not.toHaveBeenCalled();
+    expect(d.postModel.findOneAndUpdate).toHaveBeenNthCalledWith(2,
+      { _id: "post-1", status: "publishing", publishingLeaseUntil: leaseUntil },
+      { $set: expect.objectContaining({ status: "failed", lastErrorCode: "FACEBOOK_PAGE_ID_MISMATCH", publishingLeaseUntil: null }) },
+      { new: true, runValidators: true }
+    );
+  });
+
   it("does not retry an ambiguous publish timeout", async () => {
     const d = dependencies();
     d.postModel.findOneAndUpdate

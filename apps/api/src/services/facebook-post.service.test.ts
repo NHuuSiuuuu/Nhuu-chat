@@ -119,6 +119,24 @@ describe("FacebookPostService", () => {
     expect(d.postModel.findOneAndUpdate).toHaveBeenCalledWith(expect.objectContaining({ _id: "post-1", userId: "user-1", status: "publishing" }), expect.objectContaining({ $set: expect.objectContaining({ status: "published" }) }), expect.anything());
   });
 
+  it("assigns a recovery lease before publishing immediately", async () => {
+    const d = deps();
+    const now = new Date("2026-09-21T10:00:00.000Z");
+    d.connectionModel.findOne.mockReturnValue(connectionQuery({ _id: "connection-1", pageId: "page-1", status: "connected", encryptedPageAccessToken: "cipher" }));
+    d.postModel.create.mockResolvedValue(row({ status: "publishing", attempts: 1 }));
+    d.publisher.publish.mockResolvedValue({ publishedPostId: "page-1_100" });
+    d.postModel.findOneAndUpdate.mockReturnValue(updateQuery(row({ status: "published", publishedPostId: "page-1_100" })));
+    const service = new FacebookPostService({ ...d, decryptSecret: () => "page-secret", now: () => now });
+
+    await service.createPost("user-1", { message: "Hello", mode: "now" });
+
+    expect(d.postModel.create).toHaveBeenCalledWith(expect.objectContaining({
+      status: "publishing",
+      attempts: 1,
+      publishingLeaseUntil: new Date("2026-09-21T10:02:00.000Z")
+    }));
+  });
+
   it("records a safe failure and retains uploaded media when publish fails", async () => {
     const d = deps();
     d.connectionModel.findOne.mockReturnValue(connectionQuery({ _id: "connection-1", pageId: "page-1", status: "connected", encryptedPageAccessToken: "cipher" }));
@@ -217,9 +235,28 @@ describe("FacebookPostService", () => {
     const service = new FacebookPostService({ ...d, decryptSecret: () => "page-secret" });
 
     await expect(service.retryPost("user-1", "post-1", "now")).resolves.toMatchObject({ status: "published" });
+    expect(d.postModel.findOneAndUpdate).toHaveBeenNthCalledWith(1,
+      { _id: "post-1", userId: "user-1", status: "failed" },
+      { $set: expect.objectContaining({ status: "publishing", publishingLeaseUntil: expect.any(Date) }) },
+      expect.anything()
+    );
     await service.cancelPost("user-1", "post-1");
     expect(d.postModel.findOneAndDelete).toHaveBeenCalledWith({ _id: "post-1", userId: "user-1", status: { $in: ["draft", "scheduled", "failed"] } });
     expect(d.mediaService.destroy).toHaveBeenCalledWith(media);
+  });
+
+  it("keeps the post when cancellation media cleanup fails", async () => {
+    const d = deps();
+    d.postModel.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(row({ status: "scheduled", media })) });
+    d.postModel.findOneAndDelete.mockReturnValue(updateQuery(row({ status: "scheduled", media })));
+    d.mediaService.destroy.mockRejectedValue(new Error("cloudinary unavailable"));
+    const service = new FacebookPostService(d);
+
+    await expect(service.cancelPost("user-1", "post-1")).rejects.toMatchObject({
+      code: "FACEBOOK_POST_MEDIA_CLEANUP_FAILED",
+      statusCode: 502
+    });
+    expect(d.postModel.findOneAndDelete).not.toHaveBeenCalled();
   });
 
   it("rejects a scheduled time in the past", async () => {

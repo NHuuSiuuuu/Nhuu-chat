@@ -97,7 +97,10 @@ describe("Facebook publishing API", () => {
 
   it.each([
     ["FACEBOOK_PAGE_TOKEN_INVALID", "Token Facebook Page không hợp lệ hoặc đã hết hạn."],
-    ["FACEBOOK_PAGE_ID_MISMATCH", "Facebook Page không khớp với Page ID đã nhập."]
+    ["FACEBOOK_PAGE_ID_MISMATCH", "Facebook Page không khớp với Page ID đã nhập."],
+    ["FACEBOOK_PERMISSION_DENIED", "Facebook không cấp quyền đăng bài cho kết nối này."],
+    ["FACEBOOK_TOKEN_INVALID", "Token Facebook không hợp lệ hoặc đã hết hạn."],
+    ["FACEBOOK_PUBLISH_TIMEOUT", "Facebook chưa xác nhận kết quả đăng bài. Hãy kiểm tra lại trước khi thử lại."]
   ])("maps backend error code %s to a safe message", async (code, message) => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ error: { code } }), { status: 400 }));
 

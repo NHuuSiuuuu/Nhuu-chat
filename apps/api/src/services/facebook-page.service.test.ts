@@ -64,6 +64,16 @@ describe("FacebookPageService", () => {
     expect(result).toMatchObject({ id: "connection-1", pageId: "page-123", pageName: "Nhuu Store", status: "connected" });
   });
 
+  it("uses the configured Graph API version when no service override is supplied", async () => {
+    const { deps, model, fetchGraph } = dependencies();
+    model.findOneAndUpdate.mockResolvedValue(record());
+    const service = new FacebookPageService({ ...deps, graphApiVersion: undefined });
+
+    await service.connect("user-1", { pageId: "page-123", pageAccessToken: "secret-token" });
+
+    expect(fetchGraph).toHaveBeenCalledWith(expect.stringContaining("https://graph.facebook.com/v26.0/page-123"), expect.anything());
+  });
+
   it("rejects a Graph token error without encrypting or persisting", async () => {
     const { deps, model } = dependencies({ error: { code: 190, message: "Invalid OAuth access token" } });
     const service = new FacebookPageService(deps);

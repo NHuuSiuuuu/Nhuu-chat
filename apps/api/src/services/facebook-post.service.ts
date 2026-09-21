@@ -1,4 +1,5 @@
 import type { FacebookPostMedia, FacebookPostResponse } from "@nhuu-chat/contracts";
+import { env } from "@nhuu-chat/config";
 
 import { decryptSecret } from "../common/crypto.js";
 import { AppError } from "../common/errors.js";
@@ -159,7 +160,18 @@ export class FacebookPostService {
     const status = input.mode === "now" ? "publishing" : input.mode;
     let record: PostRecord;
     try {
-      record = await this.posts.create({ userId, connectionId: connection._id, pageId: connection.pageId, message, media: media ?? null, status, scheduledAt: scheduled, timezone: TIMEZONE, attempts: input.mode === "now" ? 1 : 0 });
+      record = await this.posts.create({
+        userId,
+        connectionId: connection._id,
+        pageId: connection.pageId,
+        message,
+        media: media ?? null,
+        status,
+        scheduledAt: scheduled,
+        timezone: TIMEZONE,
+        attempts: input.mode === "now" ? 1 : 0,
+        publishingLeaseUntil: input.mode === "now" ? new Date(this.clock().getTime() + env.FACEBOOK_POST_LEASE_MS) : null
+      });
     } catch (error) {
       if (media) await Promise.resolve(this.media.destroy(media)).catch(() => undefined);
       throw error;
@@ -225,16 +237,38 @@ export class FacebookPostService {
     if (current.status !== "failed") throw new AppError(409, "FACEBOOK_POST_INVALID_STATE", "Only failed Facebook posts can be retried");
     if (mode === "scheduled" && (!current.scheduledAt || new Date(current.scheduledAt).getTime() <= this.clock().getTime())) throw new AppError(400, "FACEBOOK_POST_SCHEDULE_IN_PAST", "Scheduled time must be in the future");
     const connection = await this.connection(userId);
-    const publishing = await this.posts.findOneAndUpdate({ _id: postId, userId, status: "failed" }, { $set: { status: mode === "now" ? "publishing" : "scheduled", attempts: current.attempts + 1, lastErrorCode: null, lastErrorMessage: null } }, { new: true, runValidators: true }).lean();
+    const publishing = await this.posts.findOneAndUpdate(
+      { _id: postId, userId, status: "failed" },
+      {
+        $set: {
+          status: mode === "now" ? "publishing" : "scheduled",
+          attempts: current.attempts + 1,
+          lastErrorCode: null,
+          lastErrorMessage: null,
+          publishingLeaseUntil: mode === "now" ? new Date(this.clock().getTime() + env.FACEBOOK_POST_LEASE_MS) : null
+        }
+      },
+      { new: true, runValidators: true }
+    ).lean();
     if (!publishing) throw new AppError(409, "FACEBOOK_POST_STATE_CHANGED", "Facebook post state changed while retrying");
     if (mode === "scheduled") return toResponse(publishing);
     try { return await this.publishPost(userId, publishing, connection); } catch (error) { return this.failPost(userId, publishing, error); }
   }
 
   async cancelPost(userId: string, postId: string): Promise<void> {
+    const current = await this.posts.findOne({ _id: postId, userId }).lean();
+    if (!current || !["draft", "scheduled", "failed"].includes(current.status)) {
+      throw new AppError(409, "FACEBOOK_POST_INVALID_STATE", "Facebook post cannot be cancelled in its current state");
+    }
+    if (current.media) {
+      try {
+        await this.media.destroy(current.media);
+      } catch {
+        throw new AppError(502, "FACEBOOK_POST_MEDIA_CLEANUP_FAILED", "Facebook post media could not be cleaned up");
+      }
+    }
     const deleted = await this.posts.findOneAndDelete({ _id: postId, userId, status: { $in: ["draft", "scheduled", "failed"] } }).lean();
-    if (!deleted) throw new AppError(409, "FACEBOOK_POST_INVALID_STATE", "Facebook post cannot be cancelled in its current state");
-    if (deleted.media) await this.media.destroy(deleted.media);
+    if (!deleted) throw new AppError(409, "FACEBOOK_POST_STATE_CHANGED", "Facebook post state changed while cancelling");
   }
 }
 

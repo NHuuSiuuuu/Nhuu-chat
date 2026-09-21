@@ -1,4 +1,5 @@
 import type { FacebookPageConnectionResponse } from "@nhuu-chat/contracts";
+import { env } from "@nhuu-chat/config";
 
 import { encryptSecret } from "../common/crypto.js";
 import { AppError } from "../common/errors.js";
@@ -65,7 +66,7 @@ export class FacebookPageService {
     this.model = dependencies.model ?? FacebookPageConnectionModel;
     this.fetchGraph = dependencies.fetchGraph ?? fetch;
     this.encrypt = dependencies.encryptSecret ?? encryptSecret;
-    this.graphApiVersion = dependencies.graphApiVersion ?? "v26.0";
+    this.graphApiVersion = dependencies.graphApiVersion ?? env.META_GRAPH_API_VERSION;
   }
 
   async connect(userId: string, input: { pageId: string; pageAccessToken: string }): Promise<FacebookPageConnectionResponse> {

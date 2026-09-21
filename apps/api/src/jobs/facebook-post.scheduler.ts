@@ -156,6 +156,9 @@ export class FacebookPostScheduler {
         if (!connection || connection.status !== "connected" || !connection.encryptedPageAccessToken) {
           throw new AppError(409, "FACEBOOK_PAGE_NOT_CONNECTED", "Facebook Page is not connected");
         }
+        if (connection.pageId !== claimed.pageId) {
+          throw new AppError(409, "FACEBOOK_PAGE_ID_MISMATCH", "Facebook connection Page does not match the post Page");
+        }
         published = await this.publisher.publish({
           pageId: connection.pageId,
           pageAccessToken: this.decrypt(connection.encryptedPageAccessToken),
