@@ -1,7 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
-import { cancelFacebookPost, connectFacebookPage, createFacebookPost, FacebookPublishingApiError, listFacebookPosts, removeFacebookPage, retryFacebookPost, updateFacebookPost } from "./facebook-publishing.api.js";
+import { cancelFacebookPost, connectFacebookPage, createFacebookPost, FacebookPublishingApiError, getFacebookPageConnection, listFacebookPosts, removeFacebookPage, retryFacebookPost, updateFacebookPost } from "./facebook-publishing.api.js";
 
 describe("Facebook publishing API", () => {
+  it("refreshes the cookie session once before retrying a 401 request", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "AUTHENTICATION_REQUIRED" } }), { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "connection-1", pageId: "page-1", status: "connected" }), { status: 200 }));
+
+    await expect(getFacebookPageConnection("/api")).resolves.toMatchObject({ id: "connection-1" });
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/api/v1/auth/refresh");
+    expect(fetchMock.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ method: "POST", credentials: "include" }));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it("connects with cookie credentials and does not put the token in a URL", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ id: "connection-1", pageId: "page-1", status: "connected" }), { status: 201 }));
 

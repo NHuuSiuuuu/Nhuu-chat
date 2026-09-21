@@ -37,7 +37,7 @@ function endpoint(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/$/, "")}${path}`;
 }
 
-async function request<T>(path: string, init: RequestInit = {}, options: RequestOptions = {}): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}, options: RequestOptions = {}, retryOnUnauthorized = true): Promise<T> {
   const response = await fetch(endpoint(options.baseUrl ?? API_BASE_URL, path), {
     ...init,
     cache: init.cache ?? "no-store",
@@ -45,6 +45,14 @@ async function request<T>(path: string, init: RequestInit = {}, options: Request
     signal: options.signal,
     headers: { ...(init.body instanceof FormData ? {} : { "content-type": "application/json" }), ...init.headers }
   });
+  if (response.status === 401 && retryOnUnauthorized) {
+    const refreshResponse = await fetch(endpoint(options.baseUrl ?? API_BASE_URL, "/api/v1/auth/refresh"), {
+      method: "POST",
+      credentials: "include",
+      cache: "no-store"
+    });
+    if (refreshResponse.ok) return request<T>(path, init, options, false);
+  }
   if (response.status === 204) return undefined as T;
 
   let body: unknown = null;
