@@ -25,6 +25,7 @@ describe("FacebookPublishingPage", () => {
 
   it("renders the composer modes and preview surface", () => {
     const html = surface({ initialImageUrl: "blob:preview", initialMode: "scheduled", initialScheduledAt: "2026-09-22T10:00" });
+    expect(html).toContain("mb-6");
     expect(html).toContain("Nội dung xem trước");
     expect(html).toContain("Xem trước");
     expect(html).toContain('accept="image/jpeg,image/png,image/webp"');
