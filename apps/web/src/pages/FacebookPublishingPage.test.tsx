@@ -88,4 +88,10 @@ describe("FacebookPublishingPage", () => {
     expect(source).toContain("Page ID:");
     expect(source).toContain("bg-teal-50 text-teal-700");
   });
+
+  it("keeps the Facebook management sidebar sticky below the global header", () => {
+    const source = readFileSync(new URL("./FacebookPublishingPage.tsx", import.meta.url), "utf8");
+    expect(source).toContain("sticky top-24 self-start");
+    expect(source).toContain("h-[calc(100vh-6rem)] overflow-y-auto");
+  });
 });
