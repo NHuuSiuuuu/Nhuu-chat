@@ -59,7 +59,8 @@ describe("Facebook publishing API", () => {
 
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.body).toBeInstanceOf(FormData);
-    expect((init.body as FormData).get("scheduledAt")).toBe("null");
+    expect((init.body as FormData).get("scheduledAt")).toBeNull();
+    expect((init.body as FormData).get("mode")).toBe("draft");
     expect((init.body as FormData).get("image")).toBe(image);
     fetchMock.mockRestore();
   });
