@@ -53,4 +53,11 @@ describe("ConnectModal Tailwind migration", () => {
     expect(source).toContain("font-semibold text-gray-900");
     expect(source).toContain("bg-yellow-100/80 text-yellow-700 text-[10px] font-medium px-2 py-0.5 rounded-full");
   });
+
+  it("uses square Zalo and Telegram brand tiles in the menu", () => {
+    const source = readFileSync(new URL("./PlatformIcon.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('if (provider === "telegram") return <svg className="block shrink-0" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6" fill="#29B6F6" />');
+    expect(source).toContain('if (provider === "zalo") return <svg className="block shrink-0" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="6" fill="#0068FF" />');
+  });
 });
