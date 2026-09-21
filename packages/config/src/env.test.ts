@@ -8,7 +8,8 @@ const validEnvironment = {
   JWT_SECRET: "a-jwt-secret-that-is-at-least-32-characters",
   ENCRYPTION_KEY: "an-encryption-key-that-is-32-characters",
   TELEGRAM_BOT_TOKEN: "123456789:test-token",
-  TELEGRAM_WEBHOOK_SECRET: "a-telegram-webhook-secret"
+  TELEGRAM_WEBHOOK_SECRET: "a-telegram-webhook-secret",
+  WEB_ALLOWED_ORIGINS: "http://localhost:5173"
 };
 
 async function importEnv(overrides: Record<string, string> = {}) {

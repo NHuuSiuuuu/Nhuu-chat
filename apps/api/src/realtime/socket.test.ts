@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const socketMocks = vi.hoisted(() => ({
@@ -16,7 +17,8 @@ vi.mock("socket.io", () => ({
   }
 }));
 
-vi.mock("../services/auth.service.js", () => ({ verifyAccessToken: vi.fn() }));
+const verifyAccessToken = vi.hoisted(() => vi.fn());
+vi.mock("../services/auth.service.js", () => ({ verifyAccessToken }));
 vi.mock("../models/conversation.model.js", () => ({ ConversationModel: {} }));
 
 import { createRealtimeServer, emitInboxEventToRecipients } from "./socket.js";
@@ -44,5 +46,22 @@ describe("inbox realtime recipients", () => {
 
     expect(socketMocks.to).toHaveBeenCalledWith(["inbox:admins", "inbox:owner-1"]);
     expect(socketMocks.emit).toHaveBeenCalledWith("chat:conversation_updated", payload);
+  });
+
+  it("authenticates a handshake from the access cookie and retains the legacy auth fallback", async () => {
+    verifyAccessToken.mockResolvedValue({ id: "user-1", role: "agent" });
+    const middleware = socketMocks.use.mock.calls[0]?.[0] as (socket: unknown, next: (error?: Error) => void) => Promise<void>;
+    const next = vi.fn();
+
+    await middleware({ data: {}, handshake: { headers: { cookie: "nhuu_access_token=cookie-token" }, auth: {} } }, next);
+
+    expect(verifyAccessToken).toHaveBeenCalledWith("cookie-token");
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it("restricts realtime CORS to configured web origins", () => {
+    const source = readFileSync(new URL("./socket.ts", import.meta.url), "utf8");
+    expect(source).toContain("origin: realtimeAllowedOrigins()");
+    expect(source).not.toContain("origin: true");
   });
 });

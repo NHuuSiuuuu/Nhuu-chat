@@ -3,7 +3,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { InboxPage } from "./pages/InboxPage.js";
 import { conversationPathForPlatform, DashboardPage } from "./pages/DashboardPage.js";
 import { TelegramPersonalPage } from "./pages/TelegramPersonalPage.js";
-import { clearAuth, loadAuth, saveAuth, type AuthRole } from "./state/auth.store.js";
+import { clearAuth, type AuthRole, type AuthState } from "./state/auth.store.js";
 import { ProtectedRoute } from "./components/common/ProtectedRoute.js";
 import { resolveApiBaseUrl } from "./lib/api-url.js";
 import { canAccessInbox } from "./state/inbox-access.js";
@@ -15,8 +15,6 @@ import { NetflixIntro } from "./components/NetflixIntro.js";
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 
 interface AuthResponse {
-  accessToken: string;
-  refreshToken: string;
   user: { id: string; email: string; role: AuthRole };
 }
 
@@ -77,7 +75,8 @@ function PageSkeleton() {
 }
 
 export function App() {
-  const [auth, setAuth] = useState(loadAuth());
+  const [auth, setAuth] = useState<AuthState | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [page, setPage] = useState<AppPage>(() => pageFromPath(window.location.pathname));
   const [inboxPlatform, setInboxPlatform] = useState<InboxPlatform>(() => inboxPlatformFromLocation());
   const [developmentSection, setDevelopmentSection] = useState<DevelopmentSection>(() => developmentSectionFromPath(window.location.pathname));
@@ -110,23 +109,49 @@ export function App() {
     });
     return () => { cancelled = true; };
   }, []);
-  const refresh = useCallback(async () => {
-    if (!auth) return null;
-    const response = await fetch(`${API_URL}/api/v1/auth/refresh`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ refreshToken: auth.refreshToken }) });
-    if (!response.ok) { clearAuth(); setAuth(null); return null; }
-    const tokens = await response.json() as { accessToken: string; refreshToken: string };
-    const next = { ...auth, ...tokens };
-    saveAuth(next);
-    setAuth(next);
-    return next.accessToken;
-  }, [auth]);
+  const refresh = useCallback(async (): Promise<string | null> => {
+    const response = await fetch(`${API_URL}/api/v1/auth/refresh`, { method: "POST", credentials: "include" });
+    if (!response.ok) {
+      clearAuth();
+      setAuth(null);
+      return null;
+    }
+    const body = await response.json() as AuthResponse;
+    setAuth({ user: body.user });
+    return "cookie-session";
+  }, []);
+
+  const loadSession = useCallback(async (): Promise<boolean> => {
+    const sessionResponse = await fetch(`${API_URL}/api/v1/auth/session`, { method: "POST", credentials: "include" });
+    if (sessionResponse.ok) {
+      const body = await sessionResponse.json() as AuthResponse;
+      setAuth({ user: body.user });
+      return true;
+    }
+    if (!await refresh()) return false;
+    const retryResponse = await fetch(`${API_URL}/api/v1/auth/session`, { method: "POST", credentials: "include" });
+    if (!retryResponse.ok) return false;
+    const body = await retryResponse.json() as AuthResponse;
+    setAuth({ user: body.user });
+    return true;
+  }, [refresh]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadSession().finally(() => {
+      if (!cancelled) setAuthReady(true);
+    });
+    return () => { cancelled = true; };
+  }, [loadSession]);
   let appContent: React.ReactNode;
-  if (!auth) {
-    appContent = <AuthPage onAuthenticated={(next) => { saveAuth(next); setAuth(next); }} />;
+  if (!authReady) {
+    appContent = <PageSkeleton />;
+  } else if (!auth) {
+    appContent = <AuthPage onAuthenticated={(next) => setAuth({ user: next.user })} />;
   } else if (!canAccessInbox(auth.user.role)) {
-    appContent = <main><h1>Nhuu Chat</h1><p>Tài khoản của anh đã đăng nhập nhưng chưa có quyền mở inbox. Hãy nhờ admin cấp role agent.</p><button onClick={() => { clearAuth(); setAuth(null); }}>Đăng xuất</button></main>;
+    appContent = <main><h1>Nhuu Chat</h1><p>Tài khoản của anh đã đăng nhập nhưng chưa có quyền mở inbox. Hãy nhờ admin cấp role agent.</p><button onClick={() => { void fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).finally(() => { clearAuth(); setAuth(null); }); }}>Đăng xuất</button></main>;
   } else {
-    const logout = () => { persistInboxPlatform(undefined); clearAuth(); setAuth(null); };
+    const logout = () => { persistInboxPlatform(undefined); void fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).finally(() => { clearAuth(); setAuth(null); }); };
     const openProfile = () => navigate("profile");
     const navigateFromHeader = (item: HeaderNavItem) => {
       if (item === "Hộp thư") return navigate("inbox", inboxPlatform);
@@ -134,7 +159,7 @@ export function App() {
       return navigate("development", undefined, item);
     };
     const topbarProps = { user: auth.user, onLogout: logout, onProfile: openProfile };
-    appContent = <ProtectedRoute token={auth.accessToken}>{page === "dashboard" ? <DashboardPage {...topbarProps} token={auth.accessToken} refresh={refresh} onOpenInbox={(platform) => navigate("inbox", platform)} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "telegram" ? <TelegramPersonalPage token={auth.accessToken} refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage {...topbarProps} token={auth.accessToken} refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "profile" ? <ProfilePage {...topbarProps} token={auth.accessToken} refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "development" ? <DevelopmentPage {...topbarProps} section={developmentSection} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : <InboxPage {...topbarProps} token={auth.accessToken} platform={inboxPlatform} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} />}</ProtectedRoute>;
+    appContent = <ProtectedRoute token="cookie-session">{page === "dashboard" ? <DashboardPage {...topbarProps} token="" refresh={refresh} onOpenInbox={(platform) => navigate("inbox", platform)} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "telegram" ? <TelegramPersonalPage token="" refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage {...topbarProps} token="" refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "profile" ? <ProfilePage {...topbarProps} token="" refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "development" ? <DevelopmentPage {...topbarProps} section={developmentSection} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : <InboxPage {...topbarProps} token="" platform={inboxPlatform} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} />}</ProtectedRoute>;
   }
   return <><Suspense fallback={<PageSkeleton />}>{appContent}</Suspense>{showIntro && <NetflixIntro ready={introReady} onComplete={() => setShowIntro(false)} />}</>;
 }
@@ -154,6 +179,7 @@ function AuthPage({ onAuthenticated }: { onAuthenticated: (auth: AuthResponse) =
     try {
       const response = await fetch(`${API_URL}/api/v1/auth/${mode}`, {
         method: "POST",
+        credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name: name.trim(), email: email.trim(), password })
       });

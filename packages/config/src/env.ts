@@ -32,6 +32,8 @@ const appEnvSchema = z.object({
   ENCRYPTION_KEY: z.string().min(32),
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   TELEGRAM_WEBHOOK_SECRET: z.string().min(16),
+  WEB_ALLOWED_ORIGINS: z.string().default("http://localhost:5173"),
+  AUTH_COOKIE_SAME_SITE: z.enum(["lax", "strict", "none"]).optional(),
   TELEGRAM_API_ID: z.coerce.number().int().positive().optional(),
   TELEGRAM_API_HASH: z.string().min(1).optional(),
   GEMINI_API_KEY: z.string().min(1).optional(),

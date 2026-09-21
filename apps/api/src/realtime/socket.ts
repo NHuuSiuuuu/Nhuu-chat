@@ -3,6 +3,7 @@ import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { createClient, type RedisClientType } from "redis";
 import { verifyAccessToken } from "../services/auth.service.js";
+import { ACCESS_COOKIE_NAME, readCookieHeader } from "../auth/auth.cookies.js";
 import { chatEvents } from "@nhuu-chat/contracts";
 import { ConversationModel } from "../models/conversation.model.js";
 import { canJoinConversation } from "./access.js";
@@ -10,11 +11,19 @@ import { canJoinConversation } from "./access.js";
 const redisClients = new WeakMap<Server, { pub: RedisClientType; sub: RedisClientType }>();
 let activeServer: Server | undefined;
 
+function realtimeAllowedOrigins(): string[] {
+  return (process.env.WEB_ALLOWED_ORIGINS ?? "http://localhost:5173")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export function createRealtimeServer(httpServer: HttpServer, redisUrl = process.env.REDIS_URL): Server {
-  const io = new Server(httpServer, { cors: { origin: true, credentials: true } });
+  const io = new Server(httpServer, { cors: { origin: realtimeAllowedOrigins(), credentials: true } });
   io.use(async (socket, next) => {
     try {
-      const token = socket.handshake.auth?.token;
+      const cookieToken = readCookieHeader(socket.handshake.headers.cookie, ACCESS_COOKIE_NAME);
+      const token = cookieToken ?? socket.handshake.auth?.token;
       if (typeof token !== "string") throw new Error("missing token");
       socket.data.auth = await verifyAccessToken(token);
       next();

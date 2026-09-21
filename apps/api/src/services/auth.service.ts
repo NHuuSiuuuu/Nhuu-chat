@@ -143,7 +143,7 @@ export async function login(email: string, password: string): Promise<{
   return { user, tokens };
 }
 
-export async function rotateRefreshToken(refreshToken: string): Promise<TokenPair> {
+export async function rotateRefreshToken(refreshToken: string): Promise<{ user: AuthUser; tokens: TokenPair }> {
   const tokenUser = await verifyToken(refreshToken, "refresh");
   const currentDigest = refreshDigest(refreshToken);
   const document = await UserModel.findById(tokenUser.id).select("+refreshTokenHash");
@@ -166,5 +166,17 @@ export async function rotateRefreshToken(refreshToken: string): Promise<TokenPai
     throw new AppError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid or revoked");
   }
 
-  return tokens;
+  return { user: currentUser, tokens };
+}
+
+export async function revokeRefreshToken(refreshToken: string): Promise<void> {
+  try {
+    const tokenUser = await verifyToken(refreshToken, "refresh");
+    await UserModel.updateOne(
+      { _id: tokenUser.id, refreshTokenHash: refreshDigest(refreshToken) },
+      { $set: { refreshTokenHash: null } }
+    );
+  } catch {
+    // Logout phải luôn hoàn tất ở phía client, kể cả khi cookie đã hết hạn.
+  }
 }

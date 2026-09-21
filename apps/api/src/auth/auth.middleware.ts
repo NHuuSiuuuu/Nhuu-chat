@@ -1,6 +1,7 @@
 import type { Request, RequestHandler } from "express";
 
 import { AppError } from "../common/errors.js";
+import { ACCESS_COOKIE_NAME, readCookie } from "./auth.cookies.js";
 import type { Role } from "../models/user.model.js";
 import { verifyAccessToken, type AuthUser } from "../services/auth.service.js";
 
@@ -19,8 +20,9 @@ function bearerToken(authorization: string | undefined): string {
 
 export const authenticate: RequestHandler = async (request, response, next) => {
   try {
+    const accessToken = readCookie(request, ACCESS_COOKIE_NAME);
     (request as AuthenticatedRequest).auth = await verifyAccessToken(
-      bearerToken(request.header("authorization"))
+      accessToken ?? bearerToken(request.header("authorization"))
     );
     next();
   } catch (error) {

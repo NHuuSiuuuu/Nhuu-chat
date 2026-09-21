@@ -3,12 +3,19 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createApp } from "../app.js";
 import { requireRole } from "./auth.middleware.js";
-import { hashPassword } from "../services/auth.service.js";
+import { hashPassword, issueTokens } from "../services/auth.service.js";
 import { verifyAccessToken } from "../services/auth.service.js";
 import { UserModel } from "../models/user.model.js";
 import { startTestDatabase, stopTestDatabase } from "../test/mongo-repl-set.js";
 
 process.env.JWT_SECRET ??= "test-jwt-secret-that-is-at-least-32-characters";
+
+function cookieValue(setCookie: string[] | string | undefined, name: string): string {
+  const cookies = typeof setCookie === "string" ? [setCookie] : setCookie;
+  const value = cookies?.find((cookie) => cookie.startsWith(`${name}=`))?.split(";", 1)[0]?.slice(name.length + 1);
+  if (!value) throw new Error(`Missing ${name} cookie`);
+  return value;
+}
 
 describe("authentication and roles", () => {
   beforeAll(async () => {
@@ -24,7 +31,7 @@ describe("authentication and roles", () => {
     await stopTestDatabase();
   }, 30_000);
 
-  it("registers a normalized customer and returns safe user tokens", async () => {
+  it("registers a normalized customer and returns safe auth cookies", async () => {
     const response = await request(createApp()).post("/api/v1/auth/register").send({
       name: "New Customer",
       email: "  NEW.Customer@Example.COM ",
@@ -35,11 +42,10 @@ describe("authentication and roles", () => {
     expect(response.status).toBe(201);
     expect(response.body.user).toMatchObject({ email: "new.customer@example.com", role: "customer" });
     expect(response.body.user).not.toHaveProperty("passwordHash");
-    expect(response.body).toMatchObject({
-      accessToken: expect.any(String),
-      refreshToken: expect.any(String)
-    });
-    await expect(verifyAccessToken(response.body.accessToken)).resolves.toMatchObject({
+    expect(response.body).not.toHaveProperty("accessToken");
+    expect(response.body).not.toHaveProperty("refreshToken");
+    const accessToken = cookieValue(response.headers["set-cookie"], "nhuu_access_token");
+    await expect(verifyAccessToken(accessToken)).resolves.toMatchObject({
       email: "new.customer@example.com",
       role: "customer"
     });
@@ -101,10 +107,8 @@ describe("authentication and roles", () => {
     expect(response.status).toBe(200);
     expect(response.body.user).toMatchObject({ email: "admin@example.com", role: "admin" });
     expect(response.body.user).not.toHaveProperty("passwordHash");
-    expect(response.body).toMatchObject({
-      accessToken: expect.any(String),
-      refreshToken: expect.any(String)
-    });
+    expect(response.body).not.toHaveProperty("accessToken");
+    expect(response.body).not.toHaveProperty("refreshToken");
   });
 
   it("reissues a refresh token with the user's current role and rejects replay", async () => {
@@ -119,20 +123,22 @@ describe("authentication and roles", () => {
       email: "agent@example.com",
       password: "correct horse battery staple"
     });
-    const oldRefreshToken = login.body.refreshToken as string;
+    const oldRefreshToken = cookieValue(login.headers["set-cookie"], "nhuu_refresh_token");
 
     await UserModel.updateOne({ email: "agent@example.com" }, { $set: { role: "customer" } });
 
     const refreshed = await request(createApp())
       .post("/api/v1/auth/refresh")
-      .send({ refreshToken: oldRefreshToken });
+      .set("Cookie", `nhuu_refresh_token=${oldRefreshToken}`);
     const replay = await request(createApp())
       .post("/api/v1/auth/refresh")
-      .send({ refreshToken: oldRefreshToken });
+      .set("Cookie", `nhuu_refresh_token=${oldRefreshToken}`);
 
     expect(refreshed.status).toBe(200);
-    expect(refreshed.body.refreshToken).not.toBe(oldRefreshToken);
-    await expect(verifyAccessToken(refreshed.body.accessToken)).resolves.toMatchObject({
+    expect(cookieValue(refreshed.headers["set-cookie"], "nhuu_refresh_token")).not.toBe(oldRefreshToken);
+    expect(refreshed.body).toHaveProperty("user");
+    const refreshedAccessToken = cookieValue(refreshed.headers["set-cookie"], "nhuu_access_token");
+    await expect(verifyAccessToken(refreshedAccessToken)).resolves.toMatchObject({
       email: "agent@example.com",
       role: "customer"
     });
@@ -156,11 +162,8 @@ describe("authentication and roles", () => {
 
     const tokens = new Map<string, string>();
     for (const role of ["admin", "agent", "customer"] as const) {
-      const login = await request(createApp()).post("/api/v1/auth/login").send({
-        email: `${role}@example.com`,
-        password: "correct horse battery staple"
-      });
-      tokens.set(role, login.body.accessToken);
+      const tokensForUser = await issueTokens({ id: `${role}-id`, email: `${role}@example.com`, role });
+      tokens.set(role, tokensForUser.accessToken);
     }
 
     await expect(request(app).get("/admin-only").set("Authorization", `Bearer ${tokens.get("admin")}`)).resolves.toMatchObject({ status: 200 });
@@ -177,12 +180,15 @@ describe("authentication and roles", () => {
       passwordHash: await hashPassword("correct horse battery staple"),
       role: "admin"
     });
-    const login = await request(createApp()).post("/api/v1/auth/login").send({
-      email: "admin@example.com",
-      password: "correct horse battery staple"
-    });
+    const oldRefreshToken = cookieValue(
+      (await request(createApp()).post("/api/v1/auth/login").send({
+        email: "admin@example.com",
+        password: "correct horse battery staple"
+      })).headers["set-cookie"],
+      "nhuu_refresh_token"
+    );
 
-    for (const token of [undefined, "not-a-jwt", login.body.refreshToken]) {
+    for (const token of [undefined, "not-a-jwt", oldRefreshToken]) {
       const response = request(app).get("/admin-only");
       if (token) response.set("Authorization", `Bearer ${token}`);
       await expect(response).resolves.toMatchObject({ status: 401 });

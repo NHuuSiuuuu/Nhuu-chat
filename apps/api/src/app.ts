@@ -16,7 +16,7 @@ import { aiSettingsRouter } from "./routes/ai-settings.routes.js";
 import { profileRouter } from "./routes/profile.routes.js";
 import { quickReplyRouter } from "./routes/quick-reply.routes.js";
 import { assistantRouter } from "./routes/assistants.routes.js";
-import { corsAllowlist, rateLimit, requestId, securityHeaders } from "./common/security.middleware.js";
+import { corsAllowlist, originProtection, rateLimit, requestId, securityHeaders } from "./common/security.middleware.js";
 
 export function createApp(): Express {
   const app = express();
@@ -25,6 +25,7 @@ export function createApp(): Express {
   app.use(securityHeaders);
   app.use(requestId);
   app.use(corsAllowlist);
+  app.use(originProtection);
   app.use(express.json());
   app.get("/health", (_request, response) => {
     const health: HealthResponse = { status: "ok", service: "nhuu-chat" };

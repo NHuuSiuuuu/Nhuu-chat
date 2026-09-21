@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Chuyển xác thực web sang HttpOnly access/refresh cookie: bỏ lưu JWT trong `localStorage`, thêm session bootstrap, refresh/logout bằng cookie, credentials cho API/Socket.IO và kiểm tra Origin cho request mutation; vẫn giữ Bearer fallback tạm thời cho client cũ.
+- Bổ sung cấu hình `WEB_ALLOWED_ORIGINS` và `AUTH_COOKIE_SAME_SITE`; production yêu cầu HTTPS khi dùng cookie cross-origin.
 - Căn lại ngưỡng sticky sidebar Cài đặt theo vị trí thực tế dưới header để sidebar không bị trôi một đoạn khi bắt đầu cuộn.
 - Làm gọn danh sách trong Tổng quan, Trợ lý AI và Bảo mật & dữ liệu: giữ icon SVG ở tiêu đề, bỏ icon khỏi mục con và dùng bullet mặc định.
 - Mở rộng nội dung Giới thiệu cho Tổng quan, Trợ lý AI và Bảo mật & dữ liệu; bổ sung hướng dẫn AI và sidebar Settings sticky có cuộn riêng.
