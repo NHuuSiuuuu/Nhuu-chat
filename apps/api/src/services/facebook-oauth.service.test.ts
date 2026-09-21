@@ -26,22 +26,30 @@ interface TestFacebookOAuthStore extends FacebookOAuthStore {
 }
 
 function store(): TestFacebookOAuthStore {
-  const values = new Map<string, FacebookOAuthStoredValue>();
+  const values = new Map<string, { value: FacebookOAuthStoredValue; expiresAt: number }>();
   const claims = new Map<string, string>();
   const saved: Array<{ token: string; value: FacebookOAuthStoredValue; ttlSeconds: number }> = [];
   const consumeCalls: string[] = [];
+  function validValue(token: string): FacebookOAuthStoredValue | undefined {
+    const stored = values.get(token);
+    if (!stored || stored.expiresAt <= Date.now()) {
+      values.delete(token);
+      return undefined;
+    }
+    return stored.value;
+  }
   return {
     saved,
     consumeCalls,
     async save(token, value, ttlSeconds) {
-      values.set(token, value);
+      values.set(token, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
       saved.push({ token, value, ttlSeconds });
     },
     async read(token) {
-      return values.get(token);
+      return validValue(token);
     },
     async claim(token, claimToken) {
-      const value = values.get(token);
+      const value = validValue(token);
       if (!value || claims.has(token)) return undefined;
       claims.set(token, claimToken);
       return value;
@@ -53,13 +61,13 @@ function store(): TestFacebookOAuthStore {
       if (claims.get(token) !== claimToken) return undefined;
       claims.delete(token);
       consumeCalls.push(token);
-      const value = values.get(token);
+      const value = validValue(token);
       values.delete(token);
       return value;
     },
     async consume(token) {
       consumeCalls.push(token);
-      const value = values.get(token);
+      const value = validValue(token);
       values.delete(token);
       return value;
     }
@@ -140,11 +148,20 @@ describe("FacebookOAuthService", () => {
     const stateStore = store();
     const fetchGraph = vi.fn();
     const service = new FacebookOAuthService({ stateStore, fetchGraph });
+    vi.useFakeTimers();
 
-    await expect(service.finish("expired-state", "authorization-code")).rejects.toMatchObject({
-      code: "FACEBOOK_OAUTH_STATE_INVALID"
-    });
-    expect(fetchGraph).not.toHaveBeenCalled();
+    try {
+      await stateStore.save("expiring-state", { kind: "oauth", userId: "user-1" }, 600);
+      vi.advanceTimersByTime(600_000);
+
+      await expect(service.finish("expiring-state", "authorization-code")).rejects.toMatchObject({
+        code: "FACEBOOK_OAUTH_STATE_INVALID",
+        message: "Facebook OAuth state is invalid or expired"
+      });
+      expect(fetchGraph).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects a replayed OAuth state after the first callback consumes it", async () => {

@@ -2,7 +2,7 @@
 
 ## Trạng thái
 
-Đã hoàn tất phần bổ sung test executable. Không thay đổi production code, flow nhập Page ID + Page Access Token thủ công, hoặc các file dirty không liên quan.
+Đã hoàn tất phần bổ sung test executable. Không thay đổi OAuth/manual behavior hoặc các file dirty không liên quan; chỉ thêm helper tối thiểu trong ConnectModal để test đúng logic production.
 
 ## Phạm vi đã bổ sung
 
@@ -13,13 +13,13 @@
 - `apps/api/src/controllers/facebook-page.controller.test.ts`
   - Callback failure redirect chỉ chứa safe error code, không làm lộ message hoặc access token.
 - `apps/web/src/components/dashboard/ConnectModal.test.tsx`
-  - Không sửa vì đã có test executable cho cả completion state và restart state, gồm reducer transition và rendered surface; tránh duplicate assertion.
+  - Kiểm tra selection success/onConnected và callback-query restart thông qua helper được component sử dụng thật.
 
 ## Coverage đã có và được giữ nguyên
 
 - Wrong-owner selection không invalidate selection đã có test trong OAuth service test.
-- Modal success/restart behavior đã có test render thực tế trong ConnectModal test.
-- Manual Page ID + Page Access Token flow không bị thay đổi.
+- Modal success/restart behavior đã có test render thực tế và behavioral helper coverage trong ConnectModal test.
+- Manual Page ID + Page Access Token flow không bị thay đổi; boundary test xác nhận request contract.
 
 ## Verification
 
@@ -31,4 +31,15 @@
 
 ## Concerns
 
-Workspace đang có nhiều thay đổi dirty/untracked có trước task này; chỉ hai file API test trong phạm vi task được chỉnh sửa. Modal test không nằm trong commit vì coverage yêu cầu đã tồn tại.
+Workspace đang có nhiều thay đổi dirty/untracked có trước task này; chỉ các test liên quan, report và hai helper tối thiểu trong ConnectModal được chỉnh sửa.
+
+## Review follow-up
+
+- Fake store của OAuth service giờ có expiry thực theo `Date.now()`; test dùng fake clock để state đã lưu thực sự hết hạn trước callback.
+- Manual flow boundary được kiểm tra executable qua `connectFacebookPage`, với exact endpoint, một POST request, cookie credentials và JSON body gồm Page ID + Page access token.
+- `ConnectModal` có hai helper tối thiểu được production component sử dụng thật: callback query parsing/restart action và selection success transition gọi `onConnected`. Test modal kiểm tra cả hai đường này.
+
+Focused verification sau review:
+
+- `pnpm exec vitest run apps/api/src/controllers/facebook-page.controller.test.ts apps/api/src/services/facebook-oauth.service.test.ts apps/web/src/lib/facebook-publishing.api.test.ts apps/web/src/components/dashboard/ConnectModal.test.tsx`
+- Kết quả: **8 files, 60 tests passed** (bao gồm các bản test tương ứng trong `.worktrees`).

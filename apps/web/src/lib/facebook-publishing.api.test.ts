@@ -51,11 +51,12 @@ describe("Facebook publishing API", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it("connects with cookie credentials and does not put the token in a URL", async () => {
+  it("keeps the manual Page ID and access token boundary exact", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ id: "connection-1", pageId: "page-1", status: "connected" }), { status: 201 }));
 
     await connectFacebookPage({ pageId: "page-1", pageAccessToken: "secret-token" }, "/api");
 
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith("/api/api/v1/facebook-page/connection", expect.objectContaining({
       credentials: "include",
       method: "POST",

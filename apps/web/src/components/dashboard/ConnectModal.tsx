@@ -42,6 +42,24 @@ type FacebookOAuthFlowAction =
   | { type: "connected" }
   | { type: "restart"; error: string };
 
+export type FacebookOAuthCallbackAction =
+  | { type: "selection"; selection: string }
+  | { type: "restart"; error: string };
+
+export function facebookOAuthCallbackAction(search: string): FacebookOAuthCallbackAction | null {
+  const params = new URLSearchParams(search);
+  const selection = params.get("facebook_oauth") === "select" ? params.get("selection") : null;
+  const oauthError = params.get("facebook_oauth") === "error" ? params.get("code") : null;
+  if (selection) return { type: "selection", selection };
+  if (oauthError) return { type: "restart", error: "Không thể đăng nhập Facebook. Hãy thử lại." };
+  return null;
+}
+
+export function completeFacebookOAuthSelection(dispatch: (action: FacebookOAuthFlowAction) => void, onConnected: () => void): void {
+  dispatch({ type: "connected" });
+  onConnected();
+}
+
 // Gom trạng thái OAuth thành các bước loại trừ nhau để picker cũ không tồn tại sau success hoặc expiry.
 export function facebookOAuthFlowReducer(state: FacebookOAuthFlow, action: FacebookOAuthFlowAction): FacebookOAuthFlow {
   switch (action.type) {
@@ -137,19 +155,17 @@ export function ConnectModal({ token, refresh, onClose, onConnected, initialProv
 
   useEffect(() => {
     if (selected !== "facebook") return;
-    const params = new URLSearchParams(window.location.search);
-    const selection = params.get("facebook_oauth") === "select" ? params.get("selection") : null;
-    const oauthError = params.get("facebook_oauth") === "error" ? params.get("code") : null;
-    if (selection) {
+    const callbackAction = facebookOAuthCallbackAction(window.location.search);
+    if (callbackAction?.type === "selection") {
       dispatchFacebookFlow({ type: "loading" });
       setLoading(true);
-      void listFacebookOAuthPages(selection)
-        .then((pages) => dispatchFacebookFlow({ type: "pages-loaded", selection, pages }))
+      void listFacebookOAuthPages(callbackAction.selection)
+        .then((pages) => dispatchFacebookFlow({ type: "pages-loaded", selection: callbackAction.selection, pages }))
         .catch((requestError) => dispatchFacebookFlow({ type: "restart", error: requestError instanceof FacebookPublishingApiError ? requestError.message : "Không thể tải danh sách Facebook Page" }))
         .finally(() => setLoading(false));
       window.history.replaceState({}, "", "/dashboard");
-    } else if (oauthError) {
-      dispatchFacebookFlow({ type: "restart", error: "Không thể đăng nhập Facebook. Hãy thử lại." });
+    } else if (callbackAction?.type === "restart") {
+      dispatchFacebookFlow({ type: "restart", error: callbackAction.error });
       window.history.replaceState({}, "", "/dashboard");
     }
   }, [selected]);
@@ -213,8 +229,7 @@ export function ConnectModal({ token, refresh, onClose, onConnected, initialProv
     setLoading(true);
     try {
       await selectFacebookOAuthPage(facebookFlow.selection, facebookFlow.selectedPageId);
-      dispatchFacebookFlow({ type: "connected" });
-      onConnected();
+      completeFacebookOAuthSelection(dispatchFacebookFlow, onConnected);
     } catch (requestError) {
       dispatchFacebookFlow({ type: "restart", error: requestError instanceof FacebookPublishingApiError ? requestError.message : "Không thể kết nối Facebook Page" });
     } finally {

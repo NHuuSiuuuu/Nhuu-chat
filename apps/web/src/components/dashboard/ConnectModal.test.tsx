@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import * as connectModal from "./ConnectModal.js";
 
@@ -89,6 +89,23 @@ describe("ConnectModal Tailwind migration", () => {
     expect(html).toContain("Đã kết nối Facebook Page thành công");
     expect(html).not.toContain("Page One");
     expect(html).not.toContain("Chọn Facebook Page");
+  });
+
+  it("runs the selection success transition and notifies the dashboard", () => {
+    const dispatch = vi.fn();
+    const onConnected = vi.fn();
+
+    connectModal.completeFacebookOAuthSelection(dispatch, onConnected);
+
+    expect(dispatch).toHaveBeenCalledWith({ type: "connected" });
+    expect(onConnected).toHaveBeenCalledOnce();
+  });
+
+  it("turns an OAuth callback error query into the restart action used by the modal", () => {
+    expect(connectModal.facebookOAuthCallbackAction("?facebook_oauth=error&code=FACEBOOK_OAUTH_STATE_INVALID")).toEqual({
+      type: "restart",
+      error: "Không thể đăng nhập Facebook. Hãy thử lại."
+    });
   });
 
   it("clears an expired selection and offers Facebook login again", () => {
