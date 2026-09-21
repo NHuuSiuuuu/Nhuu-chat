@@ -82,6 +82,17 @@ describe("FacebookPublishingPage", () => {
     expect(html).toContain("bg-gray-200");
   });
 
+  it("matches the post card shape and does not poll the posts API", () => {
+    const skeleton = readFileSync(new URL("../components/posts/PostSkeleton.tsx", import.meta.url), "utf8");
+    const source = readFileSync(new URL("./FacebookPublishingPage.tsx", import.meta.url), "utf8");
+    expect(skeleton).toContain("justify-between");
+    expect(skeleton).toContain("rounded-full");
+    expect(skeleton).toContain("mt-4 flex gap-2");
+    expect(skeleton).not.toContain("size-10");
+    expect(source).not.toContain("setInterval");
+    expect(source).not.toContain("5000");
+  });
+
   it("does not duplicate the publishing title and timezone subtitle below the global header", () => {
     const html = surface();
     expect(html).not.toContain("Đăng bài Facebook Page");

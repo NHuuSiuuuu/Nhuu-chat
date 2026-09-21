@@ -116,12 +116,6 @@ export function FacebookPublishingPage({ onBack, onLogoClick, onNavigate, user, 
     return () => { cancelled = true; };
   }, [client, initialLoading, loadPosts]);
 
-  useEffect(() => {
-    if (!connection) return;
-    const timer = window.setInterval(() => { void loadPosts(); }, 5000);
-    return () => window.clearInterval(timer);
-  }, [connection, loadPosts]);
-
   useEffect(() => () => { if (imageUrl) URL.revokeObjectURL(imageUrl); }, [imageUrl]);
 
   const previewText = useMemo(() => message.trim() || "Nội dung bài viết sẽ hiển thị ở đây.", [message]);
