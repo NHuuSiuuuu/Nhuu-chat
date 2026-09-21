@@ -39,7 +39,7 @@ describe("dashboard connection UI", () => {
   });
 
   it("keeps the modal mounted long enough to finish its closing animation", () => {
-    expect(connectModalCloseDurationMs).toBe(180);
+    expect(connectModalCloseDurationMs).toBe(300);
   });
 
   it("uses a fixed square box for every platform logo", () => {

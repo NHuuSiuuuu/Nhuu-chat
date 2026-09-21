@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa modal `Thêm kết nối` luôn nằm trên Header với backdrop `z-[100]`, căn giữa, nền tối, animation scale/fade và cập nhật logo Zalo nguyên bản.
 - Căn lại icon Zalo và Telegram trong menu `Thêm kết nối` theo dạng ô vuông bo góc, đồng nhất với thiết kế tham chiếu.
 - Refactor giao diện modal `Thêm kết nối`: thêm Website, đưa Booking xuống cuối, làm nổi bật trạng thái active/hover và dùng icon thương hiệu kích thước lớn không còn nền xám bao ngoài.
 - Bổ sung hướng dẫn vận hành Facebook Page V1: kết nối thủ công Page ID/token, giới hạn Development Mode, Graph API `v26.0`, Cloudinary ảnh JPG/PNG/WebP tối đa 5 MiB, trạng thái bài, múi giờ `Asia/Ho_Chi_Minh`/UTC, worker 30 giây, recovery sau restart và xử lý timeout Meta mơ hồ.

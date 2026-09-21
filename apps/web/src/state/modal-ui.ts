@@ -1,1 +1,1 @@
-export const connectModalCloseDurationMs = 180;
+export const connectModalCloseDurationMs = 300;

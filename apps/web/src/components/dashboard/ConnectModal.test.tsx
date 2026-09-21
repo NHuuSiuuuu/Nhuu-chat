@@ -56,8 +56,23 @@ describe("ConnectModal Tailwind migration", () => {
 
   it("uses square Zalo and Telegram brand tiles in the menu", () => {
     const source = readFileSync(new URL("./PlatformIcon.tsx", import.meta.url), "utf8");
+    const menuSource = source.slice(source.indexOf("if (menu)"), source.indexOf("if (plain)"));
 
-    expect(source).toContain('if (provider === "telegram") return <svg className="block shrink-0" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6" fill="#29B6F6" />');
-    expect(source).toContain('if (provider === "zalo") return <svg className="block shrink-0" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="6" fill="#0068FF" />');
+    expect(menuSource).toContain('provider === "telegram"');
+    expect(menuSource).toContain('fill="#29B6F6"');
+    expect(menuSource).toContain('provider === "zalo"');
+    expect(menuSource).toContain('stroke="#0068FF"');
+    expect(menuSource).toContain('fontSize="5.2"');
+    expect(menuSource).toContain(">Zalo</text>");
+  });
+
+  it("keeps the connection modal above the app shell with centered animated styling", () => {
+    const source = readFileSync(new URL("./ConnectModal.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4");
+    expect(source).toContain("transition-all duration-300 ease-out");
+    expect(source).toContain("scale-95");
+    expect(source).toContain("scale-100");
+    expect(source).toContain("bg-white rounded-2xl shadow-xl overflow-hidden");
   });
 });
