@@ -39,6 +39,13 @@ describe("App navigation", () => {
     expect(source).toContain('pathname.startsWith("/settings/")');
   });
 
+  it("passes settings submenu items to the dashboard mobile sidebar", () => {
+    const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("mobileSettingsItems");
+    expect(source).toContain("settingsSubmenuItems={mobileSettingsItems}");
+  });
+
   it("keeps the initial document background aligned before JavaScript loads", () => {
     const source = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
