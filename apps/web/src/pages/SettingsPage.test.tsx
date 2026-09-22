@@ -63,9 +63,21 @@ describe("Settings page", () => {
       expect(settingsModule.settingsPathForItem("Cài đặt chung")).toBe("/settings/general");
       expect(settingsModule.settingsPathForItem("Thẻ hội thoại")).toBe("/settings/conversation-tags");
       expect(settingsModule.settingsPathForItem("Hỗ trợ trả lời")).toBe("/settings/quick-replies");
+      expect(settingsModule.settingsPathForItem("Lịch sử")).toBe("/settings/history");
       expect(settingsModule.settingsItemFromPath("/settings/ai-assistant")).toBe("Trợ lý AI");
+      expect(settingsModule.settingsItemFromPath("/settings/history")).toBe("Lịch sử");
       expect(settingsModule.settingsItemFromPath("/settings/unknown")).toBe("Giới thiệu");
     }
+  });
+
+  it("renders the shared history timeline instead of the development placeholder", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const placeholders = source.split("const placeholderSettingsItems")[1]?.split("]);", 1)[0] ?? "";
+
+    expect(source).toContain('import { SettingHistoryTimeline } from "../components/settings/SettingHistoryTimeline.js"');
+    expect(source).toContain('activeTab === "Lịch sử"');
+    expect(source).toContain("<SettingHistoryTimeline token={token} refresh={refresh} apiUrl={API_URL} />");
+    expect(placeholders).not.toContain('"Lịch sử"');
   });
 
   it("adds the introduction tab with the requested navigation sections", () => {
@@ -240,11 +252,11 @@ describe("Settings page", () => {
         "Chế độ xoay vòng",
         "Đồng bộ",
         "Công cụ",
-        "Phân quyền",
-        "Lịch sử"
+        "Phân quyền"
       ].every((item) => settingsModule.isSettingsPlaceholderTab(item as never))).toBe(true);
       expect(settingsModule.isSettingsPlaceholderTab("Thẻ hội thoại" as never)).toBe(false);
       expect(settingsModule.isSettingsPlaceholderTab("Trợ lý AI" as never)).toBe(false);
+      expect(settingsModule.isSettingsPlaceholderTab("Lịch sử" as never)).toBe(false);
     }
   });
 
@@ -423,7 +435,7 @@ describe("Settings page", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("function SettingsLayout");
-    expect(source.match(/<SettingsLayout/g)?.length).toBe(4);
+    expect(source.match(/<SettingsLayout/g)?.length).toBe(5);
     expect(source).not.toContain('if (activeTab === "Trợ lý AI") return <main');
     expect(source).not.toContain('if (activeTab === "Hỗ trợ trả lời") return <main');
   });
