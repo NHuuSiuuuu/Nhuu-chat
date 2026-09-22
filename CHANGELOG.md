@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Tinh chỉnh Hero Landing Page theo ảnh tham khảo: typography mảnh hơn, nền gradient nhẹ, badge Hchat AI 2.0, CTA đôi và mô tả sản phẩm mới.
 - Tinh chỉnh Landing Page theo thiết kế Hchat trong `DEVELOPMENT_PROMPT.md`: bổ sung đủ 9 kênh, 9 tính năng, 4 gói giá, testimonial, thống kê và nội dung CTA/FAQ đồng nhất với ảnh tham khảo.
 - Thêm Landing Page public tại `/` với mockup Inbox, giới thiệu đa kênh, AI, bảng giá, FAQ và điều hướng Dashboard qua user đã đăng nhập.
 - Cập nhật nền cho tab Trợ lý AI: tab đang chọn dùng nền xanh, tab còn lại dùng nền xám nhạt.
