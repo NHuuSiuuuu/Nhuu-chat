@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Khôi phục logo riêng của Dashboard và chuyển thay đổi logo theo ảnh tham khảo sang đúng header Landing Page `/`.
 - Thay asset logo header bằng phiên bản ngang icon tròn và chữ `nhuu` theo thiết kế tham khảo.
 - Căn lại logo Nhuu trên header Inbox theo thiết kế tham khảo và xác nhận badge tin chưa đọc nằm góc dưới phải avatar với viền trắng.
 - Thay toàn bộ dữ liệu thật trong mockup Inbox bằng fake data: `admin_demo_01`, Mai Lan, Trần Kiên và nội dung hội thoại mẫu.

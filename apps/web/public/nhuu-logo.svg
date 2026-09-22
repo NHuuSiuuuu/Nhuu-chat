@@ -1,13 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 40" role="img" aria-labelledby="title">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 289 161" role="img" aria-labelledby="title">
   <title id="title">NhuuChat</title>
-  <g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="20" cy="20" r="11" stroke-width="1.6"/>
-    <path d="M14 16.5 11.5 12M26 16.5 28.5 12" stroke-width="1.6"/>
-    <circle cx="12" cy="11" r="1.2" fill="#fff" stroke="none"/>
-    <circle cx="28" cy="11" r="1.2" fill="#fff" stroke="none"/>
-    <circle cx="16.5" cy="19" r="1.2" fill="#fff" stroke="none"/>
-    <circle cx="23.5" cy="19" r="1.2" fill="#fff" stroke="none"/>
-    <path d="M16.5 24c2 1.8 5 1.8 7 0" stroke-width="1.4"/>
+  <g fill="none" stroke="#fff" stroke-linecap="round" stroke-width="6">
+    <path d="M55 48 44 24M77 46l11-22"/>
+    <circle cx="43" cy="21" r="4" fill="#fff" stroke="none"/>
+    <circle cx="90" cy="20" r="4" fill="#fff" stroke="none"/>
   </g>
-  <text x="38" y="26" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="700" letter-spacing="-1">nhuu</text>
+  <path fill="#fff" d="M60 43c-20 0-36 15-36 34 0 18 16 33 36 33h25l13 13V94c5-5 8-11 8-18 0-18-16-33-36-33H60Z"/>
+  <circle cx="61" cy="76" r="21" fill="#1264e8"/>
+  <circle cx="53" cy="72" r="3.5" fill="#fff"/><circle cx="69" cy="72" r="3.5" fill="#fff"/>
+  <path d="M53 82c5 5 11 5 16 0" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="3"/>
+  <text x="108" y="96" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="66" font-weight="700" letter-spacing="-3">nhuu</text>
 </svg>

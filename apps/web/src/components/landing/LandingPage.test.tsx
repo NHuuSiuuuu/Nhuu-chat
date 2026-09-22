@@ -33,6 +33,7 @@ describe("LandingPage", () => {
     expect(rendered).toContain("Câu hỏi thường gặp");
     expect(rendered).toContain("Hộp thư");
     expect(rendered).toContain("Bắt đầu dùng thử");
+    expect(source.findAllByProps({ src: "/nhuu-logo-landing.svg" })).toHaveLength(2);
   });
 
   it("calls login and register callbacks from the public header", () => {
