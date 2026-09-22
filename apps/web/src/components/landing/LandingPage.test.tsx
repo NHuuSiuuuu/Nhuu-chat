@@ -2,6 +2,7 @@ import * as React from "react";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import TestRenderer, { act, type ReactTestRenderer } from "react-test-renderer";
+import { LandingHeader } from "./LandingHeader.js";
 import { LandingPage } from "./LandingPage.js";
 
 describe("LandingPage", () => {
@@ -133,7 +134,7 @@ describe("LandingPage", () => {
     expect(onDashboard).toHaveBeenCalledOnce();
   });
 
-  it("uses the required transparent fixed header and desktop navigation styling", () => {
+  it("uses transparent styling for the fixed header at the top of the page", () => {
     const renderer = renderLanding({ user: null, onDashboard: vi.fn(), onLogin: vi.fn(), onRegister: vi.fn() });
     const header = renderer.root.findByType("header");
     const navigation = renderer.root.findByProps({ "aria-label": "Điều hướng chính" });
@@ -144,6 +145,29 @@ describe("LandingPage", () => {
     for (const label of ["Sản phẩm", "Tích hợp", "Bảng giá", "Tài nguyên"]) {
       const link = renderer.root.findAllByType("a").find((candidate) => candidate.children.includes(label));
       expect(link?.props.className).toContain("hover:text-slate-900");
+    }
+  });
+
+  it("uses an opaque compact header after scrolling more than 10 pixels", () => {
+    const scrollWindow = new EventTarget();
+    Object.defineProperty(scrollWindow, "scrollY", { configurable: true, value: 0 });
+    vi.stubGlobal("window", scrollWindow);
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = TestRenderer.create(<LandingHeader user={null} landingLinks={[]} mobileMenuOpen={false} onMobileMenuToggle={vi.fn()} onDashboard={vi.fn()} onLogin={vi.fn()} onRegister={vi.fn()} onLogout={vi.fn()} onMobileLinkClick={vi.fn()} />);
+    });
+
+    try {
+      Object.defineProperty(scrollWindow, "scrollY", { configurable: true, value: 11 });
+      act(() => scrollWindow.dispatchEvent(new Event("scroll")));
+
+      const header = renderer.root.findByType("header");
+      expect(header.props.className).toContain("w-full fixed top-0 left-0 z-50 bg-white/95 backdrop-blur-md shadow-md py-3 px-6 md:px-12 flex justify-between items-center");
+      expect(header.props.className).not.toContain("bg-transparent");
+      expect(header.props.className).not.toContain("py-5");
+    } finally {
+      act(() => renderer.unmount());
+      vi.unstubAllGlobals();
     }
   });
 

@@ -18,7 +18,18 @@ function Brand() {
 }
 
 export function LandingHeader({ user, landingLinks, mobileMenuOpen, onMobileMenuToggle, onDashboard, onLogin, onRegister, onLogout, onMobileLinkClick }: LandingHeaderProps) {
-  return <header className="w-full fixed top-0 left-0 z-50 bg-transparent py-5 px-6 md:px-12 flex justify-between items-center">
+  const [isScrolled, setIsScrolled] = React.useState(() => typeof window !== "undefined" && window.scrollY > 10);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const updateScrolled = () => setIsScrolled(window.scrollY > 10);
+
+    window.addEventListener("scroll", updateScrolled);
+    return () => window.removeEventListener("scroll", updateScrolled);
+  }, []);
+
+  return <header className={`w-full fixed top-0 left-0 z-50 ${isScrolled ? "bg-white/95 backdrop-blur-md shadow-md py-3" : "bg-transparent py-5"} px-6 md:px-12 flex justify-between items-center`}>
       <Brand />
       <nav className="hidden md:flex gap-8 text-sm font-medium text-slate-600" aria-label="Điều hướng chính">
         {landingLinks.map(([label, href]) => <a key={href} className="transition hover:text-slate-900" href={href}>{label}</a>)}
