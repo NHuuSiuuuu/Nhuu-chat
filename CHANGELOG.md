@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Khôi phục sidebar 7 mục Giới thiệu trên desktop, bổ sung icon thông tin cho tab; mobile tiếp tục dùng menu accordion chung.
+
 - Thêm điều hướng URL riêng cho từng mục Giới thiệu trên mobile và Dashboard, đồng thời bỏ menu Giới thiệu bị lặp phía trên nội dung.
 
 - Sửa điều hướng menu Cài đặt trên mobile: mục cha chỉ mở accordion, các mục con mới điều hướng đến từng trang.

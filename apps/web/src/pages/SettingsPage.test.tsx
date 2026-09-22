@@ -151,6 +151,28 @@ describe("Settings page", () => {
     expect(aboutSettings).toContain('<article className="p-6 sm:p-8"');
   });
 
+  it("keeps all About sections in a desktop sidebar while using the global mobile menu on narrow screens", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const aboutSettings = source.split("function AboutSettings()")[1]?.split("function SettingsLayout", 1)[0] ?? "";
+    const settingsLayout = source.split("function SettingsLayout")[1]?.split("function SettingsDevelopmentPlaceholder", 1)[0] ?? "";
+
+    for (const label of ["Tổng quan", "Dashboard", "Đa tài khoản", "Quản lý tin nhắn", "Đăng bài", "Trợ lý AI", "Bảo mật & dữ liệu"]) {
+      expect(aboutSettings).toContain(label);
+    }
+    expect(aboutSettings).toMatch(/md:block/);
+    expect(aboutSettings).toMatch(/(?:max-\[767px\]:hidden|hidden[^"`]*md:block)/);
+    expect(settingsLayout).toContain("settingsSubmenuItems={mobileSettingsItems}");
+  });
+
+  it("provides an info icon for the Giới thiệu settings tab", () => {
+    const settingsSource = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const iconSource = readFileSync(new URL("../components/conversations/InboxIcon.tsx", import.meta.url), "utf8");
+
+    expect(settingsSource).toContain('"Giới thiệu": "info"');
+    expect(iconSource).toContain('"info"');
+    expect(iconSource).toContain("info: <>");
+  });
+
   it("renders the multi-account introduction with numbered steps and merged-page guidance", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
