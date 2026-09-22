@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Suspense, useCallback, useEffect, useState } from "react";
+import { Toaster } from "sonner";
 import { InboxPage } from "./pages/InboxPage.js";
 import { conversationPathForPlatform, DashboardPage } from "./pages/DashboardPage.js";
 import { TelegramPersonalPage } from "./pages/TelegramPersonalPage.js";
@@ -193,7 +194,25 @@ export function App() {
     const topbarProps = { user: auth.user, onLogout: logout, onProfile: openProfile };
     appContent = <ProtectedRoute token="cookie-session">{page === "dashboard" ? <DashboardPage {...topbarProps} token="" refresh={refresh} onOpenInbox={(platform) => navigate("inbox", platform)} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "telegram" ? <TelegramPersonalPage token="" refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage {...topbarProps} token="" refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "profile" ? <ProfilePage {...topbarProps} token="" onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "posts" ? <FacebookPublishingPage {...topbarProps} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "development" ? <DevelopmentPage {...topbarProps} section={developmentSection} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : <InboxPage {...topbarProps} token="" platform={inboxConversationPlatform} channelId={inboxChannelId} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} />}</ProtectedRoute>;
   }
-  return <><Suspense fallback={<PageSkeleton />}>{appContent}</Suspense>{showIntro && <NetflixIntro ready={introReady} onComplete={() => setShowIntro(false)} />}</>;
+  return <>
+    <Suspense fallback={<PageSkeleton />}>{appContent}</Suspense>
+    <Toaster
+      position="top-right"
+      toastOptions={{
+        style: {
+          borderRadius: "12px",
+          boxShadow: "0 10px 25px -8px rgb(15 23 42 / 0.2)",
+          fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+          background: "#ffffff",
+          color: "#273348",
+          border: "1px solid #e2e8f0"
+        },
+        success: { style: { color: "#166534" } },
+        error: { style: { color: "#be123c" } }
+      }}
+    />
+    {showIntro && <NetflixIntro ready={introReady} onComplete={() => setShowIntro(false)} />}
+  </>;
 }
 
 function AuthPage({ onAuthenticated }: { onAuthenticated: (auth: AuthResponse) => void }) {

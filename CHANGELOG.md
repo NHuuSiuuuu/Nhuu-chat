@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thay thế toast tự xây dựng bằng `sonner`: thêm Toaster góc phải, thông báo tin nhắn đến, đăng bài, xóa bài và dọn component toast cũ.
 - Bỏ nút Làm mới khỏi các tab Nháp, Đã lên lịch và Lịch sử trong trang đăng bài Facebook.
 - Bỏ tiêu đề và mô tả lặp lại ở các tab Nháp, Đã lên lịch và Lịch sử; căn nút Làm mới về bên phải phía trên danh sách.
 - Đồng bộ ID thật trên card kênh, lưu avatar Facebook từ Graph API và bổ sung fallback avatar an toàn.

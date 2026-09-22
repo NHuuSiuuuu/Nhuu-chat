@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { chatEvents, type AiSettingsContract, type AiSuggestionsResponse, type ChatMessageContract, type ConversationContract, type ConversationPinEventPayload, type ConversationTagContract, type QuickReplyContract } from "@nhuu-chat/contracts";
 import { apiRequest } from "../lib/api.js";
 import { createChatSocket } from "../lib/socket.js";
@@ -11,14 +12,20 @@ import { appendUniqueMessage, mergeMessages, upsertConversation } from "../state
 import { applyPinnedMessagesEvent, createPinnedMessagesRequestGuard, findPinnedMessage, getPinnedMessagesForConversation, replacePinnedMessages, type ConversationPinnedMessagesState } from "../state/inbox-pins.js";
 import { clampConversationListWidth, CONVERSATION_LIST_MAX_WIDTH, CONVERSATION_LIST_MIN_WIDTH, markConversationRead } from "../state/inbox-ui.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
+import { ConversationAvatar } from "../components/conversations/ConversationAvatar.js";
 import { DashboardTopbar, type DashboardAccount } from "../components/dashboard/DashboardTopbar.js";
-import { appendMessageToast, MessageToast, type MessageToastData } from "../components/conversations/MessageToast.js";
+import { PlatformIcon } from "../components/dashboard/PlatformIcon.js";
+import type { ConnectionProviderId } from "../state/dashboard-ui.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 const CONVERSATION_TAGS_API_URL = "/api/v1/conversation-tags";
 const AI_SETTINGS_API_URL = "/api/v1/ai-settings";
 const QUICK_REPLIES_API_URL = "/api/v1/quick-replies";
 const DEFAULT_AI_SETTINGS: AiSettingsContract = { modelTier: "smart", enabled: true, suggestionsEnabled: true, sentimentEnabled: true, suggestionMode: "on_open", sentimentWindow: 3 };
+
+function platformIconProvider(platform: ChatMessageContract["platform"]): ConnectionProviderId {
+  return platform === "telegram_personal" ? "telegram" : platform === "zalo_personal" ? "zalo" : platform;
+}
 
 export function shouldAutoRefreshAiSuggestions(
   mode: AiSettingsContract["suggestionMode"],
@@ -135,7 +142,6 @@ export function InboxPage({ token, refresh, platform, channelId, onBack, onLogoC
   const [quickReplies, setQuickReplies] = useState<QuickReplyContract[]>([]);
   const [isConversationListLoading, setIsConversationListLoading] = useState(true);
   const [isConversationListOpen, setIsConversationListOpen] = useState(false);
-  const [messageToasts, setMessageToasts] = useState<MessageToastData[]>([]);
   const [isTakingOver, setIsTakingOver] = useState(false);
   const [takeoverError, setTakeoverError] = useState<string | null>(null);
   const [conversationListWidth, setConversationListWidth] = useState(CONVERSATION_LIST_MAX_WIDTH);
@@ -149,6 +155,7 @@ export function InboxPage({ token, refresh, platform, channelId, onBack, onLogoC
   const quickRepliesGuardRef = React.useRef(createQuickRepliesRequestGuard());
   const retryPayloadsRef = React.useRef(new Map<string, RetryPayloadEntry>());
   const optimisticMessageIdsRef = React.useRef(new Map<string, string>());
+  const incomingToastIdsRef = React.useRef<string[]>([]);
   aiSuggestionsGuardRef.current.setActiveConversation(activeId);
   pinnedMessagesGuardRef.current.setActiveConversation(activeId);
   const pinnedMessages = getPinnedMessagesForConversation(pinnedMessagesState, activeId);
@@ -323,7 +330,37 @@ export function InboxPage({ token, refresh, platform, channelId, onBack, onLogoC
       }));
       setPinnedMessagesError(null);
     };
-    socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => { const revision = (conversationRevisionRef.current.get(message.conversationId) ?? 0) + 1; conversationRevisionRef.current.set(message.conversationId, revision); if (message.clientMessageId) { const optimisticId = optimisticMessageIdsRef.current.get(message.clientMessageId); if (optimisticId) { releaseRetryPayload(optimisticId); optimisticMessageIdsRef.current.delete(message.clientMessageId); } } if (message.senderType === "customer") { const conversation = conversationsRef.current.find((item) => item.id === message.conversationId); setMessageToasts((current) => appendMessageToast(current, { id: message.id, conversationId: message.conversationId, senderName: message.senderName?.trim() || conversation?.customerName?.trim() || "Khách hàng", content: message.content, platform: message.platform, ...(conversation?.customerAvatarUrl ? { avatarUrl: conversation.customerAvatarUrl } : {}) })); } if (message.conversationId === activeId) { setIsCustomerTyping(false); setMessages((current) => appendUniqueMessage(current, message)); void markActiveRead(activeId); if (message.senderType === "customer" && aiSettingsLoaded && shouldAutoRefreshAiSuggestions(aiSettings.suggestionMode, "customer_message")) void refreshAiSuggestions(activeId, "customer_message"); } });
+    socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => {
+      const revision = (conversationRevisionRef.current.get(message.conversationId) ?? 0) + 1;
+      conversationRevisionRef.current.set(message.conversationId, revision);
+      if (message.clientMessageId) {
+        const optimisticId = optimisticMessageIdsRef.current.get(message.clientMessageId);
+        if (optimisticId) {
+          releaseRetryPayload(optimisticId);
+          optimisticMessageIdsRef.current.delete(message.clientMessageId);
+        }
+      }
+      if (message.senderType === "customer" && !incomingToastIdsRef.current.includes(message.id)) {
+        const conversation = conversationsRef.current.find((item) => item.id === message.conversationId);
+        const senderName = message.senderName?.trim() || conversation?.customerName?.trim() || "Khách hàng";
+        const previousToastId = incomingToastIdsRef.current.length >= 3 ? incomingToastIdsRef.current[0] : undefined;
+        if (previousToastId) {
+          toast.dismiss(previousToastId);
+          removeIncomingToast(previousToastId);
+        }
+        incomingToastIdsRef.current = [...incomingToastIdsRef.current, message.id].slice(-3);
+        toast.custom((toastId) => <button className="flex w-[min(380px,calc(100vw-2rem))] items-center gap-3 rounded-xl bg-slate-800 p-3 text-left text-white shadow-2xl ring-1 ring-white/10 transition hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300" type="button" onClick={() => { selectConversation(message.conversationId); toast.dismiss(toastId); removeIncomingToast(message.id); }}>
+          <ConversationAvatar name={senderName} avatarUrl={conversationsRef.current.find((item) => item.id === message.conversationId)?.customerAvatarUrl} size="size-12" />
+          <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><strong className="truncate text-sm">{senderName}</strong><PlatformIcon provider={platformIconProvider(message.platform)} size={16} plain /></span><span className="mt-1 block truncate text-xs text-slate-300">{message.content || "Đã gửi một tin nhắn mới"}</span></span>
+        </button>, { id: message.id, duration: 5000, onDismiss: () => removeIncomingToast(message.id), onAutoClose: () => removeIncomingToast(message.id) });
+      }
+      if (message.conversationId === activeId) {
+        setIsCustomerTyping(false);
+        setMessages((current) => appendUniqueMessage(current, message));
+        void markActiveRead(activeId);
+        if (message.senderType === "customer" && aiSettingsLoaded && shouldAutoRefreshAiSuggestions(aiSettings.suggestionMode, "customer_message")) void refreshAiSuggestions(activeId, "customer_message");
+      }
+    });
     socket.on("connect", joinActiveRoom);
     socket.on(chatEvents.messagePinUpdated, handleMessagePinUpdated);
     socket.on(chatEvents.agentTyping, (payload: { conversationId?: unknown; isTyping?: unknown }) => {
@@ -347,6 +384,9 @@ export function InboxPage({ token, refresh, platform, channelId, onBack, onLogoC
     return () => { socket.off("connect", joinActiveRoom); socket.off(chatEvents.messagePinUpdated, handleMessagePinUpdated); socket.disconnect(); };
   }, [token, platform, channelId, activeId, aiSettingsLoaded, aiSettings.suggestionMode, aiSuggestionsEnabled]);
   function selectConversation(id: string) { setActiveId(id); setReadRequestKey((current) => current + 1); setIsConversationListOpen(false); }
+  function removeIncomingToast(id: string) {
+    incomingToastIdsRef.current = incomingToastIdsRef.current.filter((toastId) => toastId !== id);
+  }
   async function updateConversationTags(id: string, tags: ConversationTagContract[]) {
     const previous = conversationsRef.current.find((item) => item.id === id)?.tags ?? [];
     setConversations((current) => {
@@ -477,7 +517,7 @@ export function InboxPage({ token, refresh, platform, channelId, onBack, onLogoC
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp, { once: true });
   }
-  return <main className="inbox-shell"><div className="pointer-events-none fixed right-4 top-4 z-[70] grid gap-3" aria-live="polite">{messageToasts.map((toast) => <div className="pointer-events-auto" key={toast.id}><MessageToast toast={toast} onOpen={(conversationId) => { selectConversation(conversationId); setMessageToasts([]); }} onClose={(id) => setMessageToasts((current) => current.filter((item) => item.id !== id))} /></div>)}</div><div className="flex h-screen min-h-0 flex-col overflow-hidden bg-slate-100"><DashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} /><div className="inbox-page grid min-h-0 flex-1 grid-cols-[44px_var(--conversation-list-width)_minmax(0,1fr)] overflow-hidden bg-slate-100 text-gray-800 transition-[grid-template-columns] duration-200 max-[900px]:grid-cols-[44px_minmax(0,1fr)]" style={{ "--conversation-list-width": `${conversationListWidth}px` } as React.CSSProperties}><aside className="inbox-nav flex flex-col items-center gap-3 bg-blue-600 px-1 py-3" aria-label="Thanh điều hướng">
+  return <main className="inbox-shell"><div className="flex h-screen min-h-0 flex-col overflow-hidden bg-slate-100"><DashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} /><div className="inbox-page grid min-h-0 flex-1 grid-cols-[44px_var(--conversation-list-width)_minmax(0,1fr)] overflow-hidden bg-slate-100 text-gray-800 transition-[grid-template-columns] duration-200 max-[900px]:grid-cols-[44px_minmax(0,1fr)]" style={{ "--conversation-list-width": `${conversationListWidth}px` } as React.CSSProperties}><aside className="inbox-nav flex flex-col items-center gap-3 bg-blue-600 px-1 py-3" aria-label="Thanh điều hướng">
     <button className="inbox-nav-item grid size-9 place-items-center rounded-lg bg-black/15 text-white transition-colors hover:bg-black/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hội thoại"><InboxIcon name="chat" /></button>
     <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hộp thư"><InboxIcon name="inbox" /></button>
     {/* <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Khách hàng"><InboxIcon name="users" /></button><div className="inbox-nav-spacer flex-1" /><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Trợ giúp"><InboxIcon name="help" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Cài đặt"><InboxIcon name="settings" /></button> */}

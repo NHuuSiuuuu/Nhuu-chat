@@ -325,13 +325,19 @@ describe("Inbox Tailwind migration", () => {
     expect(chat).not.toContain('className="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">{conversationPlatformLabel(conversation.platform)}');
   });
 
-  it("creates incoming-message toasts without notifying for agent messages", () => {
+  it("uses sonner for customer messages without notifying for agent messages", () => {
     const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain("messageToasts");
-    expect(source).toContain("<MessageToast");
+    expect(source).toContain('import { toast } from "sonner"');
+    expect(source).toContain("toast.custom");
+    expect(source).not.toContain("messageToasts");
+    expect(source).not.toContain("<MessageToast");
+    expect(source).not.toContain("appendMessageToast");
     expect(source).toContain('message.senderType === "customer"');
-    expect(source).toContain("appendMessageToast");
+    expect(source).toContain("incomingToastIdsRef");
+    expect(source).toContain("slice(-3)");
+    expect(source).toContain("selectConversation(message.conversationId)");
+    expect(source).toContain("toast.dismiss(toastId)");
   });
 
   it("defines the socket room join handler before registering it", () => {

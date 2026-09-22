@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import * as React from "react";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { FacebookPublishingPage, validateFacebookPostImage, connectionAfterFacebookDisconnect, type FacebookPublishingPageProps } from "./FacebookPublishingPage.js";
+import { FacebookPublishingPage, validateFacebookPostImage, connectionAfterFacebookDisconnect, facebookPublishingToastError, type FacebookPublishingPageProps } from "./FacebookPublishingPage.js";
+import { FacebookPublishingApiError } from "../lib/facebook-publishing.api.js";
 import type { FacebookPageConnectionResponse, FacebookPostResponse } from "@nhuu-chat/contracts";
 
 const connection: FacebookPageConnectionResponse = { id: "connection-1", pageId: "page-1", pageName: "Nhuu Page", status: "connected", createdAt: "2026-09-21T00:00:00.000Z", updatedAt: "2026-09-21T00:00:00.000Z" };
@@ -128,5 +129,25 @@ describe("FacebookPublishingPage", () => {
     expect(source).not.toContain("self-start");
     expect(source).not.toContain("h-[calc(100vh-6rem)]");
     expect(source).not.toContain("overflow-y-auto");
+  });
+
+  it("uses Sonner promise notifications for publish outcomes", () => {
+    const source = readFileSync(new URL("./FacebookPublishingPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('import { toast } from "sonner";');
+    expect(source).toContain('loading: "Đang đăng bài..."');
+    expect(source).toContain('success: "Đăng bài thành công"');
+    expect(source).toContain("facebookPublishingToastError");
+    expect(source).toContain("toast.promise");
+    expect(facebookPublishingToastError(new FacebookPublishingApiError("FACEBOOK_PUBLISH_FAILED", "Facebook chưa thể đăng bài.", 500))).toBe("FACEBOOK_PUBLISH_FAILED: Facebook chưa thể đăng bài.");
+  });
+
+  it("notifies when a post or draft is deleted", () => {
+    const source = readFileSync(new URL("./FacebookPublishingPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('"Đã xóa bài viết/bản nháp thành công"');
+    expect(source).toContain("toast.success(successMessage)");
+    expect(source).toContain("toast.error");
+    expect(source).toContain("client.cancel(post.id)");
   });
 });

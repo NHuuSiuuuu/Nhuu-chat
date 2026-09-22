@@ -94,4 +94,15 @@ describe("App navigation", () => {
 
     expect(source).toContain('<link rel="icon" type="image/jpeg" href="/nhuu-favicon.jpg"');
   });
+
+  it("configures the global Sonner toaster for NhuuChat", () => {
+    const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('import { Toaster } from "sonner";');
+    expect(source).toContain('position="top-right"');
+    expect(source).toContain('borderRadius: "12px"');
+    expect(source).toContain('fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"');
+    expect(source).toContain('background: "#ffffff"');
+    expect(source).toContain('color: "#273348"');
+  });
 });

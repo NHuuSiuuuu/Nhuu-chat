@@ -1,9 +1,9 @@
 import * as React from "react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import type { AiModelTier, AiSentimentWindow, AiSettingsContract, AiSuggestionMode, AssistantContract, AutomationTemplateContract, BotPreviewResponse, ConversationTagContract, QuickReplyContract } from "@nhuu-chat/contracts";
 import { DashboardTopbar } from "../components/dashboard/DashboardTopbar.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
-import { DevelopmentToast } from "../components/conversations/MessageToast.js";
 import { AutomationTemplateImportModal } from "../components/settings/AutomationTemplateImportModal.js";
 import { apiRequest } from "../lib/api.js";
 import { resolveApiBaseUrl } from "../lib/api-url.js";
@@ -960,15 +960,14 @@ function AboutSettings() {
 }
 
 function SettingsLayout({ activeTab, onTabChange, children, onLogoClick, onNavigate, user, onLogout, onProfile }: SettingsPageProps & { activeTab: SettingsItem; onTabChange: (item: SettingsItem) => void; children: React.ReactNode }) {
-  const [developmentToast, setDevelopmentToast] = useState<string | null>(null);
   function handleTabChange(item: SettingsItem) {
     if (isSettingsPlaceholderTab(item)) {
-      setDevelopmentToast(item);
+      toast.info(item);
       return;
     }
     onTabChange(item);
   }
-  return <main className="min-h-screen bg-gray-50 text-gray-800"><SettingsDashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} /><div className="pointer-events-none fixed right-4 top-20 z-[70] grid gap-3" aria-live="polite">{developmentToast && <div className="pointer-events-auto"><DevelopmentToast message={developmentToast} onClose={() => setDevelopmentToast(null)} /></div>}</div><div className="mx-6 flex w-auto items-start gap-6 pt-6 pb-8 max-[1024px]:mx-4 max-[1024px]:flex-col max-[1024px]:pt-4"><aside className="h-fit w-[300px] shrink-0 rounded-xl bg-white p-3 shadow-sm lg:sticky lg:top-[88px] lg:h-[calc(100vh-112px)] lg:overflow-y-auto max-[1024px]:w-full"><h1 className="px-3 pb-3 text-lg font-bold">Cài đặt</h1><nav className="grid gap-1" aria-label="Menu cài đặt">{settingsItems.map((item) => <button className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${activeTab === item ? "bg-sky-50 font-semibold text-sky-700" : "text-gray-600 hover:bg-gray-50"} ${isSettingsPlaceholderTab(item) ? "cursor-not-allowed opacity-60" : ""}`} aria-disabled={isSettingsPlaceholderTab(item)} key={item} type="button" onClick={() => handleTabChange(item)}><InboxIcon name={settingsIconByItem[item]} size={17} /> <span>{item}</span>{item === "Trợ lý AI" && <small className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Beta</small>}</button>)}</nav></aside><section className="min-w-0 flex-1 rounded-xl bg-white shadow-sm">{children}</section></div></main>;
+  return <main className="min-h-screen bg-gray-50 text-gray-800"><SettingsDashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} /><div className="mx-6 flex w-auto items-start gap-6 pt-6 pb-8 max-[1024px]:mx-4 max-[1024px]:flex-col max-[1024px]:pt-4"><aside className="h-fit w-[300px] shrink-0 rounded-xl bg-white p-3 shadow-sm lg:sticky lg:top-[88px] lg:h-[calc(100vh-112px)] lg:overflow-y-auto max-[1024px]:w-full"><h1 className="px-3 pb-3 text-lg font-bold">Cài đặt</h1><nav className="grid gap-1" aria-label="Menu cài đặt">{settingsItems.map((item) => <button className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${activeTab === item ? "bg-sky-50 font-semibold text-sky-700" : "text-gray-600 hover:bg-gray-50"} ${isSettingsPlaceholderTab(item) ? "cursor-not-allowed opacity-60" : ""}`} aria-disabled={isSettingsPlaceholderTab(item)} key={item} type="button" onClick={() => handleTabChange(item)}><InboxIcon name={settingsIconByItem[item]} size={17} /> <span>{item}</span>{item === "Trợ lý AI" && <small className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Beta</small>}</button>)}</nav></aside><section className="min-w-0 flex-1 rounded-xl bg-white shadow-sm">{children}</section></div></main>;
 }
 
 function SettingsDevelopmentPlaceholder({ title }: { title: string }) {

@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 import type { FacebookPageConnectionResponse, FacebookPostResponse } from "@nhuu-chat/contracts";
 import { DashboardTopbar } from "../components/dashboard/DashboardTopbar.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
@@ -59,6 +60,10 @@ export function connectionAfterFacebookDisconnect(_connection: FacebookPageConne
 
 function errorMessage(error: unknown): string {
   return error instanceof FacebookPublishingApiError ? error.message : "Không thể kết nối máy chủ. Vui lòng thử lại.";
+}
+
+export function facebookPublishingToastError(error: unknown): string {
+  return error instanceof FacebookPublishingApiError ? `${error.code}: ${error.message}` : error instanceof Error ? error.message : "Không thể hoàn tất thao tác đăng bài Facebook.";
 }
 
 function displayDate(value: string | null | undefined): string {
@@ -148,13 +153,21 @@ export function FacebookPublishingPage({ onBack, onLogoClick, onNavigate, user, 
     if (!message.trim()) { setError("Vui lòng nhập nội dung bài viết."); return; }
     if (mode === "scheduled" && !scheduledAt) { setError("Vui lòng chọn thời gian hẹn đăng."); return; }
     setError(null); setBusy(true);
-    try { await client.createPost({ message: message.trim(), mode, ...(mode === "scheduled" ? { scheduledAt } : {}), image }); setMessage(""); setImage(null); if (imageUrl) URL.revokeObjectURL(imageUrl); setImageUrl(null); setScheduledAt(""); await loadPosts(); }
+    try {
+      await toast.promise(client.createPost({ message: message.trim(), mode, ...(mode === "scheduled" ? { scheduledAt } : {}), image }), {
+        loading: "Đang đăng bài...",
+        success: "Đăng bài thành công",
+        error: (requestError) => `Đăng bài thất bại: ${facebookPublishingToastError(requestError)}`
+      });
+      setMessage(""); setImage(null); if (imageUrl) URL.revokeObjectURL(imageUrl); setImageUrl(null); setScheduledAt(""); await loadPosts();
+    }
     catch (requestError) { setError(errorMessage(requestError)); } finally { setBusy(false); }
   }
 
-  async function runAction(action: () => Promise<unknown>, onSuccess?: () => void) {
+  async function runAction(action: () => Promise<unknown>, onSuccess?: () => void, successMessage?: string) {
     setActionError(null); setBusy(true);
-    try { await action(); onSuccess?.(); await loadPosts(); } catch (requestError) { setActionError(errorMessage(requestError)); } finally { setBusy(false); }
+    try { await action(); onSuccess?.(); if (successMessage) toast.success(successMessage); await loadPosts(); }
+    catch (requestError) { setActionError(errorMessage(requestError)); toast.error(`Thao tác thất bại: ${facebookPublishingToastError(requestError)}`); } finally { setBusy(false); }
   }
 
   function openEditor(post: FacebookPostResponse) {
@@ -178,7 +191,7 @@ export function FacebookPublishingPage({ onBack, onLogoClick, onNavigate, user, 
   }
 
   function removePost(post: FacebookPostResponse) {
-    if (window.confirm("Xóa bài viết này khỏi hệ thống?")) void runAction(() => client.cancel(post.id));
+    if (window.confirm("Xóa bài viết này khỏi hệ thống?")) void runAction(() => client.cancel(post.id), undefined, "Đã xóa bài viết/bản nháp thành công");
   }
 
   function renderPostCard(post: FacebookPostResponse) {
