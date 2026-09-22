@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
+import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -52,11 +52,9 @@ function textContent(value: unknown): string {
 
 function renderView(overrides: Partial<React.ComponentProps<typeof SettingHistoryTimelineView>> = {}) {
   return renderToStaticMarkup(<SettingHistoryTimelineView
-    actionType=""
     error={null}
     isLoading={false}
     items={[historyItem]}
-    onActionTypeChange={() => undefined}
     onPageChange={() => undefined}
     pagination={pagination}
     {...overrides}
@@ -68,18 +66,16 @@ afterEach(() => {
 });
 
 describe("SettingHistoryTimeline", () => {
-  it("mounts, loads page one, advances pagination and resets to page one for a filter", async () => {
+  it("mounts, loads page one and advances pagination without applying a client filter", async () => {
     const response = (page: number): SettingHistoryListResponse => ({
       items: [{ ...historyItem, id: `history-${page}` }],
       pagination: { page, pageSize: 20, total: 21, totalPages: 2, hasNextPage: page === 1 }
     });
     const firstRequest = deferred<Response>();
     const secondRequest = deferred<Response>();
-    const filteredRequest = deferred<Response>();
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockReturnValueOnce(firstRequest.promise)
-      .mockReturnValueOnce(secondRequest.promise)
-      .mockReturnValueOnce(filteredRequest.promise);
+      .mockReturnValueOnce(secondRequest.promise);
     let renderer: ReactTestRenderer;
 
     await act(async () => {
@@ -106,19 +102,7 @@ describe("SettingHistoryTimeline", () => {
       await secondRequest.promise;
     });
 
-    await act(async () => {
-      const filterButton = renderer!.root.findAllByType("button").find((button: ReactTestInstance) => button.props.children === "Kết nối Facebook");
-      expect(filterButton).toBeDefined();
-      filterButton!.props.onClick();
-      await Promise.resolve();
-    });
-    expect(fetchMock).toHaveBeenNthCalledWith(3, "https://api.example.test/api/v1/setting-histories?page=1&pageSize=20&actionType=CONNECT_FACEBOOK_PAGE", expect.objectContaining({ credentials: "include" }));
-
-    await act(async () => {
-      filteredRequest.resolve(new Response(JSON.stringify(response(1)), { status: 200 }));
-      await filteredRequest.promise;
-    });
-    expect(textContent(renderer!.root)).toContain("Trang 1 / 2");
+    expect(textContent(renderer!.root)).toContain("Trang 2 / 2");
     await act(async () => {
       renderer!.unmount();
     });
@@ -139,12 +123,11 @@ describe("SettingHistoryTimeline", () => {
     });
   });
 
-  it("requests the authenticated history API with the selected filter and pagination", async () => {
+  it("requests the authenticated history API with pagination and no filter", async () => {
     const response = { items: [historyItem], pagination };
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(response), { status: 200 }));
 
     await expect(fetchSettingHistories({
-      actionType: "UPDATE_AI_SETTINGS",
       apiUrl: "https://api.example.test",
       page: 2,
       refresh: async () => null,
@@ -152,18 +135,17 @@ describe("SettingHistoryTimeline", () => {
     })).resolves.toEqual(response);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.example.test/api/v1/setting-histories?page=2&pageSize=20&actionType=UPDATE_AI_SETTINGS",
+      "https://api.example.test/api/v1/setting-histories?page=2&pageSize=20",
       expect.objectContaining({ credentials: "include" })
     );
   });
 
-  it("renders one shared Vietnamese timeline with filters, actor, time, hashes and old-to-new values", () => {
+  it("renders one shared Vietnamese timeline with actor, time, hashes and old-to-new values", () => {
     const html = renderView();
 
     expect(html).toContain("Lịch sử hoạt động");
-    expect(html).toContain("Tất cả");
-    expect(html).toContain("Cài đặt AI");
-    expect(html).toContain("Kết nối Facebook");
+    expect(html).not.toContain("Lọc lịch sử hoạt động");
+    expect(html).not.toContain("Kết nối Facebook</button>");
     expect(html).toContain("Nguyễn An");
     expect(html).toContain("14:05 • 22/09/2026");
     expect(html).toContain("Cập nhật cài đặt AI");
@@ -195,9 +177,8 @@ describe("SettingHistoryTimeline", () => {
     expect(html).not.toContain("new-secret");
   });
 
-  it("does not claim a filtered connect event is the current connection", () => {
+  it("renders a connect event without claiming it is the current connection", () => {
     const html = renderView({
-      actionType: "CONNECT_FACEBOOK_PAGE",
       items: [{
         ...historyItem,
         actionType: "CONNECT_FACEBOOK_PAGE",

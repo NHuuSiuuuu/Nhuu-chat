@@ -38,8 +38,6 @@ export type SettingHistoryListResponse = {
   pagination: SettingHistoryPagination;
 };
 
-type SettingHistoryFilter = "" | "UPDATE_AI_SETTINGS" | "CONNECT_FACEBOOK_PAGE";
-
 type SettingHistoryTimelineProps = {
   token: string;
   refresh: () => Promise<string | null>;
@@ -47,11 +45,9 @@ type SettingHistoryTimelineProps = {
 };
 
 type SettingHistoryTimelineViewProps = {
-  actionType: SettingHistoryFilter;
   error: string | null;
   isLoading: boolean;
   items: SettingHistoryResponse[];
-  onActionTypeChange: (actionType: SettingHistoryFilter) => void;
   onPageChange: (page: number) => void;
   pagination: SettingHistoryPagination;
 };
@@ -64,11 +60,6 @@ const EMPTY_PAGINATION: SettingHistoryPagination = {
   totalPages: 0,
   hasNextPage: false
 };
-const FILTERS: Array<{ label: string; value: SettingHistoryFilter }> = [
-  { label: "Tất cả", value: "" },
-  { label: "Cài đặt AI", value: "UPDATE_AI_SETTINGS" },
-  { label: "Kết nối Facebook", value: "CONNECT_FACEBOOK_PAGE" }
-];
 const SENSITIVE_FIELD_PATTERN = /(access.?token|token|password|secret|cookie|authorization)/i;
 
 function formatHistoryDate(value: string): string {
@@ -165,13 +156,11 @@ function SettingHistoryTimelineItem({ item }: { item: SettingHistoryResponse }) 
 // Tải đúng trang lịch sử theo hợp đồng API và dùng cookie phiên qua helper dùng chung.
 export function fetchSettingHistories(input: SettingHistoryTimelineProps & {
   page: number;
-  actionType: SettingHistoryFilter;
 }): Promise<SettingHistoryListResponse> {
   const query = new URLSearchParams({
     page: String(input.page),
     pageSize: String(PAGE_SIZE)
   });
-  if (input.actionType) query.set("actionType", input.actionType);
   return apiRequest<SettingHistoryListResponse>(
     input.apiUrl,
     `/api/v1/setting-histories?${query.toString()}`,
@@ -182,11 +171,9 @@ export function fetchSettingHistories(input: SettingHistoryTimelineProps & {
 }
 
 export function SettingHistoryTimelineView({
-  actionType,
   error,
   isLoading,
   items,
-  onActionTypeChange,
   onPageChange,
   pagination
 }: SettingHistoryTimelineViewProps) {
@@ -196,17 +183,7 @@ export function SettingHistoryTimelineView({
       <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-500">Theo dõi các thay đổi cài đặt quan trọng và người đã thực hiện.</p>
     </header>
 
-    <div className="mt-5 flex flex-wrap gap-2" role="group" aria-label="Lọc lịch sử hoạt động">
-      {FILTERS.map((filter) => <button
-        className={`rounded-full px-3.5 py-2 text-sm font-semibold transition ${actionType === filter.value ? "bg-gray-900 text-white" : "border border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:text-gray-900"}`}
-        aria-pressed={actionType === filter.value}
-        key={filter.value || "all"}
-        type="button"
-        onClick={() => onActionTypeChange(filter.value)}
-      >{filter.label}</button>)}
-    </div>
-
-    <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(240px,3fr)]">
+    <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(240px,3fr)]">
       <div className="min-w-0">
         {isLoading ? <div className="grid min-h-56 place-items-center rounded-2xl border border-dashed border-gray-200 bg-gray-50" role="status"><p className="text-sm text-gray-500">Đang tải lịch sử...</p></div>
           : error ? <div className="grid min-h-56 place-items-center rounded-2xl border border-rose-100 bg-rose-50 px-6 text-center" role="alert"><div><p className="font-semibold text-rose-700">Không thể tải lịch sử hoạt động</p><p className="mt-1 text-sm text-rose-600">{error}</p></div></div>
@@ -230,7 +207,6 @@ export function SettingHistoryTimelineView({
 
 export function SettingHistoryTimeline({ token, refresh, apiUrl }: SettingHistoryTimelineProps) {
   const [page, setPage] = useState(1);
-  const [actionType, setActionType] = useState<SettingHistoryFilter>("");
   const [items, setItems] = useState<SettingHistoryResponse[]>([]);
   const [pagination, setPagination] = useState<SettingHistoryPagination>(EMPTY_PAGINATION);
   const [isLoading, setIsLoading] = useState(true);
@@ -240,7 +216,7 @@ export function SettingHistoryTimeline({ token, refresh, apiUrl }: SettingHistor
     let active = true;
     setIsLoading(true);
     setError(null);
-    void fetchSettingHistories({ token, refresh, apiUrl, page, actionType })
+    void fetchSettingHistories({ token, refresh, apiUrl, page })
       .then((response) => {
         if (!active) return;
         setItems(response.items);
@@ -253,19 +229,12 @@ export function SettingHistoryTimeline({ token, refresh, apiUrl }: SettingHistor
         if (active) setIsLoading(false);
       });
     return () => { active = false; };
-  }, [actionType, apiUrl, page, refresh, token]);
-
-  function changeActionType(nextActionType: SettingHistoryFilter) {
-    setActionType(nextActionType);
-    setPage(1);
-  }
+  }, [apiUrl, page, refresh, token]);
 
   return <SettingHistoryTimelineView
-    actionType={actionType}
     error={error}
     isLoading={isLoading}
     items={items}
-    onActionTypeChange={changeActionType}
     onPageChange={setPage}
     pagination={pagination}
   />;
