@@ -18,6 +18,7 @@ import { quickReplyRouter } from "./routes/quick-reply.routes.js";
 import { assistantRouter } from "./routes/assistants.routes.js";
 import { facebookPageRouter } from "./routes/facebook-page.routes.js";
 import { facebookPostRouter } from "./routes/facebook-post.routes.js";
+import { settingHistoryRouter } from "./routes/setting-history.routes.js";
 import { corsAllowlist, originProtection, rateLimit, requestId, securityHeaders } from "./common/security.middleware.js";
 
 export function createApp(): Express {
@@ -54,6 +55,7 @@ export function createApp(): Express {
   app.use("/api/v1/assistants", assistantRouter);
   app.use("/api/v1/facebook-page", facebookPageRouter);
   app.use("/api/v1/facebook-page/posts", facebookPostRouter);
+  app.use("/api/v1/setting-histories", settingHistoryRouter);
   app.use(errorHandler);
 
   return app;
