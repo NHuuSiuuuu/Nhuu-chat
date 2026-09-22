@@ -8,4 +8,10 @@ describe("DashboardTopbar fixed layout", () => {
     expect(source).toContain("fixed top-0");
     expect(source).toContain("z-50");
   });
+
+  it("passes the clicked nested section to the mobile navigation callback", () => {
+    expect(source).toContain('nestedItems.map((nestedItem) => <button');
+    expect(source).toContain('onClick={() => navigateSettingsFromMobile(nestedItem)}');
+    expect(source).not.toContain('onClick={() => navigateSettingsFromMobile(settingsItem)}');
+  });
 });

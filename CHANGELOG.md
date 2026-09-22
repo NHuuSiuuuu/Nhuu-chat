@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm điều hướng URL riêng cho từng mục Giới thiệu trên mobile và Dashboard, đồng thời bỏ menu Giới thiệu bị lặp phía trên nội dung.
+
 - Sửa điều hướng menu Cài đặt trên mobile: mục cha chỉ mở accordion, các mục con mới điều hướng đến từng trang.
 
 - Cải thiện giao diện mobile trang Cài đặt: thêm accordion tab Cài đặt trong menu chính, ẩn sidebar phụ và tối ưu bố cục Trợ lý AI trên màn hình nhỏ.

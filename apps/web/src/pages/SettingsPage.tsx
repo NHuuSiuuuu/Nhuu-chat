@@ -1,12 +1,12 @@
 import * as React from "react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import type { AiModelTier, AiSentimentWindow, AiSettingsContract, AiSuggestionMode, AssistantContract, AutomationTemplateContract, BotPreviewResponse, ConversationTagContract, QuickReplyContract } from "@nhuu-chat/contracts";
 import { DashboardTopbar } from "../components/dashboard/DashboardTopbar.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
 import { AutomationTemplateImportModal } from "../components/settings/AutomationTemplateImportModal.js";
 import { apiRequest } from "../lib/api.js";
 import { resolveApiBaseUrl } from "../lib/api-url.js";
+import { toast } from "sonner";
 import type { AutomationTemplateImportRow } from "../lib/automation-template-import.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
@@ -89,7 +89,28 @@ export function publicationButtonLabel(enabled: boolean): { button: string; stat
 type AiAssistantTab = "Gợi ý trả lời" | "Chatbot tự động";
 
 const aboutSections = ["Tổng quan", "Dashboard", "Đa tài khoản", "Quản lý tin nhắn", "Đăng bài", "Trợ lý AI", "Bảo mật & dữ liệu"] as const;
+export const mobileAboutSections = aboutSections;
 type AboutSection = typeof aboutSections[number];
+const aboutSlugBySection: Record<AboutSection, string> = {
+  "Tổng quan": "overview",
+  Dashboard: "dashboard",
+  "Đa tài khoản": "multi-account",
+  "Quản lý tin nhắn": "message-management",
+  "Đăng bài": "publishing",
+  "Trợ lý AI": "ai-assistant",
+  "Bảo mật & dữ liệu": "security-data"
+};
+const aboutSectionBySlug = Object.fromEntries(Object.entries(aboutSlugBySection).map(([section, slug]) => [slug, section])) as Record<string, AboutSection>;
+const AboutSectionContext = React.createContext<AboutSection>(aboutSections[0]);
+
+export function aboutPathForSection(section: AboutSection): string {
+  return `/settings/about/${aboutSlugBySection[section]}`;
+}
+
+export function aboutSectionFromPath(pathname: string): AboutSection {
+  const slug = pathname.replace(/^\/settings\/about\/?/, "").split("/")[0];
+  return aboutSectionBySlug[slug] ?? aboutSections[0];
+}
 
 const aboutSectionContent: Record<AboutSection, { summary: string; bullets: string[] }> = {
   "Tổng quan": {
@@ -232,10 +253,11 @@ type SettingsDashboardTopbarProps = {
   settingsSubmenuItems?: readonly SettingsItem[];
   activeSettingsSubmenuItem?: SettingsItem;
   onSettingsSubmenuNavigate?: (item: SettingsItem) => void;
+  onAboutSectionNavigate?: (section: AboutSection) => void;
 };
 
-function SettingsDashboardTopbar(props: SettingsDashboardTopbarProps) {
-  return <DashboardTopbar {...(props as React.ComponentProps<typeof DashboardTopbar>)} />;
+function SettingsDashboardTopbar({ onAboutSectionNavigate, ...props }: SettingsDashboardTopbarProps) {
+  return <DashboardTopbar {...(props as React.ComponentProps<typeof DashboardTopbar>)} nestedSettingsSubmenuItems={{ "Giới thiệu": mobileAboutSections }} onNestedSettingsSubmenuNavigate={(item) => onAboutSectionNavigate?.(item as AboutSection)} />;
 }
 
 function AiToggle({ checked, label, onChange }: { checked: boolean; label: string; onChange: (value: boolean) => void }) {
@@ -926,18 +948,11 @@ function AboutBulletGroup({ title, icon, items }: { title: string; icon: AboutIc
 
 // Hiển thị hướng dẫn vận hành theo section, giữ riêng nội dung đa tài khoản và Gộp trang.
 function AboutSettings() {
-  const [activeSection, setActiveSection] = useState<AboutSection>(aboutSections[0]);
+  const activeSection = React.useContext(AboutSectionContext);
   const content = aboutSectionContent[activeSection];
 
-  return <div className="grid min-h-[520px] grid-cols-[minmax(170px,0.32fr)_minmax(0,1fr)] max-[700px]:grid-cols-1">
-    <aside className="border-r border-gray-100 bg-gray-50/70 p-4 max-[700px]:border-r-0 max-[700px]:border-b" aria-label="Menu Giới thiệu">
-      <div className="mb-3 px-2"><p className="text-xs font-bold uppercase tracking-wide text-sky-600">Về Nhuu-chat</p><h2 className="mt-1 text-lg font-bold text-gray-900">Giới thiệu</h2></div>
-      <nav className="grid gap-1">
-        {aboutSections.map((section) => <button className={`rounded-lg px-3 py-2.5 text-left text-sm transition ${activeSection === section ? "bg-white font-semibold text-sky-700 shadow-sm" : "text-gray-600 hover:bg-white"}`} type="button" key={section} onClick={() => setActiveSection(section)} aria-current={activeSection === section ? "page" : undefined}>{section}</button>)}
-      </nav>
-    </aside>
-    <article className="p-6 sm:p-8" aria-label={`Nội dung ${activeSection}`}>
-      <div className="max-w-3xl">
+  return <article className="p-6 sm:p-8" aria-label={`Nội dung ${activeSection}`}>
+      <div className="min-h-[520px] max-w-3xl">
         {activeSection === "Tổng quan" ? <>
           <AboutBulletGroup title="Ứng dụng này được xây dựng dành cho ai?" icon="users" items={overviewAudience} />
           <AboutBulletGroup title="Tính năng nổi bật" icon="sparkles" items={overviewFeatures} />
@@ -961,11 +976,10 @@ function AboutSettings() {
           </ul>
         </>}
       </div>
-    </article>
-  </div>;
+  </article>;
 }
 
-function SettingsLayout({ activeTab, onTabChange, children, onLogoClick, onNavigate, user, onLogout, onProfile }: SettingsPageProps & { activeTab: SettingsItem; onTabChange: (item: SettingsItem) => void; children: React.ReactNode }) {
+function SettingsLayout({ activeTab, onTabChange, onAboutSectionChange, children, onLogoClick, onNavigate, user, onLogout, onProfile }: SettingsPageProps & { activeTab: SettingsItem; onTabChange: (item: SettingsItem) => void; onAboutSectionChange: (section: AboutSection) => void; children: React.ReactNode }) {
   function handleTabChange(item: SettingsItem) {
     if (isSettingsPlaceholderTab(item)) {
       toast.info(item);
@@ -973,7 +987,7 @@ function SettingsLayout({ activeTab, onTabChange, children, onLogoClick, onNavig
     }
     onTabChange(item);
   }
-  return <main className="min-h-screen bg-gray-50 text-gray-800"><SettingsDashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} settingsSubmenuItems={mobileSettingsItems} activeSettingsSubmenuItem={activeTab} onSettingsSubmenuNavigate={handleTabChange} /><div className="mx-3 flex w-auto items-start gap-6 pt-4 pb-8 md:mx-4 lg:mx-6 lg:pt-6 max-[1024px]:flex-col"><aside className="hidden h-fit w-[300px] shrink-0 rounded-xl bg-white p-3 shadow-sm md:block lg:sticky lg:top-[88px] lg:h-[calc(100vh-112px)] lg:overflow-y-auto max-[1024px]:w-full"><h1 className="px-3 pb-3 text-lg font-bold">Cài đặt</h1><nav className="grid gap-1" aria-label="Menu cài đặt">{settingsItems.map((item) => <button className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${activeTab === item ? "bg-sky-50 font-semibold text-gray-900" : "text-gray-600 hover:bg-gray-50"} ${isSettingsPlaceholderTab(item) ? "cursor-not-allowed opacity-60" : ""}`} aria-disabled={isSettingsPlaceholderTab(item)} key={item} type="button" onClick={() => handleTabChange(item)}><InboxIcon name={settingsIconByItem[item]} size={17} /> <span>{item}</span>{item === "Trợ lý AI" && <small className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Beta</small>}</button>)}</nav></aside><section className="w-full min-w-0 flex-1 rounded-xl bg-white shadow-sm">{children}</section></div></main>;
+  return <main className="min-h-screen bg-gray-50 text-gray-800"><SettingsDashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} settingsSubmenuItems={mobileSettingsItems} activeSettingsSubmenuItem={activeTab} onSettingsSubmenuNavigate={handleTabChange} onAboutSectionNavigate={onAboutSectionChange} /><div className="mx-3 flex w-auto items-start gap-6 pt-4 pb-8 md:mx-4 lg:mx-6 lg:pt-6 max-[1024px]:flex-col"><aside className="hidden h-fit w-[300px] shrink-0 rounded-xl bg-white p-3 shadow-sm md:block lg:sticky lg:top-[88px] lg:h-[calc(100vh-112px)] lg:overflow-y-auto max-[1024px]:w-full"><h1 className="px-3 pb-3 text-lg font-bold">Cài đặt</h1><nav className="grid gap-1" aria-label="Menu cài đặt">{settingsItems.map((item) => <button className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${activeTab === item ? "bg-sky-50 font-semibold text-gray-900" : "text-gray-600 hover:bg-gray-50"} ${isSettingsPlaceholderTab(item) ? "cursor-not-allowed opacity-60" : ""}`} aria-disabled={isSettingsPlaceholderTab(item)} key={item} type="button" onClick={() => handleTabChange(item)}><InboxIcon name={settingsIconByItem[item]} size={17} /> <span>{item}</span>{item === "Trợ lý AI" && <small className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Beta</small>}</button>)}</nav></aside><section className="w-full min-w-0 flex-1 rounded-xl bg-white shadow-sm">{children}</section></div></main>;
 }
 
 function SettingsDevelopmentPlaceholder({ title }: { title: string }) {
@@ -982,6 +996,7 @@ function SettingsDevelopmentPlaceholder({ title }: { title: string }) {
 
 export function SettingsPage({ token, refresh, onLogoClick, onNavigate, user, onLogout, onProfile }: SettingsPageProps) {
   const [activeTab, setActiveTabState] = useState<SettingsItem>(() => settingsItemFromPath(window.location.pathname));
+  const [activeAboutSection, setActiveAboutSectionState] = useState<AboutSection>(() => aboutSectionFromPath(window.location.pathname));
   const [isAddTagModalOpen, setIsAddTagModalOpen] = useState(false);
   const [editingTag, setEditingTag] = useState<ConversationTagContract | null>(null);
   const [tagName, setTagName] = useState("");
@@ -994,15 +1009,28 @@ export function SettingsPage({ token, refresh, onLogoClick, onNavigate, user, on
 
   function setActiveTab(item: SettingsItem) {
     setActiveTabState(item);
-    const nextPath = settingsPathForItem(item);
+    const nextPath = item === "Giới thiệu" ? aboutPathForSection(activeAboutSection) : settingsPathForItem(item);
+    if (window.location.pathname !== nextPath) window.history.pushState({}, "", nextPath);
+  }
+
+  function setActiveAboutSection(section: AboutSection) {
+    setActiveTabState("Giới thiệu");
+    setActiveAboutSectionState(section);
+    const nextPath = aboutPathForSection(section);
     if (window.location.pathname !== nextPath) window.history.pushState({}, "", nextPath);
   }
 
   useEffect(() => {
     const initialItem = settingsItemFromPath(window.location.pathname);
-    const initialPath = settingsPathForItem(initialItem);
+    const initialAboutSection = aboutSectionFromPath(window.location.pathname);
+    const initialPath = initialItem === "Giới thiệu" ? aboutPathForSection(initialAboutSection) : settingsPathForItem(initialItem);
+    setActiveTabState(initialItem);
+    setActiveAboutSectionState(initialAboutSection);
     if (window.location.pathname !== initialPath) window.history.replaceState({}, "", initialPath);
-    const handlePopState = () => setActiveTabState(settingsItemFromPath(window.location.pathname));
+    const handlePopState = () => {
+      setActiveTabState(settingsItemFromPath(window.location.pathname));
+      setActiveAboutSectionState(aboutSectionFromPath(window.location.pathname));
+    };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);

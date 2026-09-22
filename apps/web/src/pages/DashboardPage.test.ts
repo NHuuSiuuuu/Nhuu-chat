@@ -77,6 +77,13 @@ describe("dashboard connected accounts", () => {
     expect(source).toContain("facebook:pageId");
   });
 
+  it("forwards nested settings navigation from the dashboard topbar", () => {
+    const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("onNestedSettingsSubmenuNavigate?: (item: string) => void");
+    expect(source).toContain("onNestedSettingsSubmenuNavigate={onNestedSettingsSubmenuNavigate}");
+  });
+
   it("treats only a missing Facebook connection as disconnected", async () => {
     const result = await loadFacebookDashboardStatus(
       async () => { throw new FacebookPublishingApiError("FACEBOOK_PAGE_NOT_CONNECTED", "missing", 404); },

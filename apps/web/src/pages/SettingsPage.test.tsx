@@ -118,6 +118,39 @@ describe("Settings page", () => {
     expect(settingsModule.settingsItemFromPath("/settings/about")).toBe("Giới thiệu");
   });
 
+  it("maps every About section to a stable nested URL and restores it from the URL", () => {
+    const aboutHelpers = settingsModule as typeof settingsModule & {
+      aboutPathForSection?: (section: string) => string;
+      aboutSectionFromPath?: (pathname: string) => string;
+    };
+
+    expect(typeof aboutHelpers.aboutPathForSection).toBe("function");
+    expect(typeof aboutHelpers.aboutSectionFromPath).toBe("function");
+
+    if (aboutHelpers.aboutPathForSection && aboutHelpers.aboutSectionFromPath) {
+      expect(aboutHelpers.aboutPathForSection("Tổng quan")).toBe("/settings/about/overview");
+      expect(aboutHelpers.aboutPathForSection("Dashboard")).toBe("/settings/about/dashboard");
+      expect(aboutHelpers.aboutPathForSection("Đa tài khoản")).toBe("/settings/about/multi-account");
+      expect(aboutHelpers.aboutPathForSection("Quản lý tin nhắn")).toBe("/settings/about/message-management");
+      expect(aboutHelpers.aboutPathForSection("Đăng bài")).toBe("/settings/about/publishing");
+      expect(aboutHelpers.aboutPathForSection("Trợ lý AI")).toBe("/settings/about/ai-assistant");
+      expect(aboutHelpers.aboutPathForSection("Bảo mật & dữ liệu")).toBe("/settings/about/security-data");
+
+      expect(aboutHelpers.aboutSectionFromPath("/settings/about/overview")).toBe("Tổng quan");
+      expect(aboutHelpers.aboutSectionFromPath("/settings/about/dashboard")).toBe("Dashboard");
+      expect(aboutHelpers.aboutSectionFromPath("/settings/about/unknown")).toBe("Tổng quan");
+    }
+  });
+
+  it("renders About content without the duplicate internal navigation", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const aboutSettings = source.split("function AboutSettings()")[1]?.split("function SettingsLayout", 1)[0] ?? "";
+
+    expect(aboutSettings).not.toContain('aria-label="Menu Giới thiệu"');
+    expect(aboutSettings).not.toContain("aboutSections.map");
+    expect(aboutSettings).toContain('<article className="p-6 sm:p-8"');
+  });
+
   it("renders the multi-account introduction with numbered steps and merged-page guidance", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 

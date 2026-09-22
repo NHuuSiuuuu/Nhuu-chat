@@ -46,6 +46,14 @@ describe("App navigation", () => {
     expect(source).toContain("settingsSubmenuItems={mobileSettingsItems}");
   });
 
+  it("routes nested About sections from the dashboard mobile menu to their stable paths", () => {
+    const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("aboutPathForSection");
+    expect(source).toContain("const navigateFromMobileAbout = (section: string)");
+    expect(source).toContain("onNestedSettingsSubmenuNavigate={navigateFromMobileAbout}");
+  });
+
   it("keeps the initial document background aligned before JavaScript loads", () => {
     const source = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
