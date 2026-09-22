@@ -8,6 +8,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Khôi phục logo riêng của Dashboard và chuyển thay đổi logo theo ảnh tham khảo sang đúng header Landing Page `/`.
 - Đổi logo Landing Page sang màu xanh thương hiệu trên nền trong suốt để hiển thị rõ trên header trắng.
 - Đồng bộ hình dạng logo Landing Page với logo đang dùng trong header Dashboard, giữ biến thể màu phù hợp nền trắng.
+- Thay logo giả trong mockup Inbox của Landing Page bằng asset logo thật dùng trong header Dashboard.
 - Thay asset logo header bằng phiên bản ngang icon tròn và chữ `nhuu` theo thiết kế tham khảo.
 - Căn lại logo Nhuu trên header Inbox theo thiết kế tham khảo và xác nhận badge tin chưa đọc nằm góc dưới phải avatar với viền trắng.
 - Thay toàn bộ dữ liệu thật trong mockup Inbox bằng fake data: `admin_demo_01`, Mai Lan, Trần Kiên và nội dung hội thoại mẫu.

@@ -35,6 +35,7 @@ describe("LandingPage", () => {
     expect(rendered).toContain("Hộp thư");
     expect(rendered).toContain("Bắt đầu dùng thử");
     expect(source.findAllByProps({ src: "/nhuu-logo-landing.svg" })).toHaveLength(2);
+    expect(source.findByProps({ src: "/nhuu-logo.svg" })).toBeTruthy();
   });
 
   it("uses the blue transparent logo variant for the landing brand", () => {
