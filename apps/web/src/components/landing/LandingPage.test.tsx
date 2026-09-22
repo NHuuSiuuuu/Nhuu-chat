@@ -31,7 +31,7 @@ describe("LandingPage", () => {
     expect(source.findByProps({ id: "bang-gia" })).toBeTruthy();
     expect(source.findByProps({ id: "faq" })).toBeTruthy();
     expect(rendered).toContain("Câu hỏi thường gặp");
-    expect(rendered).toContain("Hộp thư hợp nhất");
+    expect(rendered).toContain("Hchat Inbox");
     expect(rendered).toContain("Bắt đầu dùng thử");
   });
 
@@ -69,7 +69,7 @@ describe("LandingPage", () => {
   it("opens and closes the FAQ answer while updating aria-expanded", () => {
     const renderer = renderLanding({ user: null, onDashboard: vi.fn(), onLogin: vi.fn(), onRegister: vi.fn() });
     const faqButton = renderer.root.findAllByProps({ "aria-expanded": true })[0];
-    const answer = "NhuuChat hỗ trợ Facebook, Zalo, Telegram và Website trong một hệ thống quản lý tập trung.";
+    const answer = "Gói dịch vụ được thiết kế linh hoạt theo số lượng kênh và quy mô đội ngũ của anh.";
 
     expect(JSON.stringify(renderer.toJSON())).toContain(answer);
     act(() => faqButton.props.onClick());
