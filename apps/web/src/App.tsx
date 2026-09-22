@@ -13,6 +13,7 @@ import { ProfilePage } from "./pages/ProfilePage.js";
 import { DevelopmentPage, developmentPathForSection, developmentSectionFromPath, type DevelopmentSection } from "./pages/DevelopmentPage.js";
 import { NetflixIntro } from "./components/NetflixIntro.js";
 import { FacebookPublishingPage } from "./pages/FacebookPublishingPage.js";
+import { LandingPage } from "./components/landing/LandingPage.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 
@@ -20,13 +21,14 @@ interface AuthResponse {
   user: { id: string; email: string; role: AuthRole };
 }
 
-type AppPage = "dashboard" | "telegram" | "inbox" | "settings" | "profile" | "development";
+type AppPage = "landing" | "dashboard" | "telegram" | "inbox" | "settings" | "profile" | "development";
 type RoutePage = AppPage | "posts";
 type InboxPlatform = "telegram_personal" | "zalo_personal" | `facebook:${string}` | undefined;
 type HeaderNavItem = "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt";
 const INBOX_PLATFORM_STORAGE_KEY = "nhuu-chat.inbox-platform";
 
 function pageFromPath(pathname: string): RoutePage {
+  if (pathname === "/") return "landing";
   if (pathname === "/inbox") return "inbox";
   if (pathname === "/telegram") return "telegram";
   if (pathname === "/settings" || pathname.startsWith("/settings/")) return "settings";
@@ -38,6 +40,7 @@ function pageFromPath(pathname: string): RoutePage {
 }
 
 function pathForPage(page: RoutePage, developmentSection?: DevelopmentSection): string {
+  if (page === "landing") return "/";
   if (page === "inbox") return "/inbox";
   if (page === "telegram") return "/telegram";
   if (page === "settings") return "/settings";
@@ -49,6 +52,7 @@ function pathForPage(page: RoutePage, developmentSection?: DevelopmentSection): 
 
 export function getRouteTitle(route: string): string {
   const titles: Record<RoutePage, string> = {
+    landing: "NhuuChat - Quản lý tin nhắn đa kênh",
     dashboard: "Bảng điều khiển - NhuuChat",
     inbox: "Hộp thư - NhuuChat",
     settings: "Cài đặt - NhuuChat",
@@ -107,6 +111,8 @@ export function App() {
   const [developmentSection, setDevelopmentSection] = useState<DevelopmentSection>(() => developmentSectionFromPath(window.location.pathname));
   const [showIntro, setShowIntro] = useState(true);
   const [introReady, setIntroReady] = useState(false);
+  const [showAuthForm, setShowAuthForm] = useState(false);
+  const [authFormMode, setAuthFormMode] = useState<"login" | "register">("login");
   const navigate = useCallback((nextPage: RoutePage, platform?: InboxPlatform, nextDevelopmentSection?: DevelopmentSection) => {
     setPage(nextPage);
     if (nextPage === "inbox") {
@@ -174,6 +180,15 @@ export function App() {
   let appContent: React.ReactNode;
   if (!authReady) {
     appContent = <PageSkeleton />;
+  } else if (page === "landing") {
+    appContent = <>
+      <LandingPage user={auth?.user ?? null} onDashboard={() => navigate("dashboard")} onLogin={() => { setAuthFormMode("login"); setShowAuthForm(true); }} onRegister={() => { setAuthFormMode("register"); setShowAuthForm(true); }} />
+      {showAuthForm && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4" role="presentation">
+        <div className="max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl shadow-2xl">
+          <AuthPage embedded initialMode={authFormMode} onAuthenticated={(next) => { setAuth({ user: next.user }); setShowAuthForm(false); }} onBack={() => setShowAuthForm(false)} />
+        </div>
+      </div>}
+    </>;
   } else if (!auth) {
     appContent = <AuthPage onAuthenticated={(next) => setAuth({ user: next.user })} />;
   } else if (!canAccessInbox(auth.user.role)) {
@@ -225,8 +240,8 @@ export function App() {
   </>;
 }
 
-function AuthPage({ onAuthenticated }: { onAuthenticated: (auth: AuthResponse) => void }) {
-  const [mode, setMode] = useState<"login" | "register">("login");
+function AuthPage({ embedded = false, initialMode = "login", onAuthenticated, onBack }: { embedded?: boolean; initialMode?: "login" | "register"; onAuthenticated: (auth: AuthResponse) => void; onBack?: () => void }) {
+  const [mode, setMode] = useState<"login" | "register">(initialMode);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -254,7 +269,7 @@ function AuthPage({ onAuthenticated }: { onAuthenticated: (auth: AuthResponse) =
     }
   }
 
-  return <main className="grid min-h-screen place-items-center bg-slate-100 px-4 py-10 text-slate-800" aria-labelledby="auth-title">
+  return <main className={embedded ? "bg-slate-100 px-4 py-6 text-slate-800" : "grid min-h-screen place-items-center bg-slate-100 px-4 py-10 text-slate-800"} aria-labelledby="auth-title">
     <section className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg sm:p-8">
       <h1 id="auth-title" className="text-2xl font-bold text-slate-900">Nhuu Chat</h1>
       <p className="mt-2 text-sm text-slate-500">{mode === "login" ? "Đăng nhập để mở inbox." : "Tạo tài khoản mới để sử dụng hệ thống."}</p>
@@ -265,8 +280,8 @@ function AuthPage({ onAuthenticated }: { onAuthenticated: (auth: AuthResponse) =
       {error && <p className="text-sm text-rose-600" role="alert">{error}</p>}
       <button className="rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500" type="submit" disabled={submitting}>{submitting ? "Đang xử lý..." : mode === "login" ? "Đăng nhập" : "Đăng ký"}</button>
     </form>
-    <button className="mt-5 text-sm font-medium text-sky-600 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500" type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}>
-      {mode === "login" ? "Chưa có tài khoản? Đăng ký" : "Đã có tài khoản? Đăng nhập"}
-    </button></section>
+     <div className="mt-5 flex flex-wrap items-center gap-4"><button className="text-sm font-medium text-sky-600 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500" type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}>
+       {mode === "login" ? "Chưa có tài khoản? Đăng ký" : "Đã có tài khoản? Đăng nhập"}
+     </button>{onBack && <button className="text-sm font-medium text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline" type="button" onClick={onBack}>Quay lại trang chủ</button>}</div></section>
   </main>;
 }

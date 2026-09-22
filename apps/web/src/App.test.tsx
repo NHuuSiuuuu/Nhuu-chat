@@ -10,6 +10,18 @@ type AppModuleWithRouteTitle = typeof AppModule & {
 const appModule = AppModule as AppModuleWithRouteTitle;
 
 describe("App navigation", () => {
+  it("keeps the public landing page at root and sends an authenticated user to dashboard only from the user action", () => {
+    const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('type AppPage = "landing"');
+    expect(source).toContain('if (pathname === "/") return "landing"');
+    expect(source).toContain('page === "landing"');
+    expect(source).toContain("<LandingPage");
+    expect(source).toContain("showAuthForm && <div className=\"fixed inset-0");
+    expect(source).toContain('onDashboard={() => navigate("dashboard")}');
+    expect(source).not.toContain('if (!auth) return navigate("dashboard")');
+  });
+
   it("routes shared header navigation to its destination", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
@@ -30,7 +42,7 @@ describe("App navigation", () => {
   it("routes the settings header item to /settings and renders it below the shared header", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain('type AppPage = "dashboard" | "telegram" | "inbox" | "settings" | "profile" | "development"');
+    expect(source).toContain('type AppPage = "landing" | "dashboard" | "telegram" | "inbox" | "settings" | "profile" | "development"');
     expect(source).toContain('if (pathname === "/settings" || pathname.startsWith("/settings/")) return "settings"');
     expect(source).toContain('if (page === "settings") return "/settings"');
     expect(source).toContain('if (pathname === "/orders" || pathname === "/posts" || pathname === "/analytics") return "development"');
