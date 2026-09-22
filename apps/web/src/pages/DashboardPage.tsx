@@ -10,9 +10,9 @@ import { InboxIcon } from "../components/conversations/InboxIcon.js";
 import { MergePagesModal, selectAllMergePages } from "../components/dashboard/MergePagesModal.js";
 import { PlatformIcon } from "../components/dashboard/PlatformIcon.js";
 
-interface TelegramStatus { connected: boolean; displayName: string | null; username: string | null; avatarUrl?: string | null; }
-interface ZaloStatus { id: string; status: "disconnected" | "waiting_qr" | "connected" | "expired" | "error"; displayName?: string; username?: string; avatarUrl?: string | null; }
-type FacebookStatus = Pick<FacebookPageConnectionResponse, "id" | "pageId" | "pageName" | "status">;
+interface TelegramStatus { connected: boolean; telegramUserId?: string | null; displayName: string | null; username: string | null; avatarUrl?: string | null; }
+interface ZaloStatus { id: string; zaloUserId?: string | null; status: "disconnected" | "waiting_qr" | "connected" | "expired" | "error"; displayName?: string; username?: string; avatarUrl?: string | null; }
+type FacebookStatus = Pick<FacebookPageConnectionResponse, "id" | "pageId" | "pageName" | "avatarUrl" | "status">;
 type FacebookDashboardLoadResult = { connection: FacebookPageConnectionResponse | null; error: string | null };
 
 const FACEBOOK_DASHBOARD_TIMEOUT_MS = 10_000;
@@ -48,16 +48,17 @@ export function createLatestRequestRunner<T>(onResult: (result: T) => void): (re
 }
 
 // ID Facebook có dạng facebook:pageId để giữ đúng Page khi điều hướng sang Inbox.
-export interface DashboardConnectedAccount { id: "telegram_personal" | "zalo_personal" | `facebook:${string}`; platform: "telegram" | "zalo" | "facebook"; pageId?: string; name: string; username?: string; avatarUrl?: string | null; status?: "error"; }
+export interface DashboardConnectedAccount { id: "telegram_personal" | "zalo_personal" | `facebook:${string}`; platform: "telegram" | "zalo" | "facebook"; identifier?: string | null; pageId?: string; name: string; username?: string; avatarUrl?: string | null; status?: "error"; }
 
+// Chuẩn hóa định danh thật của từng kênh để card không phụ thuộc username hiển thị.
 export function buildDashboardAccounts(telegram: TelegramStatus, zalo: ZaloStatus, facebook?: FacebookStatus | null): DashboardConnectedAccount[] {
   const accounts: DashboardConnectedAccount[] = [];
-  if (telegram.connected) accounts.push({ id: "telegram_personal", platform: "telegram", name: telegram.displayName ?? "Telegram cá nhân", ...(telegram.username ? { username: telegram.username } : {}), ...(telegram.avatarUrl ? { avatarUrl: telegram.avatarUrl } : {}) });
+  if (telegram.connected) accounts.push({ id: "telegram_personal", platform: "telegram", name: telegram.displayName ?? "Telegram cá nhân", ...(telegram.telegramUserId ? { identifier: telegram.telegramUserId } : {}), ...(telegram.username ? { username: telegram.username } : {}), ...(telegram.avatarUrl ? { avatarUrl: telegram.avatarUrl } : {}) });
   if (zalo.status === "connected" || (zalo.status === "error" && zalo.displayName)) {
-    accounts.push({ id: "zalo_personal", platform: "zalo", name: zalo.displayName ?? "Zalo cá nhân", ...(zalo.username ? { username: zalo.username } : {}), ...(zalo.avatarUrl ? { avatarUrl: zalo.avatarUrl } : {}), ...(zalo.status === "error" ? { status: "error" as const } : {}) });
+    accounts.push({ id: "zalo_personal", platform: "zalo", name: zalo.displayName ?? "Zalo cá nhân", ...(zalo.zaloUserId ? { identifier: zalo.zaloUserId } : {}), ...(zalo.username ? { username: zalo.username } : {}), ...(zalo.avatarUrl ? { avatarUrl: zalo.avatarUrl } : {}), ...(zalo.status === "error" ? { status: "error" as const } : {}) });
   }
   if (facebook?.status === "connected") {
-    accounts.push({ id: `facebook:${facebook.pageId}`, platform: "facebook", pageId: facebook.pageId, name: facebook.pageName?.trim() || "Facebook Page" });
+    accounts.push({ id: `facebook:${facebook.pageId}`, platform: "facebook", identifier: facebook.pageId, pageId: facebook.pageId, name: facebook.pageName?.trim() || "Facebook Page", ...(facebook.avatarUrl ? { avatarUrl: facebook.avatarUrl } : {}) });
   }
   return accounts;
 }
@@ -119,7 +120,7 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
   const accounts = useMemo(() => buildDashboardAccounts(telegramStatus ?? { connected: false, displayName: null, username: null }, zaloStatus ?? { id: "zalo", status: "disconnected" }, facebookStatus), [telegramStatus, zaloStatus, facebookStatus]);
   const visibleAccounts = accounts.filter((account) => {
     if (filter !== "all" && account.platform !== filter) return false;
-    return !search || `${account.name} ${account.username ?? ""} ${account.platform}`.toLowerCase().includes(search.toLowerCase());
+    return !search || `${account.name} ${account.identifier ?? ""} ${account.username ?? ""} ${account.platform}`.toLowerCase().includes(search.toLowerCase());
   });
   const activeFilterLabel = filter === "all" ? "Tất cả nền tảng" : filter === "zalo" ? "Zalo" : filter === "telegram" ? "Telegram" : "Facebook";
   const selectFilter = (nextFilter: "all" | "zalo" | "telegram" | "facebook") => { setFilter(nextFilter); setIsFilterMenuOpen(false); };
@@ -194,10 +195,10 @@ function ConnectedAccountCard({ account, onOpen, onRefresh, onDeactivate }: { ac
   useEffect(() => setAvatarFailed(false), [avatarUrl]);
   return <article className="group relative flex min-w-0 items-start justify-between gap-3 rounded-xl border border-[#e3e8ef] bg-white p-4 shadow-[0_2px_8px_rgba(37,55,78,.04)] transition hover:border-[#b9ddec] hover:shadow-[0_5px_14px_rgba(37,55,78,.08)]">
     <button className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 border-0 bg-transparent pr-8 text-left focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" onClick={onOpen}>
-      <span className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-gradient-to-br from-[#26394f] to-[#111923] text-[21px] font-bold text-white">{avatarUrl && !avatarFailed ? <img className="size-full object-cover" src={avatarUrl} alt={`Avatar ${account.name}`} onError={() => setAvatarFailed(true)} /> : account.name.slice(0, 1).toUpperCase()}</span>
+       <span className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-gradient-to-br from-[#26394f] to-[#111923] text-[21px] font-bold text-white">{avatarUrl && !avatarFailed ? <img className="size-full object-cover" src={avatarUrl} alt={`Avatar ${account.name}`} referrerPolicy="no-referrer" onError={() => setAvatarFailed(true)} /> : account.name.slice(0, 1).toUpperCase()}</span>
       <span className="grid min-w-0 gap-2 pt-0.5"><strong className="truncate text-[14px]">{account.name}</strong><small className="flex min-w-0 items-center gap-2 truncate text-[12px] text-[#7e8b9c]">
         <span className="inline-grid size-7 shrink-0 place-items-center "><PlatformIcon provider={account.platform} /></span>
-         <span className="truncate">{needsReconnect ? "Cần kết nối lại" : account.username ? `@${account.username}` : account.platform === "facebook" ? "Facebook Page" : `${account.platform === "zalo" ? "Zalo" : "Telegram"} cá nhân`}</span></small></span>
+          <span className="truncate">{account.identifier?.trim() || "Chưa có ID"}</span></small></span>
     </button>
     <span className={`absolute right-12 top-4 text-[19px] ${needsReconnect ? "text-[#e87927]" : "text-[#f3a51d]"}`} title={needsReconnect ? "Cần kết nối lại" : "Đang hoạt động"}>●</span>
     {(account.id === "zalo_personal" || account.id === "telegram_personal" || account.platform === "facebook") && <div className="absolute right-2 top-2"><button className="grid size-9 place-items-center rounded-lg border-0 bg-transparent text-xl leading-none text-[#7e8b9c] hover:bg-[#f1f5f9] hover:text-[#354258] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" aria-label="Tùy chọn tài khoản" aria-expanded={isMenuOpen} aria-haspopup="menu" onClick={() => setIsMenuOpen((current) => !current)}>⋮</button>{isMenuOpen && <div className="absolute right-0 top-10 z-20 grid min-w-[180px] gap-1 rounded-xl border border-[#e3e8ef] bg-white p-1.5 shadow-lg" role="menu"><button className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[13px] text-[#354258] hover:bg-[#f1f5f9] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" role="menuitem" onClick={() => { setIsMenuOpen(false); onRefresh(); }}>Làm mới kết nối</button><button className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[13px] text-[#354258] hover:bg-[#fff1f1] hover:text-[#c33d3d] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" role="menuitem" onClick={() => { setIsMenuOpen(false); onDeactivate(); }}>Ngắt kết nối</button></div>}</div>}

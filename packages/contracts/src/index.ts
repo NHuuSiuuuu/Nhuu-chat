@@ -172,6 +172,7 @@ export interface FacebookPageConnectionResponse {
   id: string;
   pageId: string;
   pageName?: string | null;
+  avatarUrl?: string | null;
   status: "connected" | "invalid";
   lastValidatedAt?: string | null;
   lastErrorCode?: string | null;

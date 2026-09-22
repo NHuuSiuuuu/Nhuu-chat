@@ -196,8 +196,14 @@ export function submitPersonalQrPassword(id: string, userId: string, password: s
 export async function getPersonalSessionStatus(userId: string) {
   const session = await TelegramPersonalSessionModel.findOne({ userId }).lean();
   return session
-    ? { connected: session.status === "active", displayName: session.displayName, username: session.username, avatarUrl: session.avatarUrl ?? null }
-    : { connected: false, displayName: null, username: null, avatarUrl: null };
+    ? {
+      connected: session.status === "active",
+      telegramUserId: session.telegramUserId,
+      displayName: session.displayName,
+      username: session.username,
+      avatarUrl: session.avatarUrl ?? null
+    }
+    : { connected: false, telegramUserId: null, displayName: null, username: null, avatarUrl: null };
 }
 
 // Dừng mọi login/client của owner trước khi xóa session để Telegram không tự restore lại sau logout.

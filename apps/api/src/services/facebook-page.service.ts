@@ -13,6 +13,7 @@ interface FacebookPageConnectionRecord {
   _id: unknown;
   pageId: string;
   pageName?: string | null;
+  avatarUrl?: string | null;
   status: "connected" | "invalid";
   lastValidatedAt?: Date | null;
   lastErrorCode?: string | null;
@@ -43,6 +44,7 @@ function toResponse(record: FacebookPageConnectionRecord): FacebookPageConnectio
     id: stringId(record._id),
     pageId: record.pageId,
     pageName: record.pageName ?? null,
+    avatarUrl: record.avatarUrl ?? null,
     status: record.status,
     lastValidatedAt: record.lastValidatedAt?.toISOString() ?? null,
     lastErrorCode: record.lastErrorCode ?? null,
@@ -57,6 +59,17 @@ function graphErrorCode(body: unknown): number | undefined {
   if (!error || typeof error !== "object") return undefined;
   const code = (error as { code?: unknown }).code;
   return typeof code === "number" ? code : undefined;
+}
+
+// Đọc URL avatar tùy chọn từ Graph và trả về null khi payload không đầy đủ.
+function graphPictureUrl(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const picture = (body as { picture?: unknown }).picture;
+  if (!picture || typeof picture !== "object") return null;
+  const data = (picture as { data?: unknown }).data;
+  if (!data || typeof data !== "object") return null;
+  const url = (data as { url?: unknown }).url;
+  return typeof url === "string" && url.length > 0 ? url : null;
 }
 
 export class FacebookPageService {
@@ -77,7 +90,7 @@ export class FacebookPageService {
   // Xác thực Page trong deadline hữu hạn trước khi mã hóa và lưu token.
   async connect(userId: string, input: { pageId: string; pageAccessToken: string }): Promise<FacebookPageConnectionResponse> {
     const url = new URL(`https://graph.facebook.com/${this.graphApiVersion}/${encodeURIComponent(input.pageId)}`);
-    url.searchParams.set("fields", "id,name");
+    url.searchParams.set("fields", "id,name,picture.type(large)");
     url.searchParams.set("access_token", input.pageAccessToken);
 
     let response: Response;
@@ -123,6 +136,7 @@ export class FacebookPageService {
         $set: {
           pageId: input.pageId,
           pageName: typeof metadata.name === "string" ? metadata.name : null,
+          avatarUrl: graphPictureUrl(body),
           encryptedPageAccessToken,
           status: "connected",
           lastValidatedAt: new Date(),

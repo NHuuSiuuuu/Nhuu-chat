@@ -36,4 +36,16 @@ describe("Facebook page connection model", () => {
     expect(connection.platform).toBe("facebook");
     expect(connection.status).toBe("connected");
   });
+
+  it("stores an optional nullable avatar URL for existing and new connections", async () => {
+    const connection = new FacebookPageConnectionModel({
+      userId: new mongoose.Types.ObjectId(),
+      pageId: "page-123",
+      encryptedPageAccessToken: "ciphertext",
+      avatarUrl: null
+    });
+
+    await expect(connection.validate()).resolves.toBeUndefined();
+    expect(FacebookPageConnectionModel.schema.path("avatarUrl").options.default).toBeNull();
+  });
 });

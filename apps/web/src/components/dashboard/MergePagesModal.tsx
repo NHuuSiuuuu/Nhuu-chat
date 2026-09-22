@@ -7,6 +7,7 @@ export interface MergePageOption {
   id: string;
   name: string;
   platform: "telegram" | "zalo" | "facebook";
+  identifier?: string | null;
   username?: string;
   avatarUrl?: string | null;
 }
@@ -14,7 +15,7 @@ export interface MergePageOption {
 export function filterMergePages(pages: MergePageOption[], query: string): MergePageOption[] {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) return pages;
-  return pages.filter((page) => `${page.name} ${page.username ?? ""} ${page.platform}`.toLowerCase().includes(normalizedQuery));
+  return pages.filter((page) => `${page.name} ${page.identifier ?? ""} ${page.username ?? ""} ${page.platform}`.toLowerCase().includes(normalizedQuery));
 }
 
 export function selectAllMergePages(pages: MergePageOption[], query: string, selectedIds: Set<string>): Set<string> {
@@ -49,10 +50,9 @@ export function MergePagesModal({ pages, selectedIds, searchQuery, onSearchChang
         <div className="grid gap-2">
           {visiblePages.map((page) => {
             const isSelected = selectedIds.has(page.id);
-            const avatarUrl = page.avatarUrl?.trim();
             return <button className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 ${isSelected ? "border-sky-300 bg-sky-50" : "border-slate-200 hover:border-sky-200 hover:bg-slate-50"}`} type="button" key={page.id} aria-pressed={isSelected} onClick={() => onTogglePage(page.id)}>
-              <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-gradient-to-br from-slate-700 to-slate-900 text-sm font-bold text-white">{avatarUrl ? <img className="size-full object-cover" src={avatarUrl} alt="" /> : page.name.slice(0, 1).toUpperCase()}</span>
-              <span className="min-w-0 flex-1"><strong className="block truncate text-sm text-slate-800">{page.name}</strong><small className="mt-1 flex items-center gap-1.5 truncate text-xs text-slate-500"><PlatformIcon provider={page.platform} size={14} />{page.username ? `@${page.username}` : page.platform === "facebook" ? "Facebook" : page.platform === "zalo" ? "Zalo" : "Telegram"}</small></span>
+              <MergePageAvatar page={page} />
+              <span className="min-w-0 flex-1"><strong className="block truncate text-sm text-slate-800">{page.name}</strong><small className="mt-1 flex items-center gap-1.5 truncate text-xs text-slate-500"><PlatformIcon provider={page.platform} size={14} />{page.identifier?.trim() || "Chưa có ID"}</small></span>
               <span className={`grid size-5 shrink-0 place-items-center rounded-full border ${isSelected ? "border-sky-600 bg-sky-600 text-white" : "border-slate-300 text-transparent"}`} aria-hidden="true"><InboxIcon name="check" size={13} /></span>
             </button>;
           })}
@@ -65,4 +65,13 @@ export function MergePagesModal({ pages, selectedIds, searchQuery, onSearchChang
       </footer>
     </section>
   </div>;
+}
+
+// Giữ chữ cái đầu khi avatar không có hoặc ảnh không tải được.
+function MergePageAvatar({ page }: { page: MergePageOption }) {
+  const avatarUrl = page.avatarUrl?.trim();
+  const [avatarFailed, setAvatarFailed] = React.useState(false);
+  React.useEffect(() => setAvatarFailed(false), [avatarUrl]);
+
+  return <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-gradient-to-br from-slate-700 to-slate-900 text-sm font-bold text-white">{avatarUrl && !avatarFailed ? <img className="size-full object-cover" src={avatarUrl} alt={`Avatar ${page.name}`} referrerPolicy="no-referrer" onError={() => setAvatarFailed(true)} /> : page.name.slice(0, 1).toUpperCase()}</span>;
 }

@@ -30,13 +30,27 @@ describe("dashboard connected accounts", () => {
     expect(buildDashboardAccounts(
       { connected: false, displayName: null, username: null },
       { id: "zalo-session-1", status: "disconnected" },
-      { id: "connection-1", pageId: "page-42", pageName: "Nhuu Page", status: "connected" }
+      { id: "connection-1", pageId: "page-42", pageName: "Nhuu Page", avatarUrl: "https://cdn.example/facebook.jpg", status: "connected" }
     )).toContainEqual({
       id: "facebook:page-42",
       platform: "facebook",
       pageId: "page-42",
-      name: "Nhuu Page"
+      name: "Nhuu Page",
+      identifier: "page-42",
+      avatarUrl: "https://cdn.example/facebook.jpg"
     });
+  });
+
+  it("maps each connected channel to its platform identifier instead of its username", () => {
+    expect(buildDashboardAccounts(
+      { connected: true, telegramUserId: "telegram-42", displayName: "Telegram cá nhân", username: "wrong-username" },
+      { id: "zalo-session-1", zaloUserId: "zalo-84", status: "connected", displayName: "Zalo cá nhân", username: "wrong-username" },
+      { id: "connection-1", pageId: "facebook-21", pageName: "Nhuu Page", status: "connected" }
+    )).toMatchObject([
+      { platform: "telegram", identifier: "telegram-42" },
+      { platform: "zalo", identifier: "zalo-84" },
+      { platform: "facebook", identifier: "facebook-21" }
+    ]);
   });
 
   it("opens the selected platform or all platforms only for merge view", () => {
@@ -177,6 +191,22 @@ describe("dashboard connected accounts", () => {
     expect(source).toContain("avatarUrl?: string | null");
     expect(source).toContain("account.avatarUrl");
     expect(source).toContain("object-cover");
+  });
+
+  it("renders safe avatar loading and preserves initials when the image fails", () => {
+    const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('referrerPolicy="no-referrer"');
+    expect(source).toContain("onError={() => setAvatarFailed(true)}");
+    expect(source).toContain("avatarUrl && !avatarFailed");
+    expect(source).toContain("account.name.slice(0, 1).toUpperCase()");
+  });
+
+  it("uses the normalized identifier as the card secondary text", () => {
+    const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("account.identifier");
+    expect(source).not.toContain('account.platform === "facebook" ? `${platformLabelForPage(account)} Page`');
   });
 
   it("provides a compact mobile platform filter menu while keeping the desktop filter bar", () => {

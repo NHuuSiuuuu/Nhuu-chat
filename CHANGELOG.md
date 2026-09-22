@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Đồng bộ ID thật trên card kênh, lưu avatar Facebook từ Graph API và bổ sung fallback avatar an toàn.
 - Cập nhật tiêu đề tab trình duyệt theo route và thay favicon mặc định bằng logo NhuuChat.
 - Bổ sung Facebook Page vào Gộp trang và menu làm mới/ngắt kết nối trên card Dashboard.
 - Hiển thị Facebook Page đã kết nối trên Dashboard, bổ sung bộ lọc Facebook và giữ đúng Page ID khi mở Inbox.

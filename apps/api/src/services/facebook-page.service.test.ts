@@ -9,6 +9,7 @@ function record(overrides: Record<string, unknown> = {}) {
     userId: "user-1",
     pageId: "page-123",
     pageName: "Nhuu Store",
+    avatarUrl: "https://cdn.example/avatar.jpg",
     encryptedPageAccessToken: "ciphertext:token",
     status: "connected",
     lastValidatedAt: new Date("2026-09-21T10:00:00.000Z"),
@@ -19,7 +20,11 @@ function record(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function dependencies(fetchResponse: unknown = { id: "page-123", name: "Nhuu Store" }) {
+function dependencies(fetchResponse: unknown = {
+  id: "page-123",
+  name: "Nhuu Store",
+  picture: { data: { url: "https://cdn.example/avatar.jpg" } }
+}) {
   const model = {
     findOne: vi.fn(),
     findOneAndUpdate: vi.fn(),
@@ -46,14 +51,19 @@ describe("FacebookPageService", () => {
     const result = await service.connect("user-1", { pageId: "page-123", pageAccessToken: "secret-token" });
 
     expect(fetchGraph).toHaveBeenCalledWith(
-      "https://graph.facebook.com/v26.0/page-123?fields=id%2Cname&access_token=secret-token",
+      "https://graph.facebook.com/v26.0/page-123?fields=id%2Cname%2Cpicture.type%28large%29&access_token=secret-token",
       expect.objectContaining({ method: "GET" })
     );
     expect(deps.encryptSecret).toHaveBeenCalledWith("secret-token");
     expect(model.findOneAndUpdate).toHaveBeenCalledWith(
       { userId: "user-1" },
       expect.objectContaining({
-        $set: expect.objectContaining({ pageId: "page-123", pageName: "Nhuu Store", status: "connected" }),
+        $set: expect.objectContaining({
+          pageId: "page-123",
+          pageName: "Nhuu Store",
+          avatarUrl: "https://cdn.example/avatar.jpg",
+          status: "connected"
+        }),
         $setOnInsert: { userId: "user-1", platform: "facebook" }
       }),
       expect.objectContaining({ upsert: true, new: true, setDefaultsOnInsert: true })
@@ -61,7 +71,26 @@ describe("FacebookPageService", () => {
     expect(model.findOneAndUpdate.mock.calls[0]?.[1]).not.toContain("secret-token");
     expect(result).not.toHaveProperty("pageAccessToken");
     expect(result).not.toHaveProperty("encryptedPageAccessToken");
-    expect(result).toMatchObject({ id: "connection-1", pageId: "page-123", pageName: "Nhuu Store", status: "connected" });
+    expect(result).toMatchObject({
+      id: "connection-1",
+      pageId: "page-123",
+      pageName: "Nhuu Store",
+      avatarUrl: "https://cdn.example/avatar.jpg",
+      status: "connected"
+    });
+  });
+
+  it("safely persists a null avatar when Graph returns an incomplete picture payload", async () => {
+    const { deps, model } = dependencies({ id: "page-123", name: "Nhuu Store", picture: { data: {} } });
+    model.findOneAndUpdate.mockResolvedValue(record({ avatarUrl: null }));
+    const service = new FacebookPageService(deps);
+
+    const result = await service.connect("user-1", { pageId: "page-123", pageAccessToken: "secret-token" });
+
+    expect(model.findOneAndUpdate.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      $set: expect.objectContaining({ avatarUrl: null })
+    }));
+    expect(result.avatarUrl).toBeNull();
   });
 
   it("uses the configured Graph API version when no service override is supplied", async () => {
