@@ -407,7 +407,7 @@ function ChatbotAutomationSettingsLegacy({ token, refresh }: { token: string; re
   </div>;
 }
 
-function ChatbotAutomationSettings({ token, refresh }: { token: string; refresh?: () => Promise<string | null> }) {
+function ChatbotAutomationSettings({ token, refresh, ownerKey }: { token: string; refresh?: () => Promise<string | null>; ownerKey?: string }) {
   const [assistants, setAssistants] = useState<ChatbotAssistant[]>([]);
   const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");

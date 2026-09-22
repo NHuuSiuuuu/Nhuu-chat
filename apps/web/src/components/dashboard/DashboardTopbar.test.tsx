@@ -24,9 +24,7 @@ describe("DashboardTopbar", () => {
     expect(source).toContain("onLogoClick");
     expect(source).toContain("onNavigate");
     expect(source).toContain("onNavigate?.(item)");
-    expect(source).toContain('"Đơn hàng": "/orders"');
-    expect(source).toContain('"Bài viết": "/posts"');
-    expect(source).toContain('"Thống kê": "/analytics"');
+    expect(source).toContain("dashboardNavItems");
   });
 
   it("renders an avatar-triggered account dropdown", () => {
@@ -49,5 +47,14 @@ describe("DashboardTopbar", () => {
     expect(source).toContain("-translate-x-full");
     expect(source).toContain("Đóng menu điều hướng");
     expect(source).toContain("max-[767px]:hidden");
+  });
+
+  it("renders nested settings items without navigating from the parent", () => {
+    const source = readFileSync(new URL("./DashboardTopbar.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("nestedSettingsSubmenuItems");
+    expect(source).toContain("isMobileSettingsOpen");
+    expect(source).toContain("isMobileNestedSettingsOpen");
+    expect(source).toContain("navigateSettingsFromMobile(settingsItem)");
   });
 });
