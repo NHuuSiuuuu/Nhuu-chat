@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Scale Up Landing Page theo responsive: tăng typography, CTA, icon, mockup, spacing và khoảng cách grid trên desktop, giữ kích thước vừa phải trên mobile.
 - Giảm độ dày typography trên Landing Page, đồng bộ các tiêu đề, nhãn và nút theo trọng lượng chữ nhẹ hơn.
 - Sửa URL logo Zalo trong card Kênh tích hợp để không còn lỗi 404.
 - Thay icon outline trong card Kênh tích hợp bằng logo thương hiệu thật qua `logoUrl`, bổ sung SVG quả địa cầu cho Website Webchat.

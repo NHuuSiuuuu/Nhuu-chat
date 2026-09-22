@@ -89,6 +89,19 @@ describe("LandingPage", () => {
     expect(source).not.toContain("font-bold");
   });
 
+  it("uses the expanded desktop scale while keeping responsive base sizes", () => {
+    const source = readFileSync(new URL("./LandingPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("text-5xl font-semibold leading-[1.08]");
+    expect(source).toContain("md:text-7xl");
+    expect(source).toContain("text-4xl font-semibold tracking-tight md:text-5xl");
+    expect(source).toContain("h-16 w-16");
+    expect(source).toContain("text-xl font-semibold text-slate-800");
+    expect(source).toContain("text-lg font-normal leading-8");
+    expect(source).toContain("max-w-6xl");
+    expect(source).toContain("gap-8");
+  });
+
   it("calls login and register callbacks from the public header", () => {
     const onLogin = vi.fn();
     const onRegister = vi.fn();
