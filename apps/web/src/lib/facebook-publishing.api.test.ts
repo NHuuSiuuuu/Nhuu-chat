@@ -40,14 +40,15 @@ describe("Facebook publishing API", () => {
   });
 
   it("refreshes the cookie session once before retrying a 401 request", async () => {
+    const controller = new AbortController();
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "AUTHENTICATION_REQUIRED" } }), { status: 401 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: "connection-1", pageId: "page-1", status: "connected" }), { status: 200 }));
 
-    await expect(getFacebookPageConnection("/api")).resolves.toMatchObject({ id: "connection-1" });
+    await expect(getFacebookPageConnection("/api", controller.signal)).resolves.toMatchObject({ id: "connection-1" });
     expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/api/v1/auth/refresh");
-    expect(fetchMock.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ method: "POST", credentials: "include" }));
+    expect(fetchMock.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ method: "POST", credentials: "include", signal: controller.signal }));
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 

@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Hiển thị Facebook Page đã kết nối trên Dashboard, bổ sung bộ lọc Facebook và giữ đúng Page ID khi mở Inbox.
 - Cập nhật trang Giới thiệu: bổ sung đăng bài Facebook vào các điểm nổi bật của Tổng quan và thêm tab hướng dẫn `Đăng bài`.
 - Sửa avatar trong từng dòng tin nhắn của khách hàng dùng đúng `customerAvatarUrl` như avatar ở Header khung chat, tránh hiển thị fallback chữ cái khi ảnh vẫn có sẵn.
 - Cập nhật modal kết nối Facebook: dùng icon SVG thương hiệu, bổ sung nút và biểu mẫu kết nối thủ công bằng Page ID + Page Access Token, giữ nguyên luồng OAuth hiện có.

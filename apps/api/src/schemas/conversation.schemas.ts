@@ -14,6 +14,7 @@ export const conversationListQuerySchema = z.object({
   page: optionalPositiveInteger,
   limit: optionalPositiveInteger,
   platform: optionalScalarString,
+  channelId: optionalScalarString,
   status: optionalScalarString
 });
 

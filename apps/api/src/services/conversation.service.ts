@@ -19,12 +19,14 @@ export async function listConversations(query: {
   page?: string;
   limit?: string;
   platform?: string;
+  channelId?: string;
   status?: string;
 }, auth?: AuthUser) {
   const page = parsePositiveInt(query.page, 1);
   const limit = Math.min(100, parsePositiveInt(query.limit, 20));
   const filter: Record<string, unknown> = {};
   if (query.platform) filter.platform = query.platform;
+  if (query.channelId) filter.channelId = query.channelId;
   if (query.status) filter.status = query.status;
   if (auth) Object.assign(filter, conversationAccessFilter(auth));
   const [rows, total] = await Promise.all([

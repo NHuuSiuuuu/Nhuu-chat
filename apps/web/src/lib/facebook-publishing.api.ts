@@ -55,7 +55,8 @@ async function request<T>(path: string, init: RequestInit = {}, options: Request
     const refreshResponse = await fetch(endpoint(options.baseUrl ?? API_BASE_URL, "/api/v1/auth/refresh"), {
       method: "POST",
       credentials: "include",
-      cache: "no-store"
+      cache: "no-store",
+      signal: options.signal
     });
     if (refreshResponse.ok) return request<T>(path, init, options, false);
   }

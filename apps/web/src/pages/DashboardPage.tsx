@@ -1,7 +1,9 @@
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { FacebookPageConnectionResponse } from "@nhuu-chat/contracts";
 
 import { apiRequest } from "../lib/api.js";
+import { FacebookPublishingApiError, getFacebookPageConnection } from "../lib/facebook-publishing.api.js";
 import { ConnectModal } from "../components/dashboard/ConnectModal.js";
 import { DashboardTopbar, type DashboardAccount } from "../components/dashboard/DashboardTopbar.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
@@ -10,45 +12,87 @@ import { PlatformIcon } from "../components/dashboard/PlatformIcon.js";
 
 interface TelegramStatus { connected: boolean; displayName: string | null; username: string | null; avatarUrl?: string | null; }
 interface ZaloStatus { id: string; status: "disconnected" | "waiting_qr" | "connected" | "expired" | "error"; displayName?: string; username?: string; avatarUrl?: string | null; }
+type FacebookStatus = Pick<FacebookPageConnectionResponse, "id" | "pageId" | "pageName" | "status">;
+type FacebookDashboardLoadResult = { connection: FacebookPageConnectionResponse | null; error: string | null };
 
-export interface DashboardConnectedAccount { id: "telegram_personal" | "zalo_personal"; platform: "telegram" | "zalo"; name: string; username?: string; avatarUrl?: string | null; status?: "error"; }
+const FACEBOOK_DASHBOARD_TIMEOUT_MS = 10_000;
+const FACEBOOK_DASHBOARD_ERROR = "Không thể kiểm tra kết nối Facebook. Vui lòng thử lại.";
 
-export function buildDashboardAccounts(telegram: TelegramStatus, zalo: ZaloStatus): DashboardConnectedAccount[] {
+// Giới hạn thời gian kiểm tra Facebook và phân biệt chưa kết nối với lỗi dịch vụ.
+export async function loadFacebookDashboardStatus(
+  fetchConnection: (signal: AbortSignal) => Promise<FacebookPageConnectionResponse> = (signal) => getFacebookPageConnection(undefined, signal),
+  timeoutMs = FACEBOOK_DASHBOARD_TIMEOUT_MS
+): Promise<FacebookDashboardLoadResult> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return { connection: await fetchConnection(controller.signal), error: null };
+  } catch (error) {
+    if (error instanceof FacebookPublishingApiError && (error.status === 404 || error.code === "FACEBOOK_PAGE_NOT_CONNECTED")) {
+      return { connection: null, error: null };
+    }
+    return { connection: null, error: FACEBOOK_DASHBOARD_ERROR };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// ID Facebook có dạng facebook:pageId để giữ đúng Page khi điều hướng sang Inbox.
+export interface DashboardConnectedAccount { id: "telegram_personal" | "zalo_personal" | `facebook:${string}`; platform: "telegram" | "zalo" | "facebook"; pageId?: string; name: string; username?: string; avatarUrl?: string | null; status?: "error"; }
+
+export function buildDashboardAccounts(telegram: TelegramStatus, zalo: ZaloStatus, facebook?: FacebookStatus | null): DashboardConnectedAccount[] {
   const accounts: DashboardConnectedAccount[] = [];
   if (telegram.connected) accounts.push({ id: "telegram_personal", platform: "telegram", name: telegram.displayName ?? "Telegram cá nhân", ...(telegram.username ? { username: telegram.username } : {}), ...(telegram.avatarUrl ? { avatarUrl: telegram.avatarUrl } : {}) });
   if (zalo.status === "connected" || (zalo.status === "error" && zalo.displayName)) {
     accounts.push({ id: "zalo_personal", platform: "zalo", name: zalo.displayName ?? "Zalo cá nhân", ...(zalo.username ? { username: zalo.username } : {}), ...(zalo.avatarUrl ? { avatarUrl: zalo.avatarUrl } : {}), ...(zalo.status === "error" ? { status: "error" as const } : {}) });
   }
+  if (facebook?.status === "connected") {
+    accounts.push({ id: `facebook:${facebook.pageId}`, platform: "facebook", pageId: facebook.pageId, name: facebook.pageName?.trim() || "Facebook Page" });
+  }
   return accounts;
 }
 
 export function conversationPathForPlatform(platform?: DashboardConnectedAccount["id"]): string {
+  if (platform?.startsWith("facebook:")) {
+    const pageId = platform.slice("facebook:".length);
+    if (pageId) return `/inbox?platform=facebook&channelId=${encodeURIComponent(pageId)}`;
+  }
   return "/inbox";
 }
 
 export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavigate, user, onLogout, onProfile }: { token: string; refresh?: () => Promise<string | null>; onOpenInbox: (platform?: DashboardConnectedAccount["id"]) => void; onLogoClick?: () => void; onNavigate?: (item: "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void; user?: DashboardAccount | null; onLogout?: () => void; onProfile?: () => void }) {
   const [telegramStatus, setTelegramStatus] = useState<TelegramStatus | null>(null);
   const [zaloStatus, setZaloStatus] = useState<ZaloStatus | null>(null);
+  const [facebookStatus, setFacebookStatus] = useState<FacebookPageConnectionResponse | null>();
+  const [facebookError, setFacebookError] = useState<string | null>(null);
   const [showConnect, setShowConnect] = useState(() => new URLSearchParams(window.location.search).get("facebook_oauth") !== null);
-  const [connectionProvider, setConnectionProvider] = useState<"telegram" | "zalo" | undefined>();
+  const [connectionProvider, setConnectionProvider] = useState<DashboardConnectedAccount["platform"] | undefined>();
   const [accountToDeactivate, setAccountToDeactivate] = useState<DashboardConnectedAccount | null>(null);
   const [isDeactivating, setIsDeactivating] = useState(false);
   const [deactivateError, setDeactivateError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "zalo" | "telegram">("all");
+  const [filter, setFilter] = useState<"all" | "zalo" | "telegram" | "facebook">("all");
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   const [showMergePages, setShowMergePages] = useState(false);
   const [mergeSearch, setMergeSearch] = useState("");
   const [selectedMergePageIds, setSelectedMergePageIds] = useState<Set<string>>(new Set());
   const [isReloading, setIsReloading] = useState(false);
+  const loadFacebookStatus = useCallback(async () => {
+    setFacebookStatus(undefined);
+    setFacebookError(null);
+    const result = await loadFacebookDashboardStatus();
+    setFacebookStatus(result.connection);
+    setFacebookError(result.error);
+  }, []);
   const loadStatus = useCallback(async () => {
+    void loadFacebookStatus();
     const [telegram, zalo] = await Promise.all([
       apiRequest<TelegramStatus>("", "/api/v1/channels/telegram-personal/status", token, {}, refresh).catch(() => ({ connected: false, displayName: null, username: null })),
       apiRequest<ZaloStatus>("", "/api/v1/channels/zalo-personal/status", token, {}, refresh).catch(() => ({ id: "zalo", status: "disconnected" as const }))
     ]);
     setTelegramStatus(telegram);
     setZaloStatus(zalo);
-  }, [refresh, token]);
+  }, [loadFacebookStatus, refresh, token]);
   useEffect(() => { void loadStatus(); }, [loadStatus]);
   const reloadStatus = async () => {
     setIsReloading(true);
@@ -59,13 +103,14 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
     }
   };
 
-  const accounts = useMemo(() => buildDashboardAccounts(telegramStatus ?? { connected: false, displayName: null, username: null }, zaloStatus ?? { id: "zalo", status: "disconnected" }), [telegramStatus, zaloStatus]);
+  const accounts = useMemo(() => buildDashboardAccounts(telegramStatus ?? { connected: false, displayName: null, username: null }, zaloStatus ?? { id: "zalo", status: "disconnected" }, facebookStatus), [telegramStatus, zaloStatus, facebookStatus]);
+  const mergeAccounts = accounts.filter((account): account is DashboardConnectedAccount & { platform: "telegram" | "zalo" } => account.platform !== "facebook");
   const visibleAccounts = accounts.filter((account) => {
     if (filter !== "all" && account.platform !== filter) return false;
     return !search || `${account.name} ${account.username ?? ""} ${account.platform}`.toLowerCase().includes(search.toLowerCase());
   });
-  const activeFilterLabel = filter === "all" ? "Tất cả nền tảng" : filter === "zalo" ? "Zalo" : "Telegram";
-  const selectFilter = (nextFilter: "all" | "zalo" | "telegram") => { setFilter(nextFilter); setIsFilterMenuOpen(false); };
+  const activeFilterLabel = filter === "all" ? "Tất cả nền tảng" : filter === "zalo" ? "Zalo" : filter === "telegram" ? "Telegram" : "Facebook";
+  const selectFilter = (nextFilter: "all" | "zalo" | "telegram" | "facebook") => { setFilter(nextFilter); setIsFilterMenuOpen(false); };
   const openModal = () => { setConnectionProvider(undefined); setShowConnect(true); };
   const openRefreshModal = (account: DashboardConnectedAccount) => { setConnectionProvider(account.platform); setShowConnect(true); };
   const openMergeModal = () => { setMergeSearch(""); setSelectedMergePageIds(new Set()); setShowMergePages(true); };
@@ -74,7 +119,7 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
     if (next.has(pageId)) next.delete(pageId); else next.add(pageId);
     return next;
   });
-  const selectAllMergePagesFromSearch = () => setSelectedMergePageIds((current) => selectAllMergePages(accounts, mergeSearch, current));
+  const selectAllMergePagesFromSearch = () => setSelectedMergePageIds((current) => selectAllMergePages(mergeAccounts, mergeSearch, current));
   const mergeSelectedPages = () => { setShowMergePages(false); onOpenInbox(); };
   const openDeactivateModal = (account: DashboardConnectedAccount) => { setDeactivateError(null); setAccountToDeactivate(account); };
   const closeDeactivateModal = () => { if (!isDeactivating) setAccountToDeactivate(null); };
@@ -105,22 +150,22 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
       </header>
       <div className="relative mb-2 min-[701px]:hidden">
          <button className="flex w-full items-center justify-between rounded-[12px] border border-[#e7ebf1] bg-white px-4 py-3 text-left text-[13px] font-semibold text-[#354258] shadow-sm focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" aria-label={isFilterMenuOpen ? "Đóng bộ lọc nền tảng" : "Mở bộ lọc nền tảng"} aria-expanded={isFilterMenuOpen} onClick={() => setIsFilterMenuOpen((current) => !current)}><span className="flex items-center gap-2"><PlatformIcon provider={filter} />{activeFilterLabel}<b className="inline-grid min-w-[21px] place-items-center rounded-full bg-[#e7edf4] px-1.5 py-0.5 text-[11px] text-[#7f8b9b]">{filter === "all" ? accounts.length : accounts.filter((account) => account.platform === filter).length}</b></span><InboxIcon name={isFilterMenuOpen ? "chevron-up" : "chevron-down"} size={17} /></button>
-        {isFilterMenuOpen && <div className="absolute inset-x-0 top-full z-30 mt-1 grid gap-1 rounded-[12px] border border-[#e7ebf1] bg-white p-2 shadow-lg" role="listbox" aria-label="Danh sách nền tảng"><MobileFilterOption active={filter === "all"} onClick={() => selectFilter("all")} provider="all" label="Tất cả nền tảng" count={accounts.length} /><MobileFilterOption active={filter === "zalo"} onClick={() => selectFilter("zalo")} provider="zalo" label="Zalo" count={accounts.filter((account) => account.platform === "zalo").length} /><MobileFilterOption active={filter === "telegram"} onClick={() => selectFilter("telegram")} provider="telegram" label="Telegram" count={accounts.filter((account) => account.platform === "telegram").length} /></div>}
-      </div>
-      <nav className="mb-2 hidden items-center gap-1 overflow-auto rounded-[12px] border border-[#e7ebf1] bg-white px-[14px] py-[9px] min-[701px]:flex" aria-label="Lọc nền tảng"><FilterButton active={filter === "all"} onClick={() => selectFilter("all")} provider="all" label="Tất cả" count={accounts.length} /><FilterButton active={filter === "zalo"} onClick={() => selectFilter("zalo")} provider="zalo" label="Zalo" count={accounts.filter((account) => account.platform === "zalo").length} /><FilterButton active={filter === "telegram"} onClick={() => selectFilter("telegram")} provider="telegram" label="Telegram" count={accounts.filter((account) => account.platform === "telegram").length} /></nav>
-      <section className="min-h-[330px] rounded-[14px] border border-[#e8edf3] bg-white p-5" aria-label="Tài khoản đã kết nối">{(!telegramStatus || !zaloStatus) ? <div className="py-20 text-center text-[13px] text-[#8591a1]">Đang kiểm tra kết nối...</div> : visibleAccounts.length > 0 ? <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">{visibleAccounts.map((account) => <ConnectedAccountCard account={account} key={account.id} onOpen={() => onOpenInbox(account.id)} onRefresh={() => openRefreshModal(account)} onDeactivate={() => openDeactivateModal(account)} />)}</div> : <div className="grid justify-items-center px-5 pb-20 pt-[100px] text-center"><div className="mb-[18px] grid h-[58px] w-[58px] place-items-center rounded-full bg-[#e9f6fc] text-[30px] text-[#22a8df]">＋</div><h3 className="mb-2 text-base">Chưa có tài khoản kết nối</h3><p className="text-[13px] text-[#8390a1]">Kết nối Zalo hoặc Telegram để bắt đầu nhận và trả lời tin nhắn.</p><button className="mt-5 cursor-pointer rounded-lg border-0 bg-[#2aa9e7] px-4 py-[10px] text-[12px] font-bold text-white focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" onClick={openModal}>Kết nối tài khoản</button></div>}</section>
+         {isFilterMenuOpen && <div className="absolute inset-x-0 top-full z-30 mt-1 grid gap-1 rounded-[12px] border border-[#e7ebf1] bg-white p-2 shadow-lg" role="listbox" aria-label="Danh sách nền tảng"><MobileFilterOption active={filter === "all"} onClick={() => selectFilter("all")} provider="all" label="Tất cả nền tảng" count={accounts.length} /><MobileFilterOption active={filter === "zalo"} onClick={() => selectFilter("zalo")} provider="zalo" label="Zalo" count={accounts.filter((account) => account.platform === "zalo").length} /><MobileFilterOption active={filter === "telegram"} onClick={() => selectFilter("telegram")} provider="telegram" label="Telegram" count={accounts.filter((account) => account.platform === "telegram").length} /><MobileFilterOption active={filter === "facebook"} onClick={() => selectFilter("facebook")} provider="facebook" label="Facebook" count={accounts.filter((account) => account.platform === "facebook").length} /></div>}
+       </div>
+      <nav className="mb-2 hidden items-center gap-1 overflow-auto rounded-[12px] border border-[#e7ebf1] bg-white px-[14px] py-[9px] min-[701px]:flex" aria-label="Lọc nền tảng"><FilterButton active={filter === "all"} onClick={() => selectFilter("all")} provider="all" label="Tất cả" count={accounts.length} /><FilterButton active={filter === "zalo"} onClick={() => selectFilter("zalo")} provider="zalo" label="Zalo" count={accounts.filter((account) => account.platform === "zalo").length} /><FilterButton active={filter === "telegram"} onClick={() => selectFilter("telegram")} provider="telegram" label="Telegram" count={accounts.filter((account) => account.platform === "telegram").length} /><FilterButton active={filter === "facebook"} onClick={() => selectFilter("facebook")} provider="facebook" label="Facebook" count={accounts.filter((account) => account.platform === "facebook").length} /></nav>
+      <section className="min-h-[330px] rounded-[14px] border border-[#e8edf3] bg-white p-5" aria-label="Tài khoản đã kết nối">{(!telegramStatus || !zaloStatus) ? <div className="py-20 text-center text-[13px] text-[#8591a1]">Đang kiểm tra kết nối...</div> : <>{facebookStatus === undefined && <p className="mb-4 rounded-lg bg-blue-50 px-4 py-3 text-[13px] text-blue-700" role="status">Đang kiểm tra kết nối Facebook...</p>}{facebookError && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-red-50 px-4 py-3 text-[13px] text-red-700" role="alert"><span>{facebookError}</span><button className="rounded-lg border border-red-200 bg-white px-3 py-1.5 font-semibold hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-red-400 focus-visible:outline-offset-2" type="button" onClick={() => void loadFacebookStatus()}>Thử lại Facebook</button></div>}{visibleAccounts.length > 0 ? <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">{visibleAccounts.map((account) => <ConnectedAccountCard account={account} key={account.id} onOpen={() => onOpenInbox(account.id)} onRefresh={() => openRefreshModal(account)} onDeactivate={() => openDeactivateModal(account)} />)}</div> : facebookStatus !== undefined && !facebookError ? <div className="grid justify-items-center px-5 pb-20 pt-[100px] text-center"><div className="mb-[18px] grid h-[58px] w-[58px] place-items-center rounded-full bg-[#e9f6fc] text-[30px] text-[#22a8df]">＋</div><h3 className="mb-2 text-base">Chưa có tài khoản kết nối</h3><p className="text-[13px] text-[#8390a1]">Kết nối Facebook, Zalo hoặc Telegram để quản lý các kênh tại một nơi.</p><button className="mt-5 cursor-pointer rounded-lg border-0 bg-[#2aa9e7] px-4 py-[10px] text-[12px] font-bold text-white focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" onClick={openModal}>Kết nối tài khoản</button></div> : null}</>}</section>
     </div>
     {showConnect && <ConnectModal token={token} refresh={refresh} initialProvider={connectionProvider} onClose={() => setShowConnect(false)} onConnected={() => { void loadStatus(); }} />}
-    {showMergePages && <MergePagesModal pages={accounts} selectedIds={selectedMergePageIds} searchQuery={mergeSearch} onSearchChange={setMergeSearch} onTogglePage={toggleMergePage} onSelectAll={selectAllMergePagesFromSearch} onClose={() => setShowMergePages(false)} onMerge={mergeSelectedPages} />}
+    {showMergePages && <MergePagesModal pages={mergeAccounts} selectedIds={selectedMergePageIds} searchQuery={mergeSearch} onSearchChange={setMergeSearch} onTogglePage={toggleMergePage} onSelectAll={selectAllMergePagesFromSearch} onClose={() => setShowMergePages(false)} onMerge={mergeSelectedPages} />}
     {accountToDeactivate && <DeactivateAccountModal account={accountToDeactivate} error={deactivateError} loading={isDeactivating} onCancel={closeDeactivateModal} onConfirm={() => void deactivateAccount()} />}
   </main>;
 }
 
-function FilterButton({ active, onClick, provider, label, count }: { active: boolean; onClick: () => void; provider: "all" | "zalo" | "telegram"; label: string; count: number }) { return <button className={`flex items-center rounded-lg border-0 px-[13px] py-2 text-[13px] text-[#748196] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2 ${active ? "bg-[#dff2fc] font-bold text-[#187ba9]" : "bg-transparent"}`} type="button" onClick={onClick}>
+ function FilterButton({ active, onClick, provider, label, count }: { active: boolean; onClick: () => void; provider: "all" | "zalo" | "telegram" | "facebook"; label: string; count: number }) { return <button className={`flex items-center rounded-lg border-0 px-[13px] py-2 text-[13px] text-[#748196] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2 ${active ? "bg-[#dff2fc] font-bold text-[#187ba9]" : "bg-transparent"}`} type="button" onClick={onClick}>
   <span className="mr-1 inline-grid h-8 w-8 shrink-0 place-items-center "><PlatformIcon provider={provider} /></span>
    {label} <b className={`ml-[5px] inline-grid h-[21px] min-w-[21px] place-items-center rounded-full text-[11px] ${active ? "bg-[#159fe0] text-white" : "bg-[#e7edf4] text-[#7f8b9b]"}`}>{count}</b></button>; }
 
-function MobileFilterOption({ active, onClick, provider, label, count }: { active: boolean; onClick: () => void; provider: "all" | "zalo" | "telegram"; label: string; count: number }) { return <button className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[13px] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2 ${active ? "bg-[#dff2fc] font-bold text-[#187ba9]" : "text-[#748196] hover:bg-[#f5f8fb]"}`} type="button" role="option" aria-selected={active} onClick={onClick}><PlatformIcon provider={provider} /><span className="flex-1">{label}</span><b className="inline-grid min-w-[21px] place-items-center rounded-full bg-[#e7edf4] px-1.5 py-0.5 text-[11px] text-[#7f8b9b]">{count}</b></button>; }
+ function MobileFilterOption({ active, onClick, provider, label, count }: { active: boolean; onClick: () => void; provider: "all" | "zalo" | "telegram" | "facebook"; label: string; count: number }) { return <button className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[13px] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2 ${active ? "bg-[#dff2fc] font-bold text-[#187ba9]" : "text-[#748196] hover:bg-[#f5f8fb]"}`} type="button" role="option" aria-selected={active} onClick={onClick}><PlatformIcon provider={provider} /><span className="flex-1">{label}</span><b className="inline-grid min-w-[21px] place-items-center rounded-full bg-[#e7edf4] px-1.5 py-0.5 text-[11px] text-[#7f8b9b]">{count}</b></button>; }
 
 function ConnectedAccountCard({ account, onOpen, onRefresh, onDeactivate }: { account: DashboardConnectedAccount; onOpen: () => void; onRefresh: () => void; onDeactivate: () => void }) {
   const needsReconnect = account.status === "error";
@@ -133,7 +178,7 @@ function ConnectedAccountCard({ account, onOpen, onRefresh, onDeactivate }: { ac
       <span className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-gradient-to-br from-[#26394f] to-[#111923] text-[21px] font-bold text-white">{avatarUrl && !avatarFailed ? <img className="size-full object-cover" src={avatarUrl} alt={`Avatar ${account.name}`} onError={() => setAvatarFailed(true)} /> : account.name.slice(0, 1).toUpperCase()}</span>
       <span className="grid min-w-0 gap-2 pt-0.5"><strong className="truncate text-[14px]">{account.name}</strong><small className="flex min-w-0 items-center gap-2 truncate text-[12px] text-[#7e8b9c]">
         <span className="inline-grid size-7 shrink-0 place-items-center "><PlatformIcon provider={account.platform} /></span>
-        <span className="truncate">{needsReconnect ? "Cần kết nối lại" : account.username ? `@${account.username}` : `${account.platform === "zalo" ? "Zalo" : "Telegram"} cá nhân`}</span></small></span>
+         <span className="truncate">{needsReconnect ? "Cần kết nối lại" : account.username ? `@${account.username}` : account.platform === "facebook" ? "Facebook Page" : `${account.platform === "zalo" ? "Zalo" : "Telegram"} cá nhân`}</span></small></span>
     </button>
     <span className={`absolute right-12 top-4 text-[19px] ${needsReconnect ? "text-[#e87927]" : "text-[#f3a51d]"}`} title={needsReconnect ? "Cần kết nối lại" : "Đang hoạt động"}>●</span>
     {(account.id === "zalo_personal" || account.id === "telegram_personal") && <div className="absolute right-2 top-2"><button className="grid size-9 place-items-center rounded-lg border-0 bg-transparent text-xl leading-none text-[#7e8b9c] hover:bg-[#f1f5f9] hover:text-[#354258] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" aria-label="Tùy chọn tài khoản" aria-expanded={isMenuOpen} aria-haspopup="menu" onClick={() => setIsMenuOpen((current) => !current)}>⋮</button>{isMenuOpen && <div className="absolute right-0 top-10 z-20 grid min-w-[180px] gap-1 rounded-xl border border-[#e3e8ef] bg-white p-1.5 shadow-lg" role="menu"><button className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[13px] text-[#354258] hover:bg-[#f1f5f9] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" role="menuitem" onClick={() => { setIsMenuOpen(false); onRefresh(); }}><InboxIcon name="refresh" size={16} />Làm mới kết nối</button><button className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[13px] text-[#354258] hover:bg-[#fff1f1] hover:text-[#c33d3d] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" role="menuitem" onClick={() => { setIsMenuOpen(false); onDeactivate(); }}>Ngắt kết nối</button></div>}</div>}

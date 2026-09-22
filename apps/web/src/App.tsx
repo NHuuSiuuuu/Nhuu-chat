@@ -21,7 +21,7 @@ interface AuthResponse {
 
 type AppPage = "dashboard" | "telegram" | "inbox" | "settings" | "profile" | "development";
 type RoutePage = AppPage | "posts";
-type InboxPlatform = "telegram_personal" | "zalo_personal" | undefined;
+type InboxPlatform = "telegram_personal" | "zalo_personal" | `facebook:${string}` | undefined;
 type HeaderNavItem = "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt";
 const INBOX_PLATFORM_STORAGE_KEY = "nhuu-chat.inbox-platform";
 
@@ -47,11 +47,17 @@ function pathForPage(page: RoutePage, developmentSection?: DevelopmentSection): 
 }
 
 function inboxPlatformFromLocation(): InboxPlatform {
-  const value = new URLSearchParams(window.location.search).get("platform");
+  const params = new URLSearchParams(window.location.search);
+  const value = params.get("platform");
   if (value === "telegram_personal" || value === "zalo_personal") return value;
+  const channelId = value === "facebook" ? params.get("channelId")?.trim() : undefined;
+  if (channelId) return `facebook:${channelId}`;
   try {
     const stored = window.sessionStorage.getItem(INBOX_PLATFORM_STORAGE_KEY);
-    return stored === "telegram_personal" || stored === "zalo_personal" ? stored : undefined;
+    if (stored === "telegram_personal" || stored === "zalo_personal") return stored;
+    return stored?.startsWith("facebook:") && stored.length > "facebook:".length
+      ? stored as `facebook:${string}`
+      : undefined;
   } catch {
     return undefined;
   }
@@ -156,6 +162,10 @@ export function App() {
   } else if (!canAccessInbox(auth.user.role)) {
     appContent = <main><h1>Nhuu Chat</h1><p>Tài khoản của anh đã đăng nhập nhưng chưa có quyền mở inbox. Hãy nhờ admin cấp role agent.</p><button onClick={() => { void fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).finally(() => { clearAuth(); setAuth(null); }); }}>Đăng xuất</button></main>;
   } else {
+    const inboxChannelId = inboxPlatform?.startsWith("facebook:")
+      ? inboxPlatform.slice("facebook:".length)
+      : undefined;
+    const inboxConversationPlatform = inboxChannelId ? "facebook" : inboxPlatform;
     const logout = () => { persistInboxPlatform(undefined); void fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).finally(() => { clearAuth(); setAuth(null); }); };
     const openProfile = () => navigate("profile");
     const navigateFromHeader = (item: HeaderNavItem) => {
@@ -165,7 +175,7 @@ export function App() {
       return navigate("development", undefined, item);
     };
     const topbarProps = { user: auth.user, onLogout: logout, onProfile: openProfile };
-    appContent = <ProtectedRoute token="cookie-session">{page === "dashboard" ? <DashboardPage {...topbarProps} token="" refresh={refresh} onOpenInbox={(platform) => navigate("inbox", platform)} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "telegram" ? <TelegramPersonalPage token="" refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage {...topbarProps} token="" refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "profile" ? <ProfilePage {...topbarProps} token="" onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "posts" ? <FacebookPublishingPage {...topbarProps} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "development" ? <DevelopmentPage {...topbarProps} section={developmentSection} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : <InboxPage {...topbarProps} token="" platform={inboxPlatform} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} />}</ProtectedRoute>;
+    appContent = <ProtectedRoute token="cookie-session">{page === "dashboard" ? <DashboardPage {...topbarProps} token="" refresh={refresh} onOpenInbox={(platform) => navigate("inbox", platform)} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "telegram" ? <TelegramPersonalPage token="" refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage {...topbarProps} token="" refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "profile" ? <ProfilePage {...topbarProps} token="" onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "posts" ? <FacebookPublishingPage {...topbarProps} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "development" ? <DevelopmentPage {...topbarProps} section={developmentSection} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : <InboxPage {...topbarProps} token="" platform={inboxConversationPlatform} channelId={inboxChannelId} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} />}</ProtectedRoute>;
   }
   return <><Suspense fallback={<PageSkeleton />}>{appContent}</Suspense>{showIntro && <NetflixIntro ready={introReady} onComplete={() => setShowIntro(false)} />}</>;
 }

@@ -66,8 +66,11 @@ export function setConversationDraft(drafts: Record<string, string>, conversatio
   return { ...drafts, [conversationId]: content };
 }
 
-export function buildConversationListRequestPath(platform?: string): string {
-  return platform ? `/api/v1/conversations?platform=${encodeURIComponent(platform)}` : "/api/v1/conversations";
+export function buildConversationListRequestPath(platform?: string, channelId?: string): string {
+  const query = new URLSearchParams();
+  if (platform) query.set("platform", platform);
+  if (channelId) query.set("channelId", channelId);
+  return query.size > 0 ? `/api/v1/conversations?${query.toString()}` : "/api/v1/conversations";
 }
 
 export function createOptimisticMessage(conversation: ConversationContract, payload: ComposerSendPayload, clientMessageId: string, createdAt = new Date().toISOString(), attachmentUrl?: string): ChatMessageContract {
@@ -114,7 +117,7 @@ export async function loadInboxQuickReplies(request: () => Promise<{ quickReplie
 type InboxAccount = DashboardAccount & { id?: string };
 type RetryPayloadEntry = { conversationId: string; payload: ComposerSendPayload; previewUrl?: string };
 
-export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNavigate, user, onLogout, onProfile }: { token: string; refresh?: () => Promise<string | null>; platform?: string; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void; user?: InboxAccount | null; onLogout?: () => void; onProfile?: () => void }) {
+export function InboxPage({ token, refresh, platform, channelId, onBack, onLogoClick, onNavigate, user, onLogout, onProfile }: { token: string; refresh?: () => Promise<string | null>; platform?: string; channelId?: string; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void; user?: InboxAccount | null; onLogout?: () => void; onProfile?: () => void }) {
   const [conversations, setConversations] = useState<ConversationContract[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageContract[]>([]);
@@ -231,7 +234,7 @@ export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNav
   useEffect(() => {
     let cancelled = false;
     setIsConversationListLoading(true);
-    void apiRequest<{ conversations: ConversationContract[] }>(API_URL, buildConversationListRequestPath(platform), token, {}, refresh).then((result) => {
+    void apiRequest<{ conversations: ConversationContract[] }>(API_URL, buildConversationListRequestPath(platform, channelId), token, {}, refresh).then((result) => {
       if (cancelled) return;
       setConversations((current) => {
         const currentById = new Map(current.map((item) => [item.id, item]));
@@ -241,7 +244,7 @@ export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNav
           return latest && hasNewerLocalState ? { ...item, ...latest } : item;
         });
         const resultIds = new Set(result.conversations.map((item) => item.id));
-        next.push(...current.filter((item) => !resultIds.has(item.id)));
+        next.push(...current.filter((item) => !resultIds.has(item.id) && (!channelId || (item.platform === platform && item.channelId === channelId))));
         conversationsRef.current = next;
         return next;
       });
@@ -251,7 +254,7 @@ export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNav
       if (!cancelled) setIsConversationListLoading(false);
     });
     return () => { cancelled = true; };
-  }, [platform, token, refresh]);
+  }, [platform, channelId, token, refresh]);
   useEffect(() => {
     let cancelled = false;
     void apiRequest<{ tags: ConversationTagContract[] }>(API_URL, CONVERSATION_TAGS_API_URL, token, {}, refresh)
@@ -328,6 +331,7 @@ export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNav
       setIsCustomerTyping(payload.isTyping === true);
     });
     socket.on(chatEvents.conversationUpdated, (conversation: ConversationContract) => {
+      if (channelId && (conversation.platform !== platform || conversation.channelId !== channelId)) return;
       const revision = (conversationRevisionRef.current.get(conversation.id) ?? 0) + 1;
       conversationRevisionRef.current.set(conversation.id, revision);
       const readState = readStateRef.current.get(conversation.id);
@@ -341,7 +345,7 @@ export function InboxPage({ token, refresh, platform, onBack, onLogoClick, onNav
     });
     joinActiveRoom();
     return () => { socket.off("connect", joinActiveRoom); socket.off(chatEvents.messagePinUpdated, handleMessagePinUpdated); socket.disconnect(); };
-  }, [token, activeId, aiSettingsLoaded, aiSettings.suggestionMode, aiSuggestionsEnabled]);
+  }, [token, platform, channelId, activeId, aiSettingsLoaded, aiSettings.suggestionMode, aiSuggestionsEnabled]);
   function selectConversation(id: string) { setActiveId(id); setReadRequestKey((current) => current + 1); setIsConversationListOpen(false); }
   async function updateConversationTags(id: string, tags: ConversationTagContract[]) {
     const previous = conversationsRef.current.find((item) => item.id === id)?.tags ?? [];
