@@ -31,7 +31,7 @@ describe("LandingPage", () => {
     expect(source.findByProps({ id: "bang-gia" })).toBeTruthy();
     expect(source.findByProps({ id: "faq" })).toBeTruthy();
     expect(rendered).toContain("Câu hỏi thường gặp");
-    expect(rendered).toContain("Hchat Inbox");
+    expect(rendered).toContain("Hộp thư");
     expect(rendered).toContain("Bắt đầu dùng thử");
   });
 
