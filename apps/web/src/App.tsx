@@ -46,6 +46,19 @@ function pathForPage(page: RoutePage, developmentSection?: DevelopmentSection): 
   return "/dashboard";
 }
 
+export function getRouteTitle(route: string): string {
+  const titles: Record<RoutePage, string> = {
+    dashboard: "Bảng điều khiển - NhuuChat",
+    inbox: "Hộp thư - NhuuChat",
+    settings: "Cài đặt - NhuuChat",
+    posts: "Bài viết - NhuuChat",
+    profile: "Hồ sơ - NhuuChat",
+    telegram: "Telegram - NhuuChat",
+    development: "Đang phát triển - NhuuChat"
+  };
+  return titles[route as RoutePage] ?? titles.dashboard;
+}
+
 function inboxPlatformFromLocation(): InboxPlatform {
   const params = new URLSearchParams(window.location.search);
   const value = params.get("platform");
@@ -113,6 +126,9 @@ export function App() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+  useEffect(() => {
+    document.title = getRouteTitle(page);
+  }, [page]);
   useEffect(() => {
     let cancelled = false;
     void preloadIntroDependencies().finally(() => {

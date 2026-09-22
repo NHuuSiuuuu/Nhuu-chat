@@ -1,6 +1,13 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { preloadIntroDependencies } from "./App.js";
+import * as AppModule from "./App.js";
+
+type AppModuleWithRouteTitle = typeof AppModule & {
+  getRouteTitle?: (route: string) => string;
+};
+
+const appModule = AppModule as AppModuleWithRouteTitle;
 
 describe("App navigation", () => {
   it("routes shared header navigation to its destination", () => {
@@ -56,5 +63,35 @@ describe("App navigation", () => {
     expect(source).toContain("sessionStorage.removeItem");
     expect(source).not.toContain("/api/config");
     await expect(preloadIntroDependencies()).resolves.toBeUndefined();
+  });
+
+  it("exports a pure route-title helper for the main browser routes", () => {
+    const getRouteTitle = appModule.getRouteTitle;
+    const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+    expect(getRouteTitle).toBeTypeOf("function");
+    if (typeof getRouteTitle !== "function") return;
+
+    expect([
+      getRouteTitle("dashboard"),
+      getRouteTitle("inbox"),
+      getRouteTitle("settings"),
+      getRouteTitle("posts"),
+      getRouteTitle("profile"),
+      getRouteTitle("development")
+    ]).toEqual([
+      "Bảng điều khiển - NhuuChat",
+      "Hộp thư - NhuuChat",
+      "Cài đặt - NhuuChat",
+      "Bài viết - NhuuChat",
+      "Hồ sơ - NhuuChat",
+      "Đang phát triển - NhuuChat"
+    ]);
+    expect(source).toContain("document.title = getRouteTitle(page)");
+  });
+
+  it("declares the application logo as the browser favicon", () => {
+    const source = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+
+    expect(source).toContain('<link rel="icon" type="image/jpeg" href="/nhuu-favicon.jpg"');
   });
 });

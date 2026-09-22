@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Cập nhật tiêu đề tab trình duyệt theo route và thay favicon mặc định bằng logo NhuuChat.
 - Bổ sung Facebook Page vào Gộp trang và menu làm mới/ngắt kết nối trên card Dashboard.
 - Hiển thị Facebook Page đã kết nối trên Dashboard, bổ sung bộ lọc Facebook và giữ đúng Page ID khi mở Inbox.
 - Cập nhật trang Giới thiệu: bổ sung đăng bài Facebook vào các điểm nổi bật của Tổng quan và thêm tab hướng dẫn `Đăng bài`.
