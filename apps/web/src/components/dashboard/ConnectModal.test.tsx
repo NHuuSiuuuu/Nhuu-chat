@@ -1,15 +1,48 @@
 import { readFileSync } from "node:fs";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FacebookPublishingApiError } from "../../lib/facebook-publishing.api.js";
 import * as connectModal from "./ConnectModal.js";
 
 function facebookFlowSurface(flow: connectModal.FacebookOAuthFlow): string {
   const Content = connectModal.FacebookConnectContent;
-  return renderToStaticMarkup(<Content flow={flow} loading={false} onSelectPage={() => undefined} onStart={() => undefined} onSelect={() => undefined} />);
+  return renderToStaticMarkup(<Content flow={flow} loading={false} onManual={() => undefined} onSelectPage={() => undefined} onStart={() => undefined} onSelect={() => undefined} />);
 }
+
+type FacebookManualContentComponent = React.ComponentType<{
+  error: string | null;
+  loading: boolean;
+  onBack: () => void;
+  onPageAccessTokenChange: (value: string) => void;
+  onPageIdChange: (value: string) => void;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  pageAccessToken: string;
+  pageId: string;
+}>;
+
+function facebookManualSurface(overrides: Partial<React.ComponentProps<FacebookManualContentComponent>> = {}): string {
+  const candidate: unknown = (connectModal as unknown as Record<string, unknown>).FacebookManualConnectContent;
+  expect(candidate).toBeTypeOf("function");
+  const Content = candidate as FacebookManualContentComponent;
+  return renderToStaticMarkup(<Content error={null} loading={false} onBack={() => undefined} onPageAccessTokenChange={() => undefined} onPageIdChange={() => undefined} onSubmit={() => undefined} pageAccessToken="" pageId="" {...overrides} />);
+}
+
+type SubmitFacebookManualConnection = (
+  input: { pageId: string; pageAccessToken: string },
+  onConnected: () => void
+) => Promise<string | null>;
+
+function submitFacebookManualConnection(): SubmitFacebookManualConnection {
+  const candidate: unknown = (connectModal as unknown as Record<string, unknown>).submitFacebookManualConnection;
+  expect(candidate).toBeTypeOf("function");
+  return candidate as SubmitFacebookManualConnection;
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("ConnectModal Tailwind migration", () => {
   it("removes handwritten modal stylesheet imports", () => {
@@ -63,16 +96,61 @@ describe("ConnectModal Tailwind migration", () => {
     expect(source).toContain("initialProvider === \"zalo\"");
   });
 
-  it("offers Facebook OAuth and keeps manual Page credentials outside this modal flow", () => {
-    const source = readFileSync(new URL("./ConnectModal.tsx", import.meta.url), "utf8");
+  it("keeps Facebook OAuth available with a branded icon and a manual alternative", () => {
+    const html = facebookFlowSurface({ status: "login" });
 
-    expect(source).toContain("Đăng nhập bằng tài khoản Facebook");
-    expect(source).toContain("listFacebookOAuthPages");
-    expect(source).toContain("selectFacebookOAuthPage");
-    expect(source).toContain("Luồng nhập Page ID và Page Access Token thủ công vẫn được giữ nguyên");
-    expect(source).not.toMatch(/Page ID\s*<input/);
-    expect(source).not.toMatch(/Page access token\s*<input/);
-    expect(source).not.toContain("pageAccessToken");
+    expect(html).toContain("Đăng nhập bằng tài khoản Facebook");
+    expect(html).toContain("Đăng nhập bằng Facebook");
+    expect(html).toContain("Kết nối bằng Page ID + Access Token");
+    expect(html).toContain("<svg");
+    expect(html).toContain("#1877F2");
+    expect(html).not.toContain(">f</span>");
+  });
+
+  it("renders accessible manual Page credentials with loading, error, and OAuth recovery states", () => {
+    const form = facebookManualSurface({ error: "Token Facebook Page không hợp lệ hoặc đã hết hạn." });
+    const loading = facebookManualSurface({ loading: true });
+
+    expect(form).toContain('for="facebook-page-id"');
+    expect(form).toContain('id="facebook-page-id"');
+    expect(form).toContain('for="facebook-page-access-token"');
+    expect(form).toContain('id="facebook-page-access-token"');
+    expect(form).toContain('type="password"');
+    expect(form).toContain('autoComplete="off"');
+    expect(form).toContain('role="alert"');
+    expect(form).toContain("Token Facebook Page không hợp lệ hoặc đã hết hạn.");
+    expect(form).toContain("Quay lại đăng nhập Facebook");
+    expect(loading).toContain('role="status"');
+    expect(loading).toContain("Đang kết nối Facebook Page...");
+    expect(loading).toContain("disabled");
+  });
+
+  it("submits manual Page credentials through the existing API and notifies on success", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      id: "connection-1",
+      pageId: "page-1",
+      pageName: "Page One",
+      status: "connected"
+    }), { status: 201 }));
+    const onConnected = vi.fn();
+
+    await expect(submitFacebookManualConnection()({ pageId: "page-1", pageAccessToken: "secret-token" }, onConnected)).resolves.toBeNull();
+
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/v1/facebook-page/connection"), expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ pageId: "page-1", pageAccessToken: "secret-token" })
+    }));
+    expect(onConnected).toHaveBeenCalledOnce();
+  });
+
+  it("surfaces the safe API error and does not notify when manual connection fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      error: { code: "FACEBOOK_PAGE_TOKEN_INVALID", message: "unsafe provider detail" }
+    }), { status: 422 }));
+    const onConnected = vi.fn();
+
+    await expect(submitFacebookManualConnection()({ pageId: "page-1", pageAccessToken: "expired-token" }, onConnected)).resolves.toBe("Token Facebook Page không hợp lệ hoặc đã hết hạn.");
+    expect(onConnected).not.toHaveBeenCalled();
   });
 
   it("replaces the Page picker with an explicit success state after selection", () => {

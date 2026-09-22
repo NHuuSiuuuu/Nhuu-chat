@@ -3,7 +3,7 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import QRCode from "qrcode";
 
 import { apiRequest } from "../../lib/api.js";
-import { FacebookPublishingApiError, listFacebookOAuthPages, selectFacebookOAuthPage, startFacebookOAuth, type FacebookOAuthPage } from "../../lib/facebook-publishing.api.js";
+import { connectFacebookPage, FacebookPublishingApiError, listFacebookOAuthPages, selectFacebookOAuthPage, startFacebookOAuth, type FacebookOAuthPage } from "../../lib/facebook-publishing.api.js";
 import { connectionProviders, initialConnectionProvider, type ConnectionProviderId } from "../../state/dashboard-ui.js";
 import { PlatformIcon } from "./PlatformIcon.js";
 import { connectModalCloseDurationMs } from "../../state/modal-ui.js";
@@ -61,6 +61,17 @@ export function completeFacebookOAuthSelection(dispatch: (action: FacebookOAuthF
   onConnected();
 }
 
+// Giữ lỗi an toàn từ API và chỉ báo Dashboard tải lại sau khi kết nối thủ công thành công.
+export async function submitFacebookManualConnection(input: { pageId: string; pageAccessToken: string }, onConnected: () => void): Promise<string | null> {
+  try {
+    await connectFacebookPage(input);
+    onConnected();
+    return null;
+  } catch (requestError) {
+    return requestError instanceof Error ? requestError.message : "Không thể kết nối Facebook Page";
+  }
+}
+
 // Gom trạng thái OAuth thành các bước loại trừ nhau để picker cũ không tồn tại sau success hoặc expiry.
 export function facebookOAuthFlowReducer(state: FacebookOAuthFlow, action: FacebookOAuthFlowAction): FacebookOAuthFlow {
   switch (action.type) {
@@ -94,6 +105,11 @@ export function ConnectModal({ token, refresh, onClose, onConnected, initialProv
   const [image, setImage] = useState<string | null>(null);
   const [zaloImage, setZaloImage] = useState<string | null>(null);
   const [facebookFlow, dispatchFacebookFlow] = useReducer(facebookOAuthFlowReducer, { status: "login" });
+  const [facebookConnectionMode, setFacebookConnectionMode] = useState<"oauth" | "manual">("oauth");
+  const [facebookPageId, setFacebookPageId] = useState("");
+  const [facebookPageAccessToken, setFacebookPageAccessToken] = useState("");
+  const [facebookManualError, setFacebookManualError] = useState<string | null>(null);
+  const [facebookManualLoading, setFacebookManualLoading] = useState(false);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -250,6 +266,21 @@ export function ConnectModal({ token, refresh, onClose, onConnected, initialProv
     }
   }
 
+  async function submitFacebookManual(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFacebookManualError(null);
+    setFacebookManualLoading(true);
+    const connectionError = await submitFacebookManualConnection({ pageId: facebookPageId.trim(), pageAccessToken: facebookPageAccessToken }, onConnected);
+    if (connectionError) {
+      setFacebookManualError(connectionError);
+    } else {
+      setFacebookPageAccessToken("");
+      dispatchFacebookFlow({ type: "connected" });
+      setFacebookConnectionMode("oauth");
+    }
+    setFacebookManualLoading(false);
+  }
+
   useEffect(() => {
     if (initialProvider === "telegram") void startTelegram();
     if (initialProvider === "zalo") void startZalo();
@@ -280,20 +311,24 @@ export function ConnectModal({ token, refresh, onClose, onConnected, initialProv
         </nav>
         <div className="min-w-0">
           <div className="flex items-center justify-between border-b border-slate-200/70 px-5 py-4 text-[13px] font-bold text-slate-700 sm:px-[30px] sm:py-5"><span>Thêm tài khoản {provider.label}</span>{(provider.id === "telegram" || provider.id === "zalo") && <span className="text-[10px] text-sky-500">●</span>}</div>
-          {selected === "telegram" ? <TelegramConnectContent error={error} image={image} loading={loading} onStart={() => void startTelegram()} onSubmit={submitPassword} password={password} qr={qr} setPassword={setPassword} /> : selected === "zalo" ? <ZaloConnectContent error={error} image={zaloImage} loading={loading} onStart={() => void startZalo()} qr={zaloQr} /> : selected === "facebook" ? <FacebookConnectContent flow={facebookFlow} loading={loading} onStart={() => void startFacebook()} onSelect={selectFacebookPage} onSelectPage={(pageId) => dispatchFacebookFlow({ type: "select-page", pageId })} /> : <div className="px-9 py-[70px] text-center"><span className="mx-auto mb-[18px] grid h-[54px] w-[54px] place-items-center rounded-full bg-blue-50 text-[28px] text-sky-500">◷</span><h3 className="m-0 text-[17px] font-bold text-slate-800">{provider.label} đang chờ kích hoạt</h3><p className="text-[13px] text-slate-500">Tích hợp kênh này sẽ được bổ sung trong phiên bản tiếp theo.</p></div>}
+          {selected === "telegram" ? <TelegramConnectContent error={error} image={image} loading={loading} onStart={() => void startTelegram()} onSubmit={submitPassword} password={password} qr={qr} setPassword={setPassword} /> : selected === "zalo" ? <ZaloConnectContent error={error} image={zaloImage} loading={loading} onStart={() => void startZalo()} qr={zaloQr} /> : selected === "facebook" ? facebookConnectionMode === "manual" ? <FacebookManualConnectContent error={facebookManualError} loading={facebookManualLoading} onBack={() => { setFacebookConnectionMode("oauth"); setFacebookManualError(null); }} onPageAccessTokenChange={setFacebookPageAccessToken} onPageIdChange={setFacebookPageId} onSubmit={(event) => void submitFacebookManual(event)} pageAccessToken={facebookPageAccessToken} pageId={facebookPageId} /> : <FacebookConnectContent flow={facebookFlow} loading={loading} onManual={() => { setFacebookConnectionMode("manual"); setFacebookManualError(null); }} onStart={() => void startFacebook()} onSelect={selectFacebookPage} onSelectPage={(pageId) => dispatchFacebookFlow({ type: "select-page", pageId })} /> : <div className="px-9 py-[70px] text-center"><span className="mx-auto mb-[18px] grid h-[54px] w-[54px] place-items-center rounded-full bg-blue-50 text-[28px] text-sky-500">◷</span><h3 className="m-0 text-[17px] font-bold text-slate-800">{provider.label} đang chờ kích hoạt</h3><p className="text-[13px] text-slate-500">Tích hợp kênh này sẽ được bổ sung trong phiên bản tiếp theo.</p></div>}
         </div></div>
       </div>
     </section>
   </div>;
 }
 
-export function FacebookConnectContent({ flow, loading, onStart, onSelect, onSelectPage }: { flow: FacebookOAuthFlow; loading: boolean; onStart: () => void; onSelect: () => void; onSelectPage: (pageId: string) => void }) {
+export function FacebookConnectContent({ flow, loading, onManual, onStart, onSelect, onSelectPage }: { flow: FacebookOAuthFlow; loading: boolean; onManual: () => void; onStart: () => void; onSelect: () => void; onSelectPage: (pageId: string) => void }) {
   if (flow.status === "connected") return <div className="px-9 py-[70px] text-center"><span className="mx-auto mb-[18px] grid h-[54px] w-[54px] place-items-center rounded-full bg-emerald-50 text-[28px] text-emerald-600">✓</span><h3 className="m-0 text-[17px] font-bold text-emerald-700">Đã kết nối Facebook Page thành công</h3><p className="text-[13px] text-slate-500">Facebook Page đã sẵn sàng để quản lý và đăng bài.</p></div>;
   if (flow.status === "restart") return <div className="px-9 py-[70px] text-center"><span className="mx-auto mb-[18px] grid h-[54px] w-[54px] place-items-center rounded-full bg-rose-50 text-[28px] text-rose-600">!</span><h3 className="m-0 text-[17px] font-bold text-slate-800">Không thể hoàn tất kết nối Facebook</h3><p className="text-xs text-rose-600" role="alert">{flow.error}</p><button className="mt-5 rounded-lg bg-[#1877f2] px-5 py-3 text-sm font-bold text-white hover:bg-[#166fe5] disabled:cursor-wait disabled:opacity-60" type="button" onClick={onStart} disabled={loading}>{loading ? "Đang chuyển tới Facebook..." : "Đăng nhập lại bằng Facebook"}</button></div>;
   if (flow.status === "selecting" && !flow.pages.some((page) => page.canPublish)) return <div className="px-9 py-[70px] text-center"><span className="mx-auto mb-[18px] grid h-[54px] w-[54px] place-items-center rounded-full bg-amber-50 text-[28px] text-amber-600">!</span><h3 className="m-0 text-[17px] font-bold text-slate-800">Không tìm thấy Facebook Page có quyền đăng bài</h3><p className="mx-auto mt-3 max-w-md text-[13px] leading-6 text-slate-500">Tài khoản vừa đăng nhập không quản lý Page nào có quyền đăng bài. Hãy kiểm tra quyền Page hoặc đăng nhập bằng tài khoản Facebook khác.</p><button className="mt-5 rounded-lg bg-[#1877f2] px-5 py-3 text-sm font-bold text-white hover:bg-[#166fe5] disabled:cursor-wait disabled:opacity-60" type="button" onClick={onStart} disabled={loading}>{loading ? "Đang chuyển tới Facebook..." : "Đăng nhập lại bằng Facebook"}</button></div>;
   if (flow.status === "selecting") return <div className="px-6 py-10 sm:px-12 sm:py-16"><h3 className="m-0 text-xl font-bold text-slate-800">Chọn Facebook Page</h3><p className="mt-2 text-sm text-slate-500">Chọn Page mà tài khoản Facebook của anh có quyền quản lý và đăng bài.</p><div className="mt-6 grid gap-3">{flow.pages.map((page) => <label className={`flex cursor-pointer items-center gap-3 rounded-xl border p-4 ${flow.selectedPageId === page.id ? "border-sky-500 bg-sky-50" : "border-slate-200"}`} key={page.id}><input type="radio" name="facebook-page" value={page.id} checked={flow.selectedPageId === page.id} onChange={() => onSelectPage(page.id)} disabled={!page.canPublish} /><span className="min-w-0 flex-1"><strong className="block text-sm text-slate-800">{page.name}</strong><small className="text-xs text-slate-500">{page.canPublish ? "Có quyền đăng bài" : "Không có quyền đăng bài"}</small></span></label>)}</div><button className="mt-6 rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={onSelect} disabled={loading || !flow.selectedPageId}>{loading ? "Đang kết nối..." : "Kết nối Page này"}</button>{flow.error && <p className="mt-4 text-xs text-rose-600" role="alert">{flow.error}</p>}</div>;
   const oauthLoading = flow.status === "loading" || loading;
-  return <div className="px-9 py-[70px] text-center"><span className="mx-auto mb-[18px] grid h-[54px] w-[54px] place-items-center rounded-full bg-blue-50 text-[28px] text-sky-500">f</span><h3 className="m-0 text-[17px] font-bold text-slate-800">Đăng nhập bằng tài khoản Facebook</h3><p className="mx-auto mt-3 max-w-md text-[13px] leading-6 text-slate-500">Đăng nhập Facebook để lấy danh sách Page anh đang quản lý, sau đó chọn Page muốn kết nối vào NhuuChat.</p><button className="mt-6 rounded-lg bg-[#1877f2] px-5 py-3 text-sm font-bold text-white hover:bg-[#166fe5] disabled:cursor-wait disabled:opacity-60" type="button" onClick={onStart} disabled={oauthLoading}>{oauthLoading ? "Đang chuyển tới Facebook..." : "Đăng nhập bằng Facebook"}</button><p className="mt-7 text-xs text-slate-400">Luồng nhập Page ID và Page Access Token thủ công vẫn được giữ nguyên trong mục Bài viết.</p></div>;
+  return <div className="px-6 py-12 text-center sm:px-9 sm:py-[70px]"><span className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-full bg-blue-50 shadow-sm ring-1 ring-blue-100"><PlatformIcon provider="facebook" plain size={40} /></span><h3 className="m-0 text-[17px] font-bold text-slate-800">Đăng nhập bằng tài khoản Facebook</h3><p className="mx-auto mt-3 max-w-md text-[13px] leading-6 text-slate-500">Đăng nhập Facebook để lấy danh sách Page anh đang quản lý, sau đó chọn Page muốn kết nối vào NhuuChat.</p><div className="mt-6 flex flex-col items-center gap-3"><button className="rounded-lg bg-[#1877f2] px-5 py-3 text-sm font-bold text-white hover:bg-[#166fe5] disabled:cursor-wait disabled:opacity-60" type="button" onClick={onStart} disabled={oauthLoading}>{oauthLoading ? "Đang chuyển tới Facebook..." : "Đăng nhập bằng Facebook"}</button><button className="rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#1877f2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" type="button" onClick={onManual}>Kết nối bằng Page ID + Access Token</button></div></div>;
+}
+
+export function FacebookManualConnectContent({ error, loading, onBack, onPageAccessTokenChange, onPageIdChange, onSubmit, pageAccessToken, pageId }: { error: string | null; loading: boolean; onBack: () => void; onPageAccessTokenChange: (value: string) => void; onPageIdChange: (value: string) => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; pageAccessToken: string; pageId: string }) {
+  return <div className="px-5 py-8 sm:px-12 sm:py-12"><div className="mx-auto max-w-xl"><div className="flex items-start gap-4"><span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-blue-50 ring-1 ring-blue-100"><PlatformIcon provider="facebook" plain size={30} /></span><div><h3 className="m-0 text-xl font-bold text-slate-800">Kết nối Facebook Page thủ công</h3><p className="mt-1.5 text-[13px] leading-5 text-slate-500">Nhập thông tin Page hiện có. Page Access Token chỉ được gửi tới máy chủ qua kết nối bảo mật.</p></div></div><form className="mt-7 grid gap-5" onSubmit={onSubmit}><label className="grid gap-1.5 text-sm font-semibold text-slate-700" htmlFor="facebook-page-id">Page ID</label><input className="rounded-xl border border-slate-200 px-3.5 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-wait disabled:bg-slate-50" id="facebook-page-id" name="pageId" value={pageId} onChange={(event) => onPageIdChange(event.target.value)} required disabled={loading} /><label className="grid gap-1.5 text-sm font-semibold text-slate-700" htmlFor="facebook-page-access-token">Page Access Token</label><input className="rounded-xl border border-slate-200 px-3.5 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-wait disabled:bg-slate-50" id="facebook-page-access-token" name="pageAccessToken" type="password" value={pageAccessToken} onChange={(event) => onPageAccessTokenChange(event.target.value)} required autoComplete="off" disabled={loading} />{error && <p className="m-0 rounded-lg bg-rose-50 px-3 py-2.5 text-sm text-rose-700" role="alert">{error}</p>}{loading && <p className="m-0 text-sm text-slate-500" role="status" aria-live="polite">Đang kết nối Facebook Page...</p>}<div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between"><button className="rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:cursor-wait disabled:opacity-60" type="button" onClick={onBack} disabled={loading}>Quay lại đăng nhập Facebook</button><button className="rounded-lg bg-[#1877f2] px-5 py-3 text-sm font-bold text-white hover:bg-[#166fe5] disabled:cursor-wait disabled:opacity-60" type="submit" disabled={loading}>{loading ? "Đang kết nối..." : "Kết nối Page"}</button></div></form></div></div>;
 }
 
 function TelegramConnectContent({ qr, image, error, loading, password, setPassword, onStart, onSubmit }: { qr: QrStatus | null; image: string | null; error: string | null; loading: boolean; password: string; setPassword: (value: string) => void; onStart: () => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
