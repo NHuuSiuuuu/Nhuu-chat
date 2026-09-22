@@ -87,7 +87,7 @@ export function publicationButtonLabel(enabled: boolean): { button: string; stat
 
 type AiAssistantTab = "Gợi ý trả lời" | "Chatbot tự động";
 
-const aboutSections = ["Tổng quan", "Dashboard", "Đa tài khoản", "Quản lý tin nhắn", "Trợ lý AI", "Bảo mật & dữ liệu"] as const;
+const aboutSections = ["Tổng quan", "Dashboard", "Đa tài khoản", "Quản lý tin nhắn", "Đăng bài", "Trợ lý AI", "Bảo mật & dữ liệu"] as const;
 type AboutSection = typeof aboutSections[number];
 
 const aboutSectionContent: Record<AboutSection, { summary: string; bullets: string[] }> = {
@@ -109,6 +109,17 @@ const aboutSectionContent: Record<AboutSection, { summary: string; bullets: stri
       "Hỗ trợ tin text, ảnh và file theo khả năng của từng kênh.",
       "Bộ lọc hội thoại: Tất cả · Theo nhãn", "Tìm kiếm thông minh: Tìm theo tên, hoặc nhập số điện thoại để tra cứu ",
       "Ghim hội thoại: Ghim các hội thoại quan trọng lên đầu danh sách", "Chuyển hội thoại: Chuyển hội thoại sang tài khoản khác để xử lý", "Xem chi tiết hội thoại: Xem thông tin khách hàng, lịch sử hội thoại, nhãn và các thao tác quản lý"]
+  },
+  "Đăng bài": {
+    summary: "Đăng bài lên Facebook Page từ Nhuu-chat với quy trình tạo, lên lịch và theo dõi trạng thái bài viết.",
+    bullets: [
+      "Mở Bài viết để bắt đầu tạo bài.",
+      "Chọn Page Facebook muốn đăng.",
+      "Nhập nội dung bài viết.",
+      "Chọn Đăng ngay hoặc Hẹn đăng (Lên lịch).",
+      "Theo dõi các trạng thái: Bản nháp, Đã hẹn, Đang đăng, Đã đăng, Thất bại.",
+      "Chọn Thử lại khi bài viết đăng thất bại."
+    ]
   },
   "Trợ lý AI": {
     summary: "Trợ lý AI - Tăng tốc chăm sóc khách hàng hỗ trợ gợi ý trả lời và chatbot tự động dựa trên cấu hình từng trợ lý.",
@@ -153,6 +164,7 @@ const overviewFeatures = [
   "Inbox hợp nhất cho tin nhắn text, ảnh và file từ nhiều kênh.",
   "Quản lý riêng từng tài khoản, hội thoại, nhãn, người phụ trách và trạng thái gửi.",
   "Dashboard theo dõi tài khoản online/offline, listener và thao tác kết nối.",
+  "Đăng bài hiện tại hỗ trợ đăng nội dung lên Facebook Page.",
   "Trợ lý AI, chatbot tự động và kho kiến thức RAG hỗ trợ phản hồi theo ngữ cảnh."
 ];
 

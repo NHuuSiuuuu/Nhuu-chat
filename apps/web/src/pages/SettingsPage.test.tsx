@@ -83,6 +83,36 @@ describe("Settings page", () => {
     expect(source).toContain("MongoDB");
   });
 
+  it("documents Facebook posting in the About navigation, overview, and guidance", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const aboutSections = source.match(/const aboutSections = \[(.*?)\] as const;/s)?.[1] ?? "";
+    const overviewFeatures = source.split("const overviewFeatures =")[1]?.split("];", 1)[0] ?? "";
+    const postingContent = source.match(/  "Đăng bài": \{([\s\S]*?)\n  "Trợ lý AI": \{/)?.[1] ?? "";
+    const aboutSettings = source.split("function AboutSettings()")[1]?.split("\nfunction SettingsLayout", 1)[0] ?? "";
+
+    expect(aboutSections).toMatch(/"Quản lý tin nhắn",\s*"Đăng bài",/);
+    expect(overviewFeatures).toMatch(/đăng bài/i);
+    expect(overviewFeatures).toContain("Facebook Page");
+    for (const term of [
+      "Đăng bài lên Facebook Page",
+      "Bài viết",
+      "Page Facebook",
+      "nội dung",
+      "Đăng ngay",
+      "Lên lịch",
+      "Bản nháp",
+      "Đã hẹn",
+      "Đang đăng",
+      "Đã đăng",
+      "Thất bại",
+      "Thử lại"
+    ]) {
+      expect(postingContent).toContain(term);
+    }
+    expect(aboutSettings).toContain("content.summary");
+    expect(aboutSettings).toContain("content.bullets");
+  });
+
   it("maps the introduction tab to a stable settings URL", () => {
     expect(settingsModule.settingsPathForItem("Giới thiệu" as never)).toBe("/settings/about");
     expect(settingsModule.settingsItemFromPath("/settings/about")).toBe("Giới thiệu");

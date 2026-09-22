@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Cập nhật trang Giới thiệu: bổ sung đăng bài Facebook vào các điểm nổi bật của Tổng quan và thêm tab hướng dẫn `Đăng bài`.
 - Sửa avatar trong từng dòng tin nhắn của khách hàng dùng đúng `customerAvatarUrl` như avatar ở Header khung chat, tránh hiển thị fallback chữ cái khi ảnh vẫn có sẵn.
 - Cập nhật modal kết nối Facebook: dùng icon SVG thương hiệu, bổ sung nút và biểu mẫu kết nối thủ công bằng Page ID + Page Access Token, giữ nguyên luồng OAuth hiện có.
 - Bổ sung đăng nhập Facebook bằng OAuth trong modal Dashboard: lấy danh sách Page do tài khoản quản lý, chỉ cho chọn Page có quyền đăng bài và lưu kết nối qua service hiện có; giữ nguyên luồng nhập thủ công Page ID và Page Access Token.
