@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm hiệu ứng chữ chuyển sắc xanh–cyan cho tiêu đề AI Chatbot ở Landing Page.
 - Scale Up Landing Page theo responsive: tăng typography, CTA, icon, mockup, spacing và khoảng cách grid trên desktop, giữ kích thước vừa phải trên mobile.
 - Giảm độ dày typography trên Landing Page, đồng bộ các tiêu đề, nhãn và nút theo trọng lượng chữ nhẹ hơn.
 - Sửa URL logo Zalo trong card Kênh tích hợp để không còn lỗi 404.

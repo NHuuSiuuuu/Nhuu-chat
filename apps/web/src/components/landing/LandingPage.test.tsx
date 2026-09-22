@@ -69,6 +69,13 @@ describe("LandingPage", () => {
     expect(source.findByProps({ src: "/nhuu-logo.svg" })).toBeTruthy();
   });
 
+  it("renders the AI chatbot headline with the approved blue-to-cyan gradient", () => {
+    const renderer = renderLanding({ user: null, onDashboard: vi.fn(), onLogin: vi.fn(), onRegister: vi.fn() });
+    const headline = renderer.root.findAllByType("span").find((candidate) => candidate.children.includes("AI") && candidate.children.includes(" Chatbot tự động"));
+
+    expect(headline?.props.className).toBe("bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent");
+  });
+
   it("uses the blue transparent logo variant for the landing brand", () => {
     const logo = readFileSync(new URL("../../../public/nhuu-logo-landing.svg", import.meta.url), "utf8");
 
