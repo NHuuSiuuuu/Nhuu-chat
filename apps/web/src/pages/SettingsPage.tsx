@@ -994,7 +994,7 @@ function AboutSettings() {
 function SettingsLayout({ activeTab, onTabChange, onAboutSectionChange, children, onLogoClick, onNavigate, user, onLogout, onProfile }: SettingsPageProps & { activeTab: SettingsItem; onTabChange: (item: SettingsItem) => void; onAboutSectionChange: (section: AboutSection) => void; children: React.ReactNode }) {
   function handleTabChange(item: SettingsItem) {
     if (isSettingsPlaceholderTab(item)) {
-      toast.info(item);
+      toast.info(`${item}: Chức năng đang được phát triển`);
       return;
     }
     onTabChange(item);
