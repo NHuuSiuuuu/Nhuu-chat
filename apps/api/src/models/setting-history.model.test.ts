@@ -36,12 +36,13 @@ describe("Setting history model", () => {
     });
   });
 
-  it("defines chronological and action-filtered compound indexes", () => {
+  it("defines only the implicit id index and two required compound indexes", () => {
     const indexFields = SettingHistoryModel.schema.indexes().map(([fields]) => fields);
 
-    expect(indexFields).toEqual(expect.arrayContaining([
+    expect(SettingHistoryModel.schema.path("_id")).toBeDefined();
+    expect(indexFields).toEqual([
       { userId: 1, createdAt: -1, _id: -1 },
       { userId: 1, actionType: 1, createdAt: -1, _id: -1 }
-    ]));
+    ]);
   });
 });

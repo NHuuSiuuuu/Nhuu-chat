@@ -9,6 +9,14 @@ import {
 
 const SETTING_HISTORY_LIMIT = 500;
 const PATH_SEPARATOR = " › ";
+const MISSING_VALUE_DISPLAY = "(không có)";
+const SENSITIVE_FIELD_MARKERS = ["token", "password", "secret", "cookie", "authorization"];
+const SENSITIVE_FIELD_NAMES = new Set([
+  "pageaccesstoken",
+  "encryptedpageaccesstoken",
+  "accesstoken",
+  ...SENSITIVE_FIELD_MARKERS
+]);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -18,6 +26,41 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function appendPath(path: string, segment: string): string {
   return path ? `${path}${PATH_SEPARATOR}${segment}` : segment;
+}
+
+function getOwnValue(value: Record<string, unknown>, fieldName: string): unknown {
+  return Object.hasOwn(value, fieldName) ? value[fieldName] : undefined;
+}
+
+function isSensitiveFieldName(fieldName: string): boolean {
+  const normalized = fieldName.replace(/[^a-z0-9]/gi, "").toLowerCase();
+  if (SENSITIVE_FIELD_NAMES.has(normalized)) return true;
+
+  const words = fieldName
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  return SENSITIVE_FIELD_MARKERS.some((marker) =>
+    words.includes(marker) || normalized.startsWith(marker) || normalized.endsWith(marker)
+  );
+}
+
+function isSensitivePath(fieldName: string): boolean {
+  return fieldName.split(PATH_SEPARATOR).some(isSensitiveFieldName);
+}
+
+function containsSensitiveField(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(containsSensitiveField);
+  if (!isPlainObject(value)) return false;
+
+  return Object.keys(value).some((fieldName) =>
+    isSensitiveFieldName(fieldName) || containsSensitiveField(getOwnValue(value, fieldName))
+  );
+}
+
+function toPersistentValue(value: unknown): unknown {
+  return value === undefined ? MISSING_VALUE_DISPLAY : value;
 }
 
 function collectChanges(
@@ -39,12 +82,12 @@ function collectChanges(
   if (isPlainObject(oldValue) && isPlainObject(newValue)) {
     const fieldNames = [
       ...Object.keys(oldValue),
-      ...Object.keys(newValue).filter((fieldName) => !(fieldName in oldValue))
+      ...Object.keys(newValue).filter((fieldName) => !Object.hasOwn(oldValue, fieldName))
     ];
     for (const fieldName of fieldNames) {
       collectChanges(
-        oldValue[fieldName],
-        newValue[fieldName],
+        getOwnValue(oldValue, fieldName),
+        getOwnValue(newValue, fieldName),
         appendPath(path, fieldName),
         changes
       );
@@ -75,6 +118,7 @@ async function removeExpiredHistories(userId: string): Promise<void> {
   if (overflow <= 0) return;
 
   await SettingHistoryModel.deleteMany({
+    userId,
     _id: { $in: rows.slice(0, overflow).map((row) => row._id) }
   });
 }
@@ -87,7 +131,17 @@ export async function recordSettingHistory(input: {
   oldValue: unknown;
   newValue: unknown;
 }): Promise<SettingHistory | null> {
-  const changes = diffSettings(input.oldValue, input.newValue);
+  const changes = diffSettings(input.oldValue, input.newValue)
+    .filter((change) =>
+      !isSensitivePath(change.fieldName)
+      && !containsSensitiveField(change.oldValue)
+      && !containsSensitiveField(change.newValue)
+    )
+    .map((change) => ({
+      ...change,
+      oldValue: toPersistentValue(change.oldValue),
+      newValue: toPersistentValue(change.newValue)
+    }));
   if (changes.length === 0) return null;
 
   const history = await SettingHistoryModel.create({

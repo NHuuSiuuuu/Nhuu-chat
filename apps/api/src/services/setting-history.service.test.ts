@@ -70,6 +70,12 @@ describe("setting history diff", () => {
   it("returns no changes for equivalent settings", () => {
     expect(diffSettings({ enabled: true }, { enabled: true })).toEqual([]);
   });
+
+  it("reports an own field even when Object.prototype has the same key", () => {
+    expect(diffSettings({}, { constructor: "custom" })).toEqual([
+      { fieldName: "constructor", oldValue: undefined, newValue: "custom" }
+    ]);
+  });
 });
 
 describe("setting history service", () => {
@@ -90,6 +96,103 @@ describe("setting history service", () => {
     expect(result).toBeNull();
     expect(settingHistoryModel.create).not.toHaveBeenCalled();
     expect(settingHistoryModel.find).not.toHaveBeenCalled();
+  });
+
+  it("never passes sensitive path values to the history model", async () => {
+    const saved = { _id: "history-safe", versionHash: "a1b2c3d4" };
+    settingHistoryModel.create.mockResolvedValue(saved);
+    settingHistoryModel.find.mockReturnValue(retentionQuery([]));
+
+    await recordSettingHistory({
+      userId: "user-1",
+      actionType: "CONNECT_FACEBOOK_PAGE",
+      actionTitle: "Kết nối Facebook Page",
+      oldValue: {
+        pageAccessToken: "old-page-token",
+        encrypted_page_access_token: "old-encrypted-token",
+        "ACCESS-TOKEN": "old-access-token",
+        token: "old-token",
+        Password: "old-password",
+        clientSecret: "old-secret",
+        session_cookie: "old-cookie",
+        Authorization: "Bearer old-authorization",
+        pageName: "Trang cũ"
+      },
+      newValue: {
+        pageAccessToken: "new-page-token",
+        encrypted_page_access_token: "new-encrypted-token",
+        "ACCESS-TOKEN": "new-access-token",
+        token: "new-token",
+        Password: "new-password",
+        clientSecret: "new-secret",
+        session_cookie: "new-cookie",
+        Authorization: "Bearer new-authorization",
+        pageName: "Trang mới"
+      }
+    });
+
+    expect(settingHistoryModel.create).toHaveBeenCalledWith(expect.objectContaining({
+      changes: [{ fieldName: "pageName", oldValue: "Trang cũ", newValue: "Trang mới" }]
+    }));
+    expect(JSON.stringify(settingHistoryModel.create.mock.calls[0]?.[0])).not.toMatch(
+      /page-token|encrypted-token|access-token|old-token|new-token|password|secret|cookie|authorization/i
+    );
+  });
+
+  it("does not create a history row when only sensitive values changed", async () => {
+    settingHistoryModel.create.mockResolvedValue({ _id: "history-secret" });
+    settingHistoryModel.find.mockReturnValue(retentionQuery([]));
+
+    const result = await recordSettingHistory({
+      userId: "user-1",
+      actionType: "CONNECT_FACEBOOK_PAGE",
+      actionTitle: "Kết nối Facebook Page",
+      oldValue: { credentials: { pageAccessToken: "old-token" } },
+      newValue: { credentials: { pageAccessToken: "new-token" } }
+    });
+
+    expect(result).toBeNull();
+    expect(settingHistoryModel.create).not.toHaveBeenCalled();
+  });
+
+  it("does not persist a sensitive key nested inside a newly added value", async () => {
+    settingHistoryModel.create.mockResolvedValue({ _id: "history-nested-secret" });
+    settingHistoryModel.find.mockReturnValue(retentionQuery([]));
+
+    const result = await recordSettingHistory({
+      userId: "user-1",
+      actionType: "CONNECT_FACEBOOK_PAGE",
+      actionTitle: "Kết nối Facebook Page",
+      oldValue: {},
+      newValue: {
+        credentials: {
+          values: [{ "page-access-token": "must-never-be-persisted" }]
+        }
+      }
+    });
+
+    expect(result).toBeNull();
+    expect(settingHistoryModel.create).not.toHaveBeenCalled();
+  });
+
+  it("persists added and removed values with a stable missing-value marker", async () => {
+    settingHistoryModel.create.mockResolvedValue({ _id: "history-missing-values" });
+    settingHistoryModel.find.mockReturnValue(retentionQuery([]));
+
+    await recordSettingHistory({
+      userId: "user-1",
+      actionType: "UPDATE_AI_SETTINGS",
+      actionTitle: "Cập nhật cài đặt AI",
+      oldValue: { removed: "old" },
+      newValue: { added: "new" }
+    });
+
+    expect(settingHistoryModel.create).toHaveBeenCalledWith(expect.objectContaining({
+      changes: [
+        { fieldName: "removed", oldValue: "old", newValue: "(không có)" },
+        { fieldName: "added", oldValue: "(không có)", newValue: "new" }
+      ]
+    }));
   });
 
   it("records nested changes and removes every row older than the newest 500", async () => {
@@ -119,6 +222,7 @@ describe("setting history service", () => {
     expect(query.sort).toHaveBeenCalledWith({ createdAt: 1, _id: 1 });
     expect(query.select).toHaveBeenCalledWith("_id");
     expect(settingHistoryModel.deleteMany).toHaveBeenCalledWith({
+      userId: "user-1",
       _id: { $in: ["history-1", "history-2"] }
     });
   });

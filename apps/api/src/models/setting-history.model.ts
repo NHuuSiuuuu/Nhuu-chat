@@ -25,7 +25,7 @@ const settingHistoryChangeSchema = new Schema<SettingHistoryChange>(
 
 const settingHistorySchema = new Schema(
   {
-    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     actionType: {
       type: String,
       enum: SETTING_HISTORY_ACTION_TYPES,
