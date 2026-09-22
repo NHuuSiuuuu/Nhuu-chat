@@ -1,4 +1,5 @@
 import * as React from "react";
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import TestRenderer, { act, type ReactTestRenderer } from "react-test-renderer";
 import { LandingPage } from "./LandingPage.js";
@@ -34,6 +35,15 @@ describe("LandingPage", () => {
     expect(rendered).toContain("Hộp thư");
     expect(rendered).toContain("Bắt đầu dùng thử");
     expect(source.findAllByProps({ src: "/nhuu-logo-landing.svg" })).toHaveLength(2);
+  });
+
+  it("uses the white transparent logo variant for the landing brand", () => {
+    const logo = readFileSync(new URL("../../../public/nhuu-logo-landing.svg", import.meta.url), "utf8");
+
+    expect(logo).toContain('fill="#fff"');
+    expect(logo).toContain('stroke="#fff"');
+    expect(logo).not.toContain("#1264e8");
+    expect(logo).not.toContain("<rect");
   });
 
   it("calls login and register callbacks from the public header", () => {

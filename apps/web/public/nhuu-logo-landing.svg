@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 40" role="img" aria-labelledby="title">
-  <title id="title">Hchat</title>
-  <g fill="none" stroke="#1264e8" stroke-linecap="round" stroke-linejoin="round">
+  <title id="title">NhuuChat</title>
+  <g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="20" cy="20" r="11" stroke-width="1.6"/>
     <path d="M14 16.5 11.5 12M26 16.5 28.5 12" stroke-width="1.6"/>
-    <circle cx="12" cy="11" r="1.2" fill="#1264e8" stroke="none"/>
-    <circle cx="28" cy="11" r="1.2" fill="#1264e8" stroke="none"/>
-    <circle cx="16.5" cy="19" r="1.2" fill="#1264e8" stroke="none"/>
-    <circle cx="23.5" cy="19" r="1.2" fill="#1264e8" stroke="none"/>
+    <circle cx="12" cy="11" r="1.2" fill="#fff" stroke="none"/>
+    <circle cx="28" cy="11" r="1.2" fill="#fff" stroke="none"/>
+    <circle cx="16.5" cy="19" r="1.2" fill="#fff" stroke="none"/>
+    <circle cx="23.5" cy="19" r="1.2" fill="#fff" stroke="none"/>
     <path d="M16.5 24c2 1.8 5 1.8 7 0" stroke-width="1.4"/>
   </g>
-  <text x="38" y="26" fill="#1264e8" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="700" letter-spacing="-1">nhuu</text>
+  <text x="38" y="26" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="700" letter-spacing="-1">nhuu</text>
 </svg>

@@ -28,7 +28,7 @@ const faqs = [
   { question: "Hchat có giới hạn số lượng fanpage không?", answer: "Gói dịch vụ được thiết kế linh hoạt theo số lượng kênh và quy mô đội ngũ của anh." }, { question: "Dữ liệu của tôi có an toàn không?", answer: "Dữ liệu được bảo vệ theo từng tài khoản, credential không gửi xuống giao diện và quyền truy cập được kiểm soát." }, { question: "Hchat hỗ trợ những kênh nào?", answer: "Hchat hỗ trợ Facebook, Instagram, Zalo, Telegram, sàn thương mại điện tử, Email và Website." }, { question: "Tôi có thể dùng thử trước khi đăng ký không?", answer: "Có. Anh có thể bắt đầu với gói miễn phí và nâng cấp khi đội ngũ sẵn sàng." },
 ];
 
-function Brand() { return <a href="#top" className="flex items-center text-slate-950" aria-label="Hchat - về đầu trang"><img className="h-8 w-[128px] object-contain" src="/nhuu-logo-landing.svg" alt="Hchat" /></a>; }
+function Brand() { return <a href="#top" className="flex items-center text-slate-950" aria-label="NhuuChat - về đầu trang"><img className="h-8 w-[128px] object-contain" src="/nhuu-logo-landing.svg" alt="NhuuChat" /></a>; }
 function InboxMockup() {
   const conversations = [
     { name: "Mai Lan", preview: "Cho mình hỏi giá sản phẩm này?", time: "14:05", color: "bg-amber-100", initial: "M", tag: "Tư vấn", tagColor: "bg-red-500" },
