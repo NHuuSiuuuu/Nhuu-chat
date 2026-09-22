@@ -30,11 +30,13 @@ function retentionQuery(rows: Array<{ _id: string }>) {
 
 function listQuery(items: unknown[]) {
   const query = {
+    populate: vi.fn(),
     sort: vi.fn(),
     skip: vi.fn(),
     limit: vi.fn(),
     lean: vi.fn().mockResolvedValue(items)
   };
+  query.populate.mockReturnValue(query);
   query.sort.mockReturnValue(query);
   query.skip.mockReturnValue(query);
   query.limit.mockReturnValue(query);
@@ -447,7 +449,15 @@ describe("setting history service", () => {
   });
 
   it("lists one user's filtered history with bounded pagination", async () => {
-    const items = [{ _id: "history-51" }];
+    const items = [{
+      _id: "history-51",
+      userId: { _id: "user-1", name: "Agent One" },
+      actionType: "CONNECT_FACEBOOK_PAGE",
+      actionTitle: "Kết nối Facebook Page",
+      changes: [],
+      versionHash: "a1b2c3d4",
+      createdAt: "2026-09-22T08:30:00.000Z"
+    }];
     const query = listQuery(items);
     settingHistoryModel.find.mockReturnValue(query);
     settingHistoryModel.countDocuments.mockResolvedValue(101);
@@ -460,7 +470,16 @@ describe("setting history service", () => {
     });
 
     expect(result).toEqual({
-      items,
+      items: [{
+        id: "history-51",
+        actorId: "user-1",
+        actorName: "Agent One",
+        actionType: "CONNECT_FACEBOOK_PAGE",
+        actionTitle: "Kết nối Facebook Page",
+        changes: [],
+        versionHash: "a1b2c3d4",
+        createdAt: "2026-09-22T08:30:00.000Z"
+      }],
       pagination: {
         page: 2,
         pageSize: 50,
@@ -477,8 +496,43 @@ describe("setting history service", () => {
       userId: "user-1",
       actionType: "CONNECT_FACEBOOK_PAGE"
     });
+    expect(query.populate).toHaveBeenCalledWith("userId", "name");
     expect(query.sort).toHaveBeenCalledWith({ createdAt: -1, _id: -1 });
     expect(query.skip).toHaveBeenCalledWith(50);
     expect(query.limit).toHaveBeenCalledWith(50);
+  });
+
+  it("maps populated history rows to the public response DTO", async () => {
+    const query = listQuery([{
+      _id: "history-1",
+      userId: { _id: "user-1", name: "Nguyễn An", email: "secret@example.com" },
+      actionType: "UPDATE_AI_SETTINGS",
+      actionTitle: "Cập nhật cài đặt AI",
+      changes: [{ fieldName: "enabled", oldValue: true, newValue: false }],
+      versionHash: "a1b2c3d4",
+      createdAt: new Date("2026-09-22T08:30:00.000Z"),
+      updatedAt: new Date("2026-09-22T08:30:01.000Z"),
+      __v: 0
+    }]);
+    settingHistoryModel.find.mockReturnValue(query);
+    settingHistoryModel.countDocuments.mockResolvedValue(1);
+
+    const result = await listSettingHistories({
+      userId: "user-1",
+      page: 1,
+      pageSize: 20
+    });
+
+    expect(result.items).toEqual([{
+      id: "history-1",
+      actorId: "user-1",
+      actorName: "Nguyễn An",
+      actionType: "UPDATE_AI_SETTINGS",
+      actionTitle: "Cập nhật cài đặt AI",
+      changes: [{ fieldName: "enabled", oldValue: true, newValue: false }],
+      versionHash: "a1b2c3d4",
+      createdAt: "2026-09-22T08:30:00.000Z"
+    }]);
+    expect(query.populate).toHaveBeenCalledWith("userId", "name");
   });
 });

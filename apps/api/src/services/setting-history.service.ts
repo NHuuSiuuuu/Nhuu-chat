@@ -132,6 +132,46 @@ async function removeExpiredHistories(userId: string): Promise<void> {
   });
 }
 
+type SettingHistoryActorRow = {
+  _id?: unknown;
+  name?: string;
+};
+
+type SettingHistoryRow = {
+  _id: unknown;
+  userId: unknown;
+  actionType: SettingHistoryActionType;
+  actionTitle: string;
+  changes: SettingHistoryChange[];
+  versionHash: string;
+  createdAt: Date | string;
+};
+
+export type SettingHistoryResponse = {
+  id: string;
+  actorId: string;
+  actorName: string;
+  actionType: SettingHistoryActionType;
+  actionTitle: string;
+  changes: SettingHistoryChange[];
+  versionHash: string;
+  createdAt: string;
+};
+
+function toSettingHistoryResponse(row: SettingHistoryRow): SettingHistoryResponse {
+  const actor = row.userId as SettingHistoryActorRow;
+  return {
+    id: String(row._id),
+    actorId: String(actor?._id ?? row.userId),
+    actorName: actor?.name ?? "",
+    actionType: row.actionType,
+    actionTitle: row.actionTitle,
+    changes: row.changes,
+    versionHash: row.versionHash,
+    createdAt: new Date(row.createdAt).toISOString()
+  };
+}
+
 // Chỉ lưu thay đổi thực tế và dọn các bản ghi cũ vượt giới hạn của từng người dùng.
 export async function recordSettingHistory(input: {
   userId: string;
@@ -177,6 +217,7 @@ export async function listSettingHistories(input: {
   };
   const [items, total] = await Promise.all([
     SettingHistoryModel.find(filter)
+      .populate("userId", "name")
       .sort({ createdAt: -1, _id: -1 })
       .skip((page - 1) * pageSize)
       .limit(pageSize)
@@ -186,7 +227,7 @@ export async function listSettingHistories(input: {
   const totalPages = Math.ceil(total / pageSize);
 
   return {
-    items,
+    items: items.map((item) => toSettingHistoryResponse(item as unknown as SettingHistoryRow)),
     pagination: {
       page,
       pageSize,
