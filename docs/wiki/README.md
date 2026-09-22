@@ -209,6 +209,8 @@ Route `GET /api/v1/setting-histories` yêu cầu xác thực với role `admin` 
 
 Response có dạng `{ items, pagination: { page, pageSize, total, totalPages, hasNextPage } }` và sắp xếp bản ghi mới nhất trước. Lịch sử chỉ chứa metadata an toàn; Page Access Token, OAuth token, cookie, password, secret và trường xác thực nhạy cảm không được lưu hoặc trả về. Mỗi người dùng được giữ tối đa 500 bản ghi, bản ghi cũ nhất tự bị dọn khi vượt giới hạn; vì vậy đây không phải kho audit lưu vô thời hạn.
 
+Snapshot trước/sau gắn với thao tác cập nhật thành công, kể cả khi có yêu cầu đồng thời; ngắt kết nối chỉ ghi Page thực sự bị xóa. Việc ghi và dọn lịch sử chạy bất đồng bộ sau thao tác chính: lỗi được log phía server, không làm thao tác chính thất bại, nhưng có thể khiến lịch sử bị thiếu hoặc chưa được dọn.
+
 ### Gửi media outbound
 
 `POST /api/v1/messages/send` tiếp nhận JSON cho tin text hoặc `multipart/form-data` với các field `conversationId`, `type`, `content` và một file `attachment`. Backend giới hạn 20 MB, chặn `.exe`, `.js`, `.sh` cùng MIME nguy hiểm, upload media vào Cloudinary rồi gửi buffer qua connector. `telegram_personal` dùng GramJS `sendFile`; `zalo_personal` dùng attachment buffer của `zca-js`. Chỉ hai kênh cá nhân này được phép gửi media; Facebook, Instagram, Telegram Bot và Zalo khác vẫn text-only. Video chưa có nút riêng trong bản đầu.

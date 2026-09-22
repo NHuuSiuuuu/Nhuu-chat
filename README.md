@@ -137,6 +137,8 @@ API đọc lịch sử là `GET /api/v1/setting-histories?page=1&pageSize=20&act
 
 Lịch sử không lưu Page Access Token, OAuth token, cookie, password, secret hoặc trường xác thực nhạy cảm. Mỗi người dùng được giữ tối đa 500 bản ghi; sau khi tạo bản ghi vượt giới hạn, hệ thống tự xóa các bản ghi cũ nhất. Đây là lịch sử vận hành có giới hạn, không phải kho audit lưu vô thời hạn.
 
+Snapshot trước/sau gắn với thao tác cập nhật thành công, kể cả khi có yêu cầu đồng thời; ngắt kết nối chỉ ghi Page thực sự bị xóa. Việc ghi và dọn lịch sử chạy bất đồng bộ sau thao tác chính: lỗi được log phía server, không làm thao tác chính thất bại, nhưng có thể khiến lịch sử bị thiếu hoặc chưa được dọn.
+
 ### Gửi ảnh và file từ Inbox
 
 Composer hỗ trợ chọn một ảnh hoặc file, nhập chú thích tùy chọn rồi gửi tới hội thoại Zalo cá nhân hoặc Telegram cá nhân. Backend giới hạn 20 MB mỗi lần gửi, chặn `.exe`, `.js`, `.sh` và MIME nguy hiểm, lưu media qua Cloudinary để message còn tải được sau khi reload, đồng thời gửi buffer trực tiếp qua connector cá nhân. Các kênh khác vẫn chỉ hỗ trợ text.

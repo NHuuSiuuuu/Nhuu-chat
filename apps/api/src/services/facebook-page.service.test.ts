@@ -48,7 +48,8 @@ function dependencies(fetchResponse: unknown = {
   const model = {
     findOne: vi.fn(),
     findOneAndUpdate: vi.fn(),
-    deleteOne: vi.fn()
+    create: vi.fn(),
+    findOneAndDelete: vi.fn()
   };
   model.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(null) });
   const fetchGraph = vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue(fetchResponse) });
@@ -82,7 +83,7 @@ describe("FacebookPageService", () => {
 
   it("validates Graph metadata before encrypting and persists only encrypted credentials", async () => {
     const { deps, model, fetchGraph } = dependencies();
-    model.findOneAndUpdate.mockResolvedValue(record());
+    model.create.mockResolvedValue(record());
     const service = new FacebookPageService(deps);
 
     const result = await service.connect("user-1", { pageId: "page-123", pageAccessToken: "secret-token" });
@@ -92,20 +93,16 @@ describe("FacebookPageService", () => {
       expect.objectContaining({ method: "GET" })
     );
     expect(deps.encryptSecret).toHaveBeenCalledWith("secret-token");
-    expect(model.findOneAndUpdate).toHaveBeenCalledWith(
-      { userId: "user-1" },
-      expect.objectContaining({
-        $set: expect.objectContaining({
-          pageId: "page-123",
-          pageName: "Nhuu Store",
-          avatarUrl: "https://cdn.example/avatar.jpg",
-          status: "connected"
-        }),
-        $setOnInsert: { userId: "user-1", platform: "facebook" }
-      }),
-      expect.objectContaining({ upsert: true, new: true, setDefaultsOnInsert: true })
-    );
-    expect(model.findOneAndUpdate.mock.calls[0]?.[1]).not.toContain("secret-token");
+    expect(model.create).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "user-1",
+      platform: "facebook",
+      pageId: "page-123",
+      pageName: "Nhuu Store",
+      avatarUrl: "https://cdn.example/avatar.jpg",
+      status: "connected",
+      encryptedPageAccessToken: "ciphertext:secret-token"
+    }));
+    expect(model.create.mock.calls[0]?.[0]).not.toHaveProperty("pageAccessToken");
     expect(result).not.toHaveProperty("pageAccessToken");
     expect(result).not.toHaveProperty("encryptedPageAccessToken");
     expect(result).toMatchObject({
@@ -119,20 +116,18 @@ describe("FacebookPageService", () => {
 
   it("safely persists a null avatar when Graph returns an incomplete picture payload", async () => {
     const { deps, model } = dependencies({ id: "page-123", name: "Nhuu Store", picture: { data: {} } });
-    model.findOneAndUpdate.mockResolvedValue(record({ avatarUrl: null }));
+    model.create.mockResolvedValue(record({ avatarUrl: null }));
     const service = new FacebookPageService(deps);
 
     const result = await service.connect("user-1", { pageId: "page-123", pageAccessToken: "secret-token" });
 
-    expect(model.findOneAndUpdate.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
-      $set: expect.objectContaining({ avatarUrl: null })
-    }));
+    expect(model.create.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ avatarUrl: null }));
     expect(result.avatarUrl).toBeNull();
   });
 
   it("uses the configured Graph API version when no service override is supplied", async () => {
     const { deps, model, fetchGraph } = dependencies();
-    model.findOneAndUpdate.mockResolvedValue(record());
+    model.create.mockResolvedValue(record());
     const service = new FacebookPageService({ ...deps, graphApiVersion: undefined });
 
     await service.connect("user-1", { pageId: "page-123", pageAccessToken: "secret-token" });
@@ -150,6 +145,7 @@ describe("FacebookPageService", () => {
     });
     expect(deps.encryptSecret).not.toHaveBeenCalled();
     expect(model.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(model.create).not.toHaveBeenCalled();
   });
 
   it("rejects metadata for a different Page ID", async () => {
@@ -162,6 +158,7 @@ describe("FacebookPageService", () => {
     });
     expect(deps.encryptSecret).not.toHaveBeenCalled();
     expect(model.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(model.create).not.toHaveBeenCalled();
   });
 
   it("returns one user's connection without exposing encrypted storage", async () => {
@@ -177,12 +174,12 @@ describe("FacebookPageService", () => {
   it("removes only the authenticated user's connection", async () => {
     const { deps, model } = dependencies();
     model.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(record()) });
-    model.deleteOne.mockResolvedValue({ acknowledged: true, deletedCount: 1 });
+    model.findOneAndDelete.mockResolvedValue(record());
     const service = new FacebookPageService(deps);
 
     await service.remove("user-1");
 
-    expect(model.deleteOne).toHaveBeenCalledWith({ userId: "user-1" });
+    expect(model.findOneAndDelete).toHaveBeenCalledWith({ userId: "user-1" });
   });
 
   it("records a connect action with previous and saved safe Page metadata only", async () => {
@@ -226,7 +223,7 @@ describe("FacebookPageService", () => {
   it("records the removed Page identity without its encrypted token", async () => {
     const { deps, model } = dependencies();
     model.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(record()) });
-    model.deleteOne.mockResolvedValue({ acknowledged: true, deletedCount: 1 });
+    model.findOneAndDelete.mockResolvedValue(record());
     const service = new FacebookPageService(deps);
 
     await service.remove("user-1");
@@ -252,7 +249,7 @@ describe("FacebookPageService", () => {
 
   it("creates one history record when OAuth selection delegates to connect", async () => {
     const { deps, model } = dependencies();
-    model.findOneAndUpdate.mockResolvedValue(record());
+    model.create.mockResolvedValue(record());
     const service = new FacebookPageService(deps);
     const oauthStore = {
       save: vi.fn(),
@@ -291,7 +288,7 @@ describe("FacebookPageService", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     settingHistoryServiceMocks.recordSettingHistory.mockRejectedValueOnce(historyError);
     const { deps, model } = dependencies();
-    model.findOneAndUpdate.mockResolvedValue(record());
+    model.create.mockResolvedValue(record());
     const service = new FacebookPageService(deps);
 
     await expect(service.connect("user-1", {
@@ -356,6 +353,7 @@ describe("FacebookPageService", () => {
 
       expect(deps.encryptSecret).not.toHaveBeenCalled();
       expect(model.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(model.create).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -402,6 +400,7 @@ describe("FacebookPageService", () => {
 
       expect(deps.encryptSecret).not.toHaveBeenCalled();
       expect(model.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(model.create).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }

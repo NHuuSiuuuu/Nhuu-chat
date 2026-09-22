@@ -125,7 +125,7 @@ function SettingHistoryValueBadge({ label, value, tone }: { label: string; value
   </span>;
 }
 
-function SettingHistoryTimelineItem({ item, isCurrent }: { item: SettingHistoryResponse; isCurrent: boolean }) {
+function SettingHistoryTimelineItem({ item }: { item: SettingHistoryResponse }) {
   const safeChanges = item.changes.filter(isSafeHistoryChange);
   const actorName = item.actorName.trim() || "Người dùng";
 
@@ -141,7 +141,6 @@ function SettingHistoryTimelineItem({ item, isCurrent }: { item: SettingHistoryR
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {isCurrent && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">Hiện tại</span>}
           <span className="rounded-full bg-gray-100 px-2.5 py-1 font-mono text-[11px] text-gray-600">Phiên bản {item.versionHash}</span>
         </div>
       </header>
@@ -212,7 +211,7 @@ export function SettingHistoryTimelineView({
         {isLoading ? <div className="grid min-h-56 place-items-center rounded-2xl border border-dashed border-gray-200 bg-gray-50" role="status"><p className="text-sm text-gray-500">Đang tải lịch sử...</p></div>
           : error ? <div className="grid min-h-56 place-items-center rounded-2xl border border-rose-100 bg-rose-50 px-6 text-center" role="alert"><div><p className="font-semibold text-rose-700">Không thể tải lịch sử hoạt động</p><p className="mt-1 text-sm text-rose-600">{error}</p></div></div>
             : items.length === 0 ? <div className="grid min-h-56 place-items-center rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-6 text-center"><div><p className="font-semibold text-gray-700">Chưa có hoạt động nào</p><p className="mt-1 text-sm text-gray-500">Các thay đổi cài đặt sẽ xuất hiện tại đây.</p></div></div>
-              : <ol className="ml-3 border-l border-gray-200">{items.map((item, index) => <SettingHistoryTimelineItem item={item} isCurrent={pagination.page === 1 && index === 0} key={item.id} />)}</ol>}
+              : <ol className="ml-3 border-l border-gray-200">{items.map((item) => <SettingHistoryTimelineItem item={item} key={item.id} />)}</ol>}
 
         {pagination.totalPages > 1 && <nav className="mt-6 flex items-center justify-between gap-3" aria-label="Phân trang lịch sử">
           <button className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Trang trước" type="button" disabled={pagination.page <= 1 || isLoading} onClick={() => onPageChange(pagination.page - 1)}>Trước</button>

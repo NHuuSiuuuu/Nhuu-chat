@@ -24,8 +24,9 @@ interface FacebookPageConnectionRecord {
 
 interface ConnectionModel {
   findOne(filter: { userId: string }): { lean(): Promise<FacebookPageConnectionRecord | null> };
-  findOneAndUpdate(filter: { userId: string }, update: Record<string, unknown>, options: Record<string, unknown>): Promise<FacebookPageConnectionRecord>;
-  deleteOne(filter: { userId: string }): Promise<unknown>;
+  findOneAndUpdate(filter: Record<string, unknown>, update: Record<string, unknown>, options: Record<string, unknown>): Promise<FacebookPageConnectionRecord | null>;
+  create(input: Record<string, unknown>): Promise<FacebookPageConnectionRecord>;
+  findOneAndDelete(filter: { userId: string }): Promise<FacebookPageConnectionRecord | null>;
 }
 
 export interface FacebookPageServiceDependencies {
@@ -109,7 +110,6 @@ export class FacebookPageService {
 
   // Xác thực Page trong deadline hữu hạn trước khi mã hóa và lưu token.
   async connect(userId: string, input: { pageId: string; pageAccessToken: string }): Promise<FacebookPageConnectionResponse> {
-    const existing = await this.model.findOne({ userId }).lean();
     const url = new URL(`https://graph.facebook.com/${this.graphApiVersion}/${encodeURIComponent(input.pageId)}`);
     url.searchParams.set("fields", "id,name,picture.type(large)");
     url.searchParams.set("access_token", input.pageAccessToken);
@@ -151,22 +151,39 @@ export class FacebookPageService {
     }
 
     const encryptedPageAccessToken = this.encrypt(input.pageAccessToken);
-    const saved = await this.model.findOneAndUpdate(
-      { userId },
-      {
-        $set: {
-          pageId: input.pageId,
-          pageName: typeof metadata.name === "string" ? metadata.name : null,
-          avatarUrl: graphPictureUrl(body),
-          encryptedPageAccessToken,
-          status: "connected",
-          lastValidatedAt: new Date(),
-          lastErrorCode: null
-        },
-        $setOnInsert: { userId, platform: "facebook" }
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
+    const values = {
+      pageId: input.pageId,
+      pageName: typeof metadata.name === "string" ? metadata.name : null,
+      avatarUrl: graphPictureUrl(body),
+      encryptedPageAccessToken,
+      status: "connected",
+      lastValidatedAt: new Date(),
+      lastErrorCode: null
+    };
+    let existing: FacebookPageConnectionRecord | null;
+    let saved: FacebookPageConnectionRecord;
+    // Chỉ ghi khi toàn bộ metadata audit còn khớp; đọc lại nếu kết nối bị thay hoặc xóa.
+    for (;;) {
+      existing = await this.model.findOne({ userId }).lean();
+      if (existing) {
+        const updated = await this.model.findOneAndUpdate(
+          { userId, _id: existing._id, ...toHistoryMetadata(existing) },
+          { $set: values },
+          { returnDocument: "after" }
+        );
+        if (!updated) continue;
+        saved = updated;
+        break;
+      }
+      try {
+        saved = await this.model.create({ userId, platform: "facebook", ...values });
+        break;
+      } catch (error) {
+        // Index userId duy nhất phân xử hai lần kết nối đầu tiên; lỗi khác vẫn được trả về.
+        const conflict = error as { code?: number; keyPattern?: { userId?: number } } | null;
+        if (conflict?.code !== 11000 || conflict.keyPattern?.userId !== 1) throw error;
+      }
+    }
     const result = toResponse(saved);
     recordSettingHistorySafely({
       userId,
@@ -184,8 +201,8 @@ export class FacebookPageService {
   }
 
   async remove(userId: string): Promise<void> {
-    const existing = await this.model.findOne({ userId }).lean();
-    await this.model.deleteOne({ userId });
+    const existing = await this.model.findOneAndDelete({ userId });
+    if (!existing) return;
     recordSettingHistorySafely({
       userId,
       actionType: "DISCONNECT_FACEBOOK_PAGE",

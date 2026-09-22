@@ -44,6 +44,27 @@ function listQuery(items: unknown[]) {
 }
 
 describe("setting history diff", () => {
+  it.each([
+    { oldValue: ["a"], newValue: { "0": "a" }, safeOld: ["a"], safeNew: { "0": "a" } },
+    { oldValue: { "0": "a" }, newValue: ["a"], safeOld: { "0": "a" }, safeNew: ["a"] },
+    { oldValue: [{ token: "secret" }], newValue: { "0": { token: "secret" } }, safeOld: [{}], safeNew: { "0": {} } }
+  ])("preserves sanitized container values when numeric paths have identical leaves: $safeOld to $safeNew", ({ oldValue, newValue, safeOld, safeNew }) => {
+    expect(diffSettings({ items: oldValue }, { items: newValue })).toEqual([
+      { fieldName: "items", oldValue: safeOld, newValue: safeNew }
+    ]);
+    expect(diffSettings(oldValue, newValue)).toEqual([
+      { fieldName: "value", oldValue: safeOld, newValue: safeNew }
+    ]);
+  });
+
+  it.each([
+    [{ credentials: {} }, { credentials: { token: "secret" } }],
+    [{ credentials: { token: "secret" } }, { credentials: {} }],
+    [{ credentials: [{}] }, { credentials: [{ token: "secret" }] }]
+  ])("does not remove an existing container after filtering its only sensitive field", (oldValue, newValue) => {
+    expect(diffSettings(oldValue, newValue)).toEqual([]);
+  });
+
   it("reports a changed primitive", () => {
     expect(diffSettings({ enabled: true }, { enabled: false })).toEqual([
       { fieldName: "enabled", oldValue: true, newValue: false }

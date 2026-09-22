@@ -12,6 +12,7 @@ const PATH_SEPARATOR = " › ";
 const MISSING_VALUE_DISPLAY = "(không có)";
 const EMPTY_OBJECT_VALUE = Symbol("empty-object");
 const EMPTY_ARRAY_VALUE = Symbol("empty-array");
+type ContainerValue = unknown[] | Record<string, unknown>;
 const SENSITIVE_FIELD_NAMES = new Set([
   "pageaccesstoken",
   "encryptedpageaccesstoken",
@@ -44,24 +45,27 @@ function toPersistentValue(value: unknown): unknown {
   return value === undefined ? MISSING_VALUE_DISPLAY : value;
 }
 
-// Làm phẳng dữ liệu thành các lá an toàn, giữ riêng container rỗng và bỏ toàn bộ nhánh bí mật.
+// Giữ kiểu container riêng khỏi các lá an toàn, bỏ toàn bộ nhánh bí mật.
 function collectLeafValues(
   value: unknown,
   path: string[],
-  leaves: Map<string, unknown>
+  leaves: Map<string, unknown>,
+  containers: Map<string, ContainerValue>
 ): void {
   if (Array.isArray(value)) {
+    containers.set(JSON.stringify(path), value);
     if (value.length === 0) {
       leaves.set(JSON.stringify(path), EMPTY_ARRAY_VALUE);
       return;
     }
     for (let index = 0; index < value.length; index += 1) {
-      collectLeafValues(value[index], [...path, String(index)], leaves);
+      collectLeafValues(value[index], [...path, String(index)], leaves, containers);
     }
     return;
   }
 
   if (isPlainObject(value)) {
+    containers.set(JSON.stringify(path), value);
     const fieldNames = Object.keys(value);
     if (fieldNames.length === 0) {
       leaves.set(JSON.stringify(path), EMPTY_OBJECT_VALUE);
@@ -72,7 +76,8 @@ function collectLeafValues(
       collectLeafValues(
         getOwnValue(value, fieldName),
         [...path, fieldName],
-        leaves
+        leaves,
+        containers
       );
     }
     return;
@@ -87,12 +92,40 @@ function toDiffValue(value: unknown): unknown {
   return value;
 }
 
+// Khi đổi kiểu container, chỉ đưa nội dung đã lọc đệ quy vào giá trị trước/sau.
+function sanitizeContainerValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeContainerValue);
+  if (isPlainObject(value)) {
+    return Object.fromEntries(Object.entries(value)
+      .filter(([key]) => !isSensitiveFieldName(key))
+      .map(([key, child]) => [key, sanitizeContainerValue(child)]));
+  }
+  return value;
+}
+
 // So sánh đệ quy dữ liệu cài đặt và giữ nguyên kiểu giá trị để tránh tuần tự hóa dữ liệu nhạy cảm.
 export function diffSettings(oldValue: unknown, newValue: unknown): SettingHistoryChange[] {
   const oldLeaves = new Map<string, unknown>();
   const newLeaves = new Map<string, unknown>();
-  collectLeafValues(oldValue, [], oldLeaves);
-  collectLeafValues(newValue, [], newLeaves);
+  const oldContainers = new Map<string, ContainerValue>();
+  const newContainers = new Map<string, ContainerValue>();
+  collectLeafValues(oldValue, [], oldLeaves, oldContainers);
+  collectLeafValues(newValue, [], newLeaves, newContainers);
+
+  for (const [path, oldContainer] of oldContainers) {
+    const newContainer = newContainers.get(path);
+    if (!newContainer) continue;
+    const oldType = Array.isArray(oldContainer) ? EMPTY_ARRAY_VALUE : EMPTY_OBJECT_VALUE;
+    const newType = Array.isArray(newContainer) ? EMPTY_ARRAY_VALUE : EMPTY_OBJECT_VALUE;
+    if (oldType !== newType) {
+      oldLeaves.set(path, sanitizeContainerValue(oldContainer));
+      newLeaves.set(path, sanitizeContainerValue(newContainer));
+    } else {
+      // Container vẫn tồn tại: không coi lá rỗng/bị lọc bí mật là thêm hoặc xóa cha.
+      if (oldLeaves.get(path) === oldType) oldLeaves.delete(path);
+      if (newLeaves.get(path) === newType) newLeaves.delete(path);
+    }
+  }
 
   const changes: SettingHistoryChange[] = [];
   const pathKeys = [

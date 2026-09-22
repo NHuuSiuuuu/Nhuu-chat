@@ -65,17 +65,7 @@ describe("AI settings service", () => {
 
   it("persists only the requested AI settings fields", async () => {
     userModelMocks.findById.mockReturnValue(query({ _id: "user-1" }));
-    userModelMocks.findByIdAndUpdate.mockReturnValue(query({
-      _id: "user-1",
-      aiSettings: {
-        modelTier: "economy",
-        enabled: false,
-        suggestionsEnabled: false,
-        sentimentEnabled: false,
-        suggestionMode: "manual",
-        sentimentWindow: 10
-      }
-    }));
+    userModelMocks.findByIdAndUpdate.mockReturnValue(query({ _id: "user-1" }));
 
     await expect(updateAiSettings("user-1", {
       modelTier: "economy",
@@ -103,12 +93,12 @@ describe("AI settings service", () => {
         "aiSettings.suggestionMode": "manual",
         "aiSettings.sentimentWindow": 10
       } },
-      { new: true }
+      { returnDocument: "before" }
     );
   });
 
   it("records only fields changed between the old and saved normalized AI settings", async () => {
-    userModelMocks.findById.mockReturnValue(query({
+    userModelMocks.findByIdAndUpdate.mockReturnValue(query({
       _id: "user-1",
       aiSettings: {
         modelTier: "unsupported",
@@ -119,21 +109,9 @@ describe("AI settings service", () => {
         sentimentWindow: 10
       }
     }));
-    userModelMocks.findByIdAndUpdate.mockReturnValue(query({
-      _id: "user-1",
-      aiSettings: {
-        modelTier: "economy",
-        enabled: false,
-        suggestionsEnabled: true,
-        sentimentEnabled: true,
-        suggestionMode: "manual",
-        sentimentWindow: 10
-      }
-    }));
 
     await updateAiSettings("user-1", { modelTier: "economy", enabled: false });
 
-    expect(userModelMocks.findById).toHaveBeenCalledWith("user-1");
     await vi.waitFor(() => expect(settingHistoryModelMocks.create).toHaveBeenCalledWith(expect.objectContaining({
       userId: "user-1",
       actionType: "UPDATE_AI_SETTINGS",
@@ -172,7 +150,7 @@ describe("AI settings service", () => {
     userModelMocks.findById.mockReturnValue(query({ _id: "user-1", aiSettings: { enabled: true } }));
     userModelMocks.findByIdAndUpdate.mockReturnValue(query({
       _id: "user-1",
-      aiSettings: { enabled: false }
+      aiSettings: { enabled: true }
     }));
 
     await expect(updateAiSettings("user-1", { enabled: false })).resolves.toMatchObject({ enabled: false });

@@ -59,9 +59,6 @@ export async function getAiSettings(userId: string): Promise<AiSettings> {
 }
 
 export async function updateAiSettings(userId: string, patch: AiSettingsPatch): Promise<AiSettings> {
-  const existingUser = await UserModel.findById(userId).lean();
-  if (!existingUser) throw new AppError(404, "USER_NOT_FOUND", "User was not found");
-  const oldSettings = normalizeSettings(existingUser.aiSettings);
   const set: Record<string, unknown> = {};
   if (patch.modelTier !== undefined) set["aiSettings.modelTier"] = patch.modelTier;
   if (patch.enabled !== undefined) set["aiSettings.enabled"] = patch.enabled;
@@ -69,9 +66,14 @@ export async function updateAiSettings(userId: string, patch: AiSettingsPatch): 
   if (patch.sentimentEnabled !== undefined) set["aiSettings.sentimentEnabled"] = patch.sentimentEnabled;
   if (patch.suggestionMode !== undefined) set["aiSettings.suggestionMode"] = patch.suggestionMode;
   if (patch.sentimentWindow !== undefined) set["aiSettings.sentimentWindow"] = patch.sentimentWindow;
-  const user = await UserModel.findByIdAndUpdate(userId, { $set: set }, { new: true }).lean();
+  // Lấy pre-image trong cùng thao tác ghi để hai lần lưu đồng thời không dùng chung bản cũ.
+  const user = await UserModel.findByIdAndUpdate(userId, { $set: set }, { returnDocument: "before" }).lean();
   if (!user) throw new AppError(404, "USER_NOT_FOUND", "User was not found");
-  const newSettings = normalizeSettings(user.aiSettings);
+  const oldSettings = normalizeSettings(user.aiSettings);
+  const newSettings = normalizeSettings({
+    ...oldSettings,
+    ...Object.fromEntries(Object.entries(set).map(([key, value]) => [key.slice("aiSettings.".length), value]))
+  });
   recordSettingHistorySafely({
     userId,
     actionType: "UPDATE_AI_SETTINGS",

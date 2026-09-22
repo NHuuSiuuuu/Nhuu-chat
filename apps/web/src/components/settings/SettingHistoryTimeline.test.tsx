@@ -169,7 +169,7 @@ describe("SettingHistoryTimeline", () => {
     expect(html).toContain("Cập nhật cài đặt AI");
     expect(html).toContain("Phiên bản");
     expect(html).toContain("abc123ef");
-    expect(html).toContain("Hiện tại");
+    expect(html).not.toContain("Hiện tại");
     expect(html).toContain("Cũ");
     expect(html).toContain("Thông minh nhất");
     expect(html).toContain("→");
@@ -193,6 +193,22 @@ describe("SettingHistoryTimeline", () => {
     expect(html).not.toContain("Chế độ xoay vòng");
     expect(html).not.toContain("old-secret");
     expect(html).not.toContain("new-secret");
+  });
+
+  it("does not claim a filtered connect event is the current connection", () => {
+    const html = renderView({
+      actionType: "CONNECT_FACEBOOK_PAGE",
+      items: [{
+        ...historyItem,
+        actionType: "CONNECT_FACEBOOK_PAGE",
+        actionTitle: "Kết nối Facebook Page",
+        changes: [{ fieldName: "status", oldValue: "(không có)", newValue: "connected" }]
+      }]
+    });
+
+    expect(html).toContain("connected");
+    expect(html).toContain("Kết nối Facebook Page");
+    expect(html).not.toContain("Hiện tại");
   });
 
   it("renders loading, error and empty states", () => {

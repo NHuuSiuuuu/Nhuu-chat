@@ -6,6 +6,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 ## [Unreleased]
 
 - Thêm trang và API Lịch sử hoạt động cho thay đổi Cài đặt AI, kết nối/ngắt kết nối Facebook Page, có xác thực theo người dùng, phân trang và giới hạn lưu 500 bản ghi mỗi người dùng.
+- Sửa snapshot lịch sử bị cũ khi nhiều yêu cầu cập nhật AI hoặc kết nối Facebook chạy đồng thời; chỉ ghi ngắt kết nối cho Page thực sự bị xóa. Diff giữ kiểu container và lọc dữ liệu nhạy cảm; bỏ nhãn `Hiện tại` vốn suy ra từ vị trí sự kiện trong Timeline.
 
 - Khôi phục sidebar 7 mục Giới thiệu trên desktop, bổ sung icon thông tin cho tab; mobile tiếp tục dùng menu accordion chung.
 
