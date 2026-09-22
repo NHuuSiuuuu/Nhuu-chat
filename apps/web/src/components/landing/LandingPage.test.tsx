@@ -81,6 +81,14 @@ describe("LandingPage", () => {
     expect(logo).not.toContain("<rect");
   });
 
+  it("keeps landing typography below the heaviest font weights", () => {
+    const source = readFileSync(new URL("./LandingPage.tsx", import.meta.url), "utf8");
+
+    expect(source).not.toContain("font-black");
+    expect(source).not.toContain("font-extrabold");
+    expect(source).not.toContain("font-bold");
+  });
+
   it("calls login and register callbacks from the public header", () => {
     const onLogin = vi.fn();
     const onRegister = vi.fn();
