@@ -245,7 +245,6 @@ describe("Settings page", () => {
 
     if (typeof settingsModule.isSettingsPlaceholderTab === "function") {
       expect([
-        "Cài đặt chung",
         "Hỗ trợ trả lời",
         "Giao diện",
         "Cuộc gọi",
@@ -254,6 +253,7 @@ describe("Settings page", () => {
         "Công cụ",
         "Phân quyền"
       ].every((item) => settingsModule.isSettingsPlaceholderTab(item as never))).toBe(true);
+      expect(settingsModule.isSettingsPlaceholderTab("Cài đặt chung" as never)).toBe(false);
       expect(settingsModule.isSettingsPlaceholderTab("Thẻ hội thoại" as never)).toBe(false);
       expect(settingsModule.isSettingsPlaceholderTab("Trợ lý AI" as never)).toBe(false);
       expect(settingsModule.isSettingsPlaceholderTab("Lịch sử" as never)).toBe(false);
@@ -442,7 +442,7 @@ describe("Settings page", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("function SettingsLayout");
-    expect(source.match(/<SettingsLayout/g)?.length).toBe(5);
+    expect(source.match(/<SettingsLayout/g)?.length).toBe(6);
     expect(source).not.toContain('if (activeTab === "Trợ lý AI") return <main');
     expect(source).not.toContain('if (activeTab === "Hỗ trợ trả lời") return <main');
   });

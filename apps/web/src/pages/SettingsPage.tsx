@@ -4,6 +4,7 @@ import type { AiModelTier, AiSentimentWindow, AiSettingsContract, AiSuggestionMo
 import { DashboardTopbar } from "../components/dashboard/DashboardTopbar.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
 import { AutomationTemplateImportModal } from "../components/settings/AutomationTemplateImportModal.js";
+import { GeneralSettingsPanel } from "../components/settings/GeneralSettingsPanel.js";
 import { SettingHistoryTimeline } from "../components/settings/SettingHistoryTimeline.js";
 import { apiRequest } from "../lib/api.js";
 import { resolveApiBaseUrl } from "../lib/api-url.js";
@@ -42,7 +43,6 @@ const settingsIconByItem = {
 } as const;
 type SettingsItem = typeof settingsItems[number];
 const placeholderSettingsItems = new Set<SettingsItem>([
-  "Cài đặt chung",
   "Hỗ trợ trả lời",
   "Giao diện",
   "Cuộc gọi",
@@ -1113,6 +1113,7 @@ export function SettingsPage({ token, refresh, onLogoClick, onNavigate, user, on
   }
 
   if (activeTab === "Giới thiệu") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><AboutSectionContext.Provider value={{ activeSection: activeAboutSection, onSectionChange: setActiveAboutSection }}><AboutSettings /></AboutSectionContext.Provider></SettingsLayout>;
+  if (activeTab === "Cài đặt chung") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><GeneralSettingsPanel apiUrl={API_URL} token={token} refresh={refresh} /></SettingsLayout>;
   if (activeTab === "Trợ lý AI") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><AiAssistantSettings token={token} refresh={refresh} ownerKey={user?.email} /></SettingsLayout>;
   if (activeTab === "Lịch sử") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><SettingHistoryTimeline token={token} refresh={refresh} apiUrl={API_URL} /></SettingsLayout>;
   if (isSettingsPlaceholderTab(activeTab)) return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><SettingsDevelopmentPlaceholder title={activeTab} /></SettingsLayout>;
