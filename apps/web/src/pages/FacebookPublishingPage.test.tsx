@@ -68,11 +68,10 @@ describe("FacebookPublishingPage", () => {
     expect(source).toContain("lastErrorMessage");
   });
 
-  it("keeps the post-list refresh action right-aligned without a repeated tab heading", () => {
+  it("removes the refresh action without restoring repeated tab headings", () => {
     const source = readFileSync(new URL("./FacebookPublishingPage.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain('className="mb-4 flex justify-end"');
-    expect(source).toContain(">Làm mới</button>");
+    expect(source).not.toContain(">Làm mới</button>");
     expect(source).not.toContain("Các bài viết đang chờ hoàn thiện.");
     expect(source).not.toContain("Các bài viết đã đặt lịch đăng.");
     expect(source).not.toContain("Theo dõi các bài viết đã đăng hoặc thất bại.");
