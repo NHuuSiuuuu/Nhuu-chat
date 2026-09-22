@@ -11,6 +11,7 @@ describe("DashboardTopbar", () => {
     expect(source).not.toContain("mb-");
     expect(source).toContain('src="/nhuu-logo.svg"');
     expect(source).toContain('alt="NhuuChat"');
+    expect(source).toContain('className="h-8 w-[90px] object-contain"');
     const logo = readFileSync(new URL("../../../public/nhuu-logo.svg", import.meta.url), "utf8");
     expect(logo).not.toContain("<rect");
     expect(source).toContain("nhuusiuu");
