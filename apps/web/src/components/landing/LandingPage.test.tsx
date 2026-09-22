@@ -42,7 +42,10 @@ describe("LandingPage", () => {
 
     expect(logo).toContain('fill="#1264e8"');
     expect(logo).toContain('stroke="#1264e8"');
-    expect(logo).not.toContain('fill="#fff"');
+    expect(logo).toContain("M60 43c-20 0-36 15-36 34");
+    expect(logo).toContain("M53 82c5 5 11 5 16 0");
+    expect(logo).toContain('x="108"');
+    expect(logo).toContain('<circle cx="61" cy="76" r="21" fill="#fff"/>');
     expect(logo).not.toContain('stroke="#fff"');
     expect(logo).not.toContain("<rect");
   });
