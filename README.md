@@ -131,7 +131,7 @@ Bài `failed` có thể retry thủ công; không có retry tự động cho l�
 
 ### Lịch sử hoạt động cài đặt
 
-Mở `Cài đặt > Lịch sử` hoặc `/settings/history` để xem Timeline thay đổi, giá trị cũ/mới, người thực hiện, thời gian và mã phiên bản. Bản hiện tại ghi nhận các thay đổi Cài đặt AI và thao tác kết nối/ngắt kết nối Facebook Page, gồm cả kết nối OAuth và nhập thủ công. Timeline có bộ lọc `Tất cả`, `Cài đặt AI`, `Kết nối Facebook` và phân trang 20 bản ghi; thao tác ngắt kết nối hiện nằm trong `Tất cả`. Các hành động chưa có API như xóa bình luận, chặn khách hàng hoặc chế độ xoay vòng chưa được ghi nhận.
+Mở `Cài đặt > Lịch sử` hoặc `/settings/history` để xem Timeline thay đổi, giá trị cũ/mới, người thực hiện, thời gian và mã phiên bản. Bản hiện tại ghi nhận các thay đổi Cài đặt AI và thao tác kết nối/ngắt kết nối Facebook Page, gồm cả kết nối OAuth và nhập thủ công. Timeline có bộ lọc `Tất cả`, `Cài đặt AI`, `Kết nối Facebook` và phân trang 20 bản ghi; thao tác ngắt kết nối hiện nằm trong `Tất cả`.
 
 API đọc lịch sử là `GET /api/v1/setting-histories?page=1&pageSize=20&actionType=UPDATE_AI_SETTINGS`. Route yêu cầu phiên đăng nhập hợp lệ với role `admin` hoặc `agent`, ưu tiên access token trong HttpOnly cookie và vẫn hỗ trợ Bearer token cho client cũ. API không nhận `userId`; backend luôn lấy người dùng từ thông tin xác thực và chỉ trả lịch sử của người đó. `page` mặc định là `1`, `pageSize` mặc định là `20` và được giới hạn tối đa `50`; `actionType` tùy chọn nhận `UPDATE_AI_SETTINGS`, `CONNECT_FACEBOOK_PAGE` hoặc `DISCONNECT_FACEBOOK_PAGE`. Kết quả mới nhất đứng trước và có dạng `{ items, pagination: { page, pageSize, total, totalPages, hasNextPage } }`.
 

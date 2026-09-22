@@ -199,7 +199,7 @@ Retry chỉ là thao tác thủ công trên bài `failed`. Timeout Meta là kế
 
 ### Lịch sử hoạt động cài đặt
 
-Người dùng mở `Cài đặt > Lịch sử` (`/settings/history`) để xem Timeline gồm giá trị cũ/mới, người thực hiện, thời gian và mã phiên bản. Phạm vi hiện tại gồm cập nhật Cài đặt AI, kết nối Facebook Page qua OAuth hoặc nhập thủ công, và ngắt kết nối Facebook Page. Giao diện dùng các bộ lọc `Tất cả`, `Cài đặt AI`, `Kết nối Facebook`, tải 20 bản ghi mỗi trang và có nút chuyển trang; thao tác ngắt kết nối hiện nằm trong `Tất cả`. Các hành động xóa bình luận, chặn khách hàng và chế độ xoay vòng chưa có API nên không xuất hiện trong lịch sử.
+Người dùng mở `Cài đặt > Lịch sử` (`/settings/history`) để xem Timeline gồm giá trị cũ/mới, người thực hiện, thời gian và mã phiên bản. Phạm vi hiện tại gồm cập nhật Cài đặt AI, kết nối Facebook Page qua OAuth hoặc nhập thủ công, và ngắt kết nối Facebook Page. Giao diện dùng các bộ lọc `Tất cả`, `Cài đặt AI`, `Kết nối Facebook`, tải 20 bản ghi mỗi trang và có nút chuyển trang; thao tác ngắt kết nối hiện nằm trong `Tất cả`.
 
 Route `GET /api/v1/setting-histories` yêu cầu xác thực với role `admin` hoặc `agent`, dùng access token trong HttpOnly cookie hoặc Bearer token tương thích client cũ. Backend lấy user từ phiên xác thực, không nhận `userId` trong query/body và không trả dữ liệu của người dùng khác. Query hỗ trợ:
 
