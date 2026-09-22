@@ -1,6 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const settingHistoryModelMocks = vi.hoisted(() => ({
+  create: vi.fn(),
+  find: vi.fn(),
+  deleteMany: vi.fn()
+}));
+
+const settingHistoryServiceMocks = vi.hoisted(() => ({
+  recordSettingHistory: vi.fn()
+}));
+
+vi.mock("../models/setting-history.model.js", () => ({
+  SettingHistoryModel: settingHistoryModelMocks
+}));
+vi.mock("./setting-history.service.js", async () => {
+  const actual = await vi.importActual<typeof import("./setting-history.service.js")>("./setting-history.service.js");
+  settingHistoryServiceMocks.recordSettingHistory.mockImplementation(actual.recordSettingHistory);
+  return { ...actual, recordSettingHistory: settingHistoryServiceMocks.recordSettingHistory };
+});
+
 import { AppError } from "../common/errors.js";
+import { FacebookOAuthService } from "./facebook-oauth.service.js";
 import { FacebookPageService, type FacebookPageServiceDependencies } from "./facebook-page.service.js";
 
 function record(overrides: Record<string, unknown> = {}) {
@@ -30,6 +50,7 @@ function dependencies(fetchResponse: unknown = {
     findOneAndUpdate: vi.fn(),
     deleteOne: vi.fn()
   };
+  model.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(null) });
   const fetchGraph = vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue(fetchResponse) });
   const deps: FacebookPageServiceDependencies = {
     model: model as never,
@@ -40,8 +61,24 @@ function dependencies(fetchResponse: unknown = {
   return { deps, model, fetchGraph };
 }
 
+function retentionQuery(rows: Array<{ _id: string }> = []) {
+  const historyQuery = {
+    sort: vi.fn(),
+    select: vi.fn(),
+    lean: vi.fn().mockResolvedValue(rows)
+  };
+  historyQuery.sort.mockReturnValue(historyQuery);
+  historyQuery.select.mockReturnValue(historyQuery);
+  return historyQuery;
+}
+
 describe("FacebookPageService", () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    settingHistoryModelMocks.create.mockResolvedValue({ _id: "history-1" });
+    settingHistoryModelMocks.find.mockReturnValue(retentionQuery());
+    settingHistoryModelMocks.deleteMany.mockResolvedValue({ deletedCount: 0 });
+  });
 
   it("validates Graph metadata before encrypting and persists only encrypted credentials", async () => {
     const { deps, model, fetchGraph } = dependencies();
@@ -139,12 +176,135 @@ describe("FacebookPageService", () => {
 
   it("removes only the authenticated user's connection", async () => {
     const { deps, model } = dependencies();
+    model.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(record()) });
     model.deleteOne.mockResolvedValue({ acknowledged: true, deletedCount: 1 });
     const service = new FacebookPageService(deps);
 
     await service.remove("user-1");
 
     expect(model.deleteOne).toHaveBeenCalledWith({ userId: "user-1" });
+  });
+
+  it("records a connect action with previous and saved safe Page metadata only", async () => {
+    const { deps, model } = dependencies({ id: "page-456", name: "Nhuu New" });
+    model.findOne.mockReturnValue({
+      lean: vi.fn().mockResolvedValue(record({
+        pageId: "page-123",
+        pageName: "Nhuu Old",
+        status: "invalid",
+        encryptedPageAccessToken: "ciphertext:old-token"
+      }))
+    });
+    model.findOneAndUpdate.mockResolvedValue(record({
+      pageId: "page-456",
+      pageName: "Nhuu New",
+      encryptedPageAccessToken: "ciphertext:new-token"
+    }));
+    const service = new FacebookPageService(deps);
+
+    await service.connect("user-1", { pageId: "page-456", pageAccessToken: "new-secret-token" });
+
+    expect(settingHistoryServiceMocks.recordSettingHistory).toHaveBeenCalledWith({
+      userId: "user-1",
+      actionType: "CONNECT_FACEBOOK_PAGE",
+      actionTitle: "Kết nối Facebook Page",
+      oldValue: { pageId: "page-123", pageName: "Nhuu Old", status: "invalid" },
+      newValue: { pageId: "page-456", pageName: "Nhuu New", status: "connected" }
+    });
+    expect(JSON.stringify(settingHistoryServiceMocks.recordSettingHistory.mock.calls[0]?.[0]))
+      .not.toMatch(/token|ciphertext|new-secret/i);
+    await vi.waitFor(() => expect(settingHistoryModelMocks.create).toHaveBeenCalledWith(expect.objectContaining({
+      actionType: "CONNECT_FACEBOOK_PAGE",
+      changes: [
+        { fieldName: "pageId", oldValue: "page-123", newValue: "page-456" },
+        { fieldName: "pageName", oldValue: "Nhuu Old", newValue: "Nhuu New" },
+        { fieldName: "status", oldValue: "invalid", newValue: "connected" }
+      ]
+    })));
+  });
+
+  it("records the removed Page identity without its encrypted token", async () => {
+    const { deps, model } = dependencies();
+    model.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(record()) });
+    model.deleteOne.mockResolvedValue({ acknowledged: true, deletedCount: 1 });
+    const service = new FacebookPageService(deps);
+
+    await service.remove("user-1");
+
+    expect(settingHistoryServiceMocks.recordSettingHistory).toHaveBeenCalledWith({
+      userId: "user-1",
+      actionType: "DISCONNECT_FACEBOOK_PAGE",
+      actionTitle: "Ngắt kết nối Facebook Page",
+      oldValue: { pageId: "page-123", pageName: "Nhuu Store", status: "connected" },
+      newValue: {}
+    });
+    expect(JSON.stringify(settingHistoryServiceMocks.recordSettingHistory.mock.calls[0]?.[0]))
+      .not.toMatch(/token|ciphertext/i);
+    await vi.waitFor(() => expect(settingHistoryModelMocks.create).toHaveBeenCalledWith(expect.objectContaining({
+      actionType: "DISCONNECT_FACEBOOK_PAGE",
+      changes: [
+        { fieldName: "pageId", oldValue: "page-123", newValue: "(không có)" },
+        { fieldName: "pageName", oldValue: "Nhuu Store", newValue: "(không có)" },
+        { fieldName: "status", oldValue: "connected", newValue: "(không có)" }
+      ]
+    })));
+  });
+
+  it("creates one history record when OAuth selection delegates to connect", async () => {
+    const { deps, model } = dependencies();
+    model.findOneAndUpdate.mockResolvedValue(record());
+    const service = new FacebookPageService(deps);
+    const oauthStore = {
+      save: vi.fn(),
+      read: vi.fn(),
+      consume: vi.fn(),
+      claim: vi.fn().mockResolvedValue({
+        kind: "selection",
+        userId: "user-1",
+        pages: [{
+          id: "page-123",
+          name: "Nhuu Store",
+          accessToken: "oauth-page-secret",
+          canPublish: true
+        }]
+      }),
+      releaseClaim: vi.fn(),
+      consumeClaim: vi.fn().mockResolvedValue(undefined)
+    };
+    const oauth = new FacebookOAuthService({ stateStore: oauthStore, randomToken: () => "claim-1" });
+
+    await oauth.select(
+      "user-1",
+      "selection-1",
+      "page-123",
+      (userId, input) => service.connect(userId, input)
+    );
+
+    expect(settingHistoryServiceMocks.recordSettingHistory).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(settingHistoryModelMocks.create).toHaveBeenCalledOnce());
+    expect(JSON.stringify(settingHistoryServiceMocks.recordSettingHistory.mock.calls[0]?.[0]))
+      .not.toContain("oauth-page-secret");
+  });
+
+  it("keeps a successful Facebook connection successful when history persistence fails", async () => {
+    const historyError = new Error("history unavailable");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    settingHistoryServiceMocks.recordSettingHistory.mockRejectedValueOnce(historyError);
+    const { deps, model } = dependencies();
+    model.findOneAndUpdate.mockResolvedValue(record());
+    const service = new FacebookPageService(deps);
+
+    await expect(service.connect("user-1", {
+      pageId: "page-123",
+      pageAccessToken: "secret-token"
+    })).resolves.toMatchObject({ pageId: "page-123", status: "connected" });
+
+    expect(settingHistoryServiceMocks.recordSettingHistory).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(consoleError).toHaveBeenCalledWith(
+      "Failed to record setting history",
+      expect.objectContaining({ userId: "user-1", actionType: "CONNECT_FACEBOOK_PAGE", error: historyError })
+    ));
+    consoleError.mockRestore();
   });
 
   it.each([

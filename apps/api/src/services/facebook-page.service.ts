@@ -4,6 +4,7 @@ import { env } from "@nhuu-chat/config";
 import { encryptSecret } from "../common/crypto.js";
 import { AppError } from "../common/errors.js";
 import { FacebookPageConnectionModel } from "../models/facebook-page-connection.model.js";
+import { recordSettingHistory } from "./setting-history.service.js";
 
 const FACEBOOK_GRAPH_REQUEST_TIMEOUT_MS = 10_000;
 
@@ -53,6 +54,25 @@ function toResponse(record: FacebookPageConnectionRecord): FacebookPageConnectio
   };
 }
 
+function toHistoryMetadata(record: FacebookPageConnectionRecord | null) {
+  if (!record) return {};
+  return {
+    pageId: record.pageId,
+    pageName: record.pageName ?? null,
+    status: record.status
+  };
+}
+
+function recordSettingHistorySafely(input: Parameters<typeof recordSettingHistory>[0]): void {
+  void recordSettingHistory(input).catch((error) => {
+    console.error("Failed to record setting history", {
+      userId: input.userId,
+      actionType: input.actionType,
+      error
+    });
+  });
+}
+
 function graphErrorCode(body: unknown): number | undefined {
   if (!body || typeof body !== "object") return undefined;
   const error = (body as { error?: unknown }).error;
@@ -89,6 +109,7 @@ export class FacebookPageService {
 
   // Xác thực Page trong deadline hữu hạn trước khi mã hóa và lưu token.
   async connect(userId: string, input: { pageId: string; pageAccessToken: string }): Promise<FacebookPageConnectionResponse> {
+    const existing = await this.model.findOne({ userId }).lean();
     const url = new URL(`https://graph.facebook.com/${this.graphApiVersion}/${encodeURIComponent(input.pageId)}`);
     url.searchParams.set("fields", "id,name,picture.type(large)");
     url.searchParams.set("access_token", input.pageAccessToken);
@@ -146,7 +167,15 @@ export class FacebookPageService {
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
-    return toResponse(saved);
+    const result = toResponse(saved);
+    recordSettingHistorySafely({
+      userId,
+      actionType: "CONNECT_FACEBOOK_PAGE",
+      actionTitle: "Kết nối Facebook Page",
+      oldValue: toHistoryMetadata(existing),
+      newValue: toHistoryMetadata(saved)
+    });
+    return result;
   }
 
   async get(userId: string): Promise<FacebookPageConnectionResponse | null> {
@@ -155,7 +184,15 @@ export class FacebookPageService {
   }
 
   async remove(userId: string): Promise<void> {
+    const existing = await this.model.findOne({ userId }).lean();
     await this.model.deleteOne({ userId });
+    recordSettingHistorySafely({
+      userId,
+      actionType: "DISCONNECT_FACEBOOK_PAGE",
+      actionTitle: "Ngắt kết nối Facebook Page",
+      oldValue: toHistoryMetadata(existing),
+      newValue: {}
+    });
   }
 }
 

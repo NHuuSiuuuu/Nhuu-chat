@@ -10,6 +10,7 @@ import {
   type AiSettings,
   type AiSuggestionMode
 } from "../ai/ai-settings.js";
+import { recordSettingHistory } from "./setting-history.service.js";
 
 export interface AiSettingsPatch {
   modelTier?: AiModelTier;
@@ -41,6 +42,16 @@ function normalizeSettings(value: unknown): AiSettings {
   };
 }
 
+function recordSettingHistorySafely(input: Parameters<typeof recordSettingHistory>[0]): void {
+  void recordSettingHistory(input).catch((error) => {
+    console.error("Failed to record setting history", {
+      userId: input.userId,
+      actionType: input.actionType,
+      error
+    });
+  });
+}
+
 export async function getAiSettings(userId: string): Promise<AiSettings> {
   const user = await UserModel.findById(userId).lean();
   if (!user) throw new AppError(404, "USER_NOT_FOUND", "User was not found");
@@ -48,6 +59,9 @@ export async function getAiSettings(userId: string): Promise<AiSettings> {
 }
 
 export async function updateAiSettings(userId: string, patch: AiSettingsPatch): Promise<AiSettings> {
+  const existingUser = await UserModel.findById(userId).lean();
+  if (!existingUser) throw new AppError(404, "USER_NOT_FOUND", "User was not found");
+  const oldSettings = normalizeSettings(existingUser.aiSettings);
   const set: Record<string, unknown> = {};
   if (patch.modelTier !== undefined) set["aiSettings.modelTier"] = patch.modelTier;
   if (patch.enabled !== undefined) set["aiSettings.enabled"] = patch.enabled;
@@ -57,5 +71,13 @@ export async function updateAiSettings(userId: string, patch: AiSettingsPatch): 
   if (patch.sentimentWindow !== undefined) set["aiSettings.sentimentWindow"] = patch.sentimentWindow;
   const user = await UserModel.findByIdAndUpdate(userId, { $set: set }, { new: true }).lean();
   if (!user) throw new AppError(404, "USER_NOT_FOUND", "User was not found");
-  return normalizeSettings(user.aiSettings);
+  const newSettings = normalizeSettings(user.aiSettings);
+  recordSettingHistorySafely({
+    userId,
+    actionType: "UPDATE_AI_SETTINGS",
+    actionTitle: "Cập nhật cài đặt AI",
+    oldValue: oldSettings,
+    newValue: newSettings
+  });
+  return newSettings;
 }
