@@ -140,6 +140,7 @@ describe("LandingPage", () => {
     const navigation = renderer.root.findByProps({ "aria-label": "Điều hướng chính" });
 
     expect(header.props.className).toContain("w-full fixed top-0 left-0 z-50 bg-transparent py-5 px-6 md:px-12 flex justify-between items-center");
+    expect(header.props.className).toContain("transition-all duration-300 ease-in-out");
     expect(header.props.className).not.toContain("border");
     expect(navigation.props.className).toContain("hidden md:flex gap-8 text-sm font-medium text-slate-600");
     for (const label of ["Sản phẩm", "Tích hợp", "Bảng giá", "Tài nguyên"]) {
