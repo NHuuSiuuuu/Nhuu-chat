@@ -61,6 +61,15 @@ export interface AiSettingsContract {
   sentimentWindow: AiSentimentWindow;
 }
 
+export type NotificationSound = "off" | "default" | "tri-tone" | "clubhouse";
+
+export interface GeneralSettingsContract {
+  browserNotificationsEnabled: boolean;
+  notificationSound: NotificationSound;
+  moveUnreadConversationsToTop: boolean;
+  openNextUnreadConversation: boolean;
+}
+
 export type ChatPlatform = "facebook" | "instagram" | "zalo" | "zalo_personal" | "telegram" | "telegram_personal";
 export type ConversationStatus = "open" | "pending" | "closed";
 
