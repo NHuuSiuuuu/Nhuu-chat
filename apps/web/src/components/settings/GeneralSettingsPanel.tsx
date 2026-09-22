@@ -33,7 +33,7 @@ function SettingToggle({ label, checked, onChange }: { label: string; checked: b
   </label>;
 }
 
-function SettingRow({ icon, title, description, children }: { icon: string; title: string; description: string; children?: React.ReactNode }) {
+function SettingRow({ icon, title, description, children }: { icon: "bell" | "user"; title: string; description: string; children?: React.ReactNode }) {
   return <div className="flex items-start gap-4 py-5">
     <span className="mt-0.5 grid size-7 shrink-0 place-items-center text-gray-600"><InboxIcon name={icon} size={21} /></span>
     <div className="min-w-0 flex-1">
