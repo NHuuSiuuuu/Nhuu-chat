@@ -305,6 +305,13 @@ describe("Settings page", () => {
     expect(source).toContain("setSuggestionsEnabled");
   });
 
+  it("gives AI assistant tabs persistent selected and unselected backgrounds", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('activeAiTab === "Gợi ý trả lời" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"');
+    expect(source).toContain('activeAiTab === "Chatbot tự động" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"');
+  });
+
   it("renders the chatbot automation workspace instead of a placeholder", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
