@@ -5,10 +5,10 @@ import TestRenderer, { act, type ReactTestRenderer } from "react-test-renderer";
 import { LandingPage } from "./LandingPage.js";
 
 describe("LandingPage", () => {
-  function renderLanding(props: React.ComponentProps<typeof LandingPage>) {
+  function renderLanding({ onLogout = vi.fn(), ...props }: Omit<React.ComponentProps<typeof LandingPage>, "onLogout"> & { onLogout?: () => void }) {
     let renderer!: ReactTestRenderer;
     act(() => {
-      renderer = TestRenderer.create(<LandingPage {...props} />);
+      renderer = TestRenderer.create(<LandingPage {...props} onLogout={onLogout} />);
     });
     return renderer;
   }
@@ -131,6 +131,31 @@ describe("LandingPage", () => {
     act(() => userButton.props.onClick());
 
     expect(onDashboard).toHaveBeenCalledOnce();
+  });
+
+  it("renders the requested navigation labels with their landing link styling", () => {
+    const renderer = renderLanding({ user: null, onDashboard: vi.fn(), onLogin: vi.fn(), onRegister: vi.fn() });
+
+    for (const label of ["Sản phẩm", "Tích hợp", "Bảng giá", "Tài nguyên"]) {
+      const link = renderer.root.findAllByType("a").find((candidate) => candidate.children.includes(label));
+      expect(link?.props.className).toContain("transition hover:text-blue-600");
+    }
+  });
+
+  it("lets an authenticated user log out from the landing header", () => {
+    const onLogout = vi.fn();
+    const renderer = renderLanding({
+      user: { email: "admin@example.com", role: "admin" },
+      onDashboard: vi.fn(),
+      onLogin: vi.fn(),
+      onRegister: vi.fn(),
+      onLogout,
+    });
+
+    const logoutButton = renderer.root.findByProps({ "aria-label": "Đăng xuất" });
+    act(() => logoutButton.props.onClick());
+
+    expect(onLogout).toHaveBeenCalledOnce();
   });
 
   it("opens and closes the FAQ answer while updating aria-expanded", () => {

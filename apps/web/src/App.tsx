@@ -177,12 +177,16 @@ export function App() {
     });
     return () => { cancelled = true; };
   }, [loadSession]);
+  const logout = useCallback(() => {
+    persistInboxPlatform(undefined);
+    void fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).finally(() => { clearAuth(); setAuth(null); });
+  }, []);
   let appContent: React.ReactNode;
   if (!authReady) {
     appContent = <PageSkeleton />;
   } else if (page === "landing") {
     appContent = <>
-      <LandingPage user={auth?.user ?? null} onDashboard={() => navigate("dashboard")} onLogin={() => { setAuthFormMode("login"); setShowAuthForm(true); }} onRegister={() => { setAuthFormMode("register"); setShowAuthForm(true); }} />
+      <LandingPage user={auth?.user ?? null} onDashboard={() => navigate("dashboard")} onLogin={() => { setAuthFormMode("login"); setShowAuthForm(true); }} onRegister={() => { setAuthFormMode("register"); setShowAuthForm(true); }} onLogout={logout} />
       {showAuthForm && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4" role="presentation">
         <div className="max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl shadow-2xl">
           <AuthPage embedded initialMode={authFormMode} onAuthenticated={(next) => { setAuth({ user: next.user }); setShowAuthForm(false); }} onBack={() => setShowAuthForm(false)} />
@@ -198,7 +202,6 @@ export function App() {
       ? inboxPlatform.slice("facebook:".length)
       : undefined;
     const inboxConversationPlatform = inboxChannelId ? "facebook" : inboxPlatform;
-    const logout = () => { persistInboxPlatform(undefined); void fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).finally(() => { clearAuth(); setAuth(null); }); };
     const openProfile = () => navigate("profile");
     const navigateFromHeader = (item: HeaderNavItem) => {
       if (item === "Hộp thư") return navigate("inbox", inboxPlatform);
