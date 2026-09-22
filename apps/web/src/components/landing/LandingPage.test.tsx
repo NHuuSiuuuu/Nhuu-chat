@@ -34,6 +34,11 @@ describe("LandingPage", () => {
     expect(rendered).toContain("Câu hỏi thường gặp");
     expect(rendered).toContain("Hộp thư");
     expect(rendered).toContain("Bắt đầu dùng thử");
+    expect(rendered).toContain("AI Auto-Reply Active • Khách VIP 100%");
+    expect(rendered).toContain("Tăng 300% hiệu suất");
+    expect(rendered).toContain("Tự động chốt đơn Zalo & FB");
+    expect(source.findByProps({ "data-testid": "landing-badge-ai" }).props.animate).toEqual({ y: [-8, 8, -8] });
+    expect(source.findByProps({ "data-testid": "landing-badge-performance" }).props.transition.delay).toBe(1);
     expect(source.findAllByProps({ src: "/nhuu-logo-landing.svg" })).toHaveLength(2);
     expect(source.findByProps({ src: "/nhuu-logo.svg" })).toBeTruthy();
   });
