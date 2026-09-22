@@ -139,6 +139,54 @@ describe("setting history service", () => {
     );
   });
 
+  it("persists legitimate password policy and cookie consent fields", async () => {
+    settingHistoryModel.create.mockResolvedValue({ _id: "history-legitimate-fields" });
+    settingHistoryModel.find.mockReturnValue(retentionQuery([]));
+
+    await recordSettingHistory({
+      userId: "user-1",
+      actionType: "UPDATE_AI_SETTINGS",
+      actionTitle: "Cập nhật cài đặt AI",
+      oldValue: { passwordPolicy: "standard", cookieConsent: false },
+      newValue: { passwordPolicy: "strict", cookieConsent: true }
+    });
+
+    expect(settingHistoryModel.create).toHaveBeenCalledWith(expect.objectContaining({
+      changes: [
+        { fieldName: "passwordPolicy", oldValue: "standard", newValue: "strict" },
+        { fieldName: "cookieConsent", oldValue: false, newValue: true }
+      ]
+    }));
+  });
+
+  it("keeps safe leaves from a new parent object while omitting its secret leaves", async () => {
+    settingHistoryModel.create.mockResolvedValue({ _id: "history-safe-sibling" });
+    settingHistoryModel.find.mockReturnValue(retentionQuery([]));
+
+    await recordSettingHistory({
+      userId: "user-1",
+      actionType: "CONNECT_FACEBOOK_PAGE",
+      actionTitle: "Kết nối Facebook Page",
+      oldValue: {},
+      newValue: {
+        credentials: {
+          pageName: "Trang an toàn",
+          token: "must-never-be-persisted"
+        }
+      }
+    });
+
+    expect(settingHistoryModel.create).toHaveBeenCalledWith(expect.objectContaining({
+      changes: [{
+        fieldName: "credentials › pageName",
+        oldValue: "(không có)",
+        newValue: "Trang an toàn"
+      }]
+    }));
+    expect(JSON.stringify(settingHistoryModel.create.mock.calls[0]?.[0]))
+      .not.toContain("must-never-be-persisted");
+  });
+
   it("does not create a history row when only sensitive values changed", async () => {
     settingHistoryModel.create.mockResolvedValue({ _id: "history-secret" });
     settingHistoryModel.find.mockReturnValue(retentionQuery([]));

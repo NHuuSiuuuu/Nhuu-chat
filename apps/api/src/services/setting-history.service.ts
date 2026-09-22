@@ -10,12 +10,17 @@ import {
 const SETTING_HISTORY_LIMIT = 500;
 const PATH_SEPARATOR = " › ";
 const MISSING_VALUE_DISPLAY = "(không có)";
-const SENSITIVE_FIELD_MARKERS = ["token", "password", "secret", "cookie", "authorization"];
 const SENSITIVE_FIELD_NAMES = new Set([
   "pageaccesstoken",
   "encryptedpageaccesstoken",
   "accesstoken",
-  ...SENSITIVE_FIELD_MARKERS
+  "token",
+  "password",
+  "secret",
+  "cookie",
+  "authorization",
+  "clientsecret",
+  "sessioncookie"
 ]);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -34,29 +39,7 @@ function getOwnValue(value: Record<string, unknown>, fieldName: string): unknown
 
 function isSensitiveFieldName(fieldName: string): boolean {
   const normalized = fieldName.replace(/[^a-z0-9]/gi, "").toLowerCase();
-  if (SENSITIVE_FIELD_NAMES.has(normalized)) return true;
-
-  const words = fieldName
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean);
-  return SENSITIVE_FIELD_MARKERS.some((marker) =>
-    words.includes(marker) || normalized.startsWith(marker) || normalized.endsWith(marker)
-  );
-}
-
-function isSensitivePath(fieldName: string): boolean {
-  return fieldName.split(PATH_SEPARATOR).some(isSensitiveFieldName);
-}
-
-function containsSensitiveField(value: unknown): boolean {
-  if (Array.isArray(value)) return value.some(containsSensitiveField);
-  if (!isPlainObject(value)) return false;
-
-  return Object.keys(value).some((fieldName) =>
-    isSensitiveFieldName(fieldName) || containsSensitiveField(getOwnValue(value, fieldName))
-  );
+  return SENSITIVE_FIELD_NAMES.has(normalized);
 }
 
 function toPersistentValue(value: unknown): unknown {
@@ -71,23 +54,28 @@ function collectChanges(
 ): void {
   if (Object.is(oldValue, newValue)) return;
 
-  if (Array.isArray(oldValue) && Array.isArray(newValue)) {
-    const itemCount = Math.max(oldValue.length, newValue.length);
+  const oldArray = Array.isArray(oldValue) ? oldValue : undefined;
+  const newArray = Array.isArray(newValue) ? newValue : undefined;
+  if ((oldArray || newArray) && (oldArray || oldValue === undefined) && (newArray || newValue === undefined)) {
+    const itemCount = Math.max(oldArray?.length ?? 0, newArray?.length ?? 0);
     for (let index = 0; index < itemCount; index += 1) {
-      collectChanges(oldValue[index], newValue[index], appendPath(path, String(index)), changes);
+      collectChanges(oldArray?.[index], newArray?.[index], appendPath(path, String(index)), changes);
     }
     return;
   }
 
-  if (isPlainObject(oldValue) && isPlainObject(newValue)) {
+  const oldObject = isPlainObject(oldValue) ? oldValue : undefined;
+  const newObject = isPlainObject(newValue) ? newValue : undefined;
+  if ((oldObject || newObject) && (oldObject || oldValue === undefined) && (newObject || newValue === undefined)) {
     const fieldNames = [
-      ...Object.keys(oldValue),
-      ...Object.keys(newValue).filter((fieldName) => !Object.hasOwn(oldValue, fieldName))
+      ...Object.keys(oldObject ?? {}),
+      ...Object.keys(newObject ?? {}).filter((fieldName) => !Object.hasOwn(oldObject ?? {}, fieldName))
     ];
     for (const fieldName of fieldNames) {
+      if (isSensitiveFieldName(fieldName)) continue;
       collectChanges(
-        getOwnValue(oldValue, fieldName),
-        getOwnValue(newValue, fieldName),
+        oldObject ? getOwnValue(oldObject, fieldName) : undefined,
+        newObject ? getOwnValue(newObject, fieldName) : undefined,
         appendPath(path, fieldName),
         changes
       );
@@ -132,11 +120,6 @@ export async function recordSettingHistory(input: {
   newValue: unknown;
 }): Promise<SettingHistory | null> {
   const changes = diffSettings(input.oldValue, input.newValue)
-    .filter((change) =>
-      !isSensitivePath(change.fieldName)
-      && !containsSensitiveField(change.oldValue)
-      && !containsSensitiveField(change.newValue)
-    )
     .map((change) => ({
       ...change,
       oldValue: toPersistentValue(change.oldValue),
