@@ -10,6 +10,8 @@ import {
 const SETTING_HISTORY_LIMIT = 500;
 const PATH_SEPARATOR = " › ";
 const MISSING_VALUE_DISPLAY = "(không có)";
+const EMPTY_OBJECT_VALUE = Symbol("empty-object");
+const EMPTY_ARRAY_VALUE = Symbol("empty-array");
 const SENSITIVE_FIELD_NAMES = new Set([
   "pageaccesstoken",
   "encryptedpageaccesstoken",
@@ -46,54 +48,72 @@ function toPersistentValue(value: unknown): unknown {
   return value === undefined ? MISSING_VALUE_DISPLAY : value;
 }
 
-function collectChanges(
-  oldValue: unknown,
-  newValue: unknown,
+// Làm phẳng dữ liệu thành các lá an toàn, giữ riêng container rỗng và bỏ toàn bộ nhánh bí mật.
+function collectLeafValues(
+  value: unknown,
   path: string,
-  changes: SettingHistoryChange[]
+  leaves: Map<string, unknown>
 ): void {
-  if (Object.is(oldValue, newValue)) return;
-
-  const oldArray = Array.isArray(oldValue) ? oldValue : undefined;
-  const newArray = Array.isArray(newValue) ? newValue : undefined;
-  if ((oldArray || newArray) && (oldArray || oldValue === undefined) && (newArray || newValue === undefined)) {
-    const itemCount = Math.max(oldArray?.length ?? 0, newArray?.length ?? 0);
-    for (let index = 0; index < itemCount; index += 1) {
-      collectChanges(oldArray?.[index], newArray?.[index], appendPath(path, String(index)), changes);
+  const leafPath = path || "value";
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      if (path) leaves.set(leafPath, EMPTY_ARRAY_VALUE);
+      return;
+    }
+    for (let index = 0; index < value.length; index += 1) {
+      collectLeafValues(value[index], appendPath(path, String(index)), leaves);
     }
     return;
   }
 
-  const oldObject = isPlainObject(oldValue) ? oldValue : undefined;
-  const newObject = isPlainObject(newValue) ? newValue : undefined;
-  if ((oldObject || newObject) && (oldObject || oldValue === undefined) && (newObject || newValue === undefined)) {
-    const fieldNames = [
-      ...Object.keys(oldObject ?? {}),
-      ...Object.keys(newObject ?? {}).filter((fieldName) => !Object.hasOwn(oldObject ?? {}, fieldName))
-    ];
+  if (isPlainObject(value)) {
+    const fieldNames = Object.keys(value);
+    if (fieldNames.length === 0) {
+      if (path) leaves.set(leafPath, EMPTY_OBJECT_VALUE);
+      return;
+    }
     for (const fieldName of fieldNames) {
       if (isSensitiveFieldName(fieldName)) continue;
-      collectChanges(
-        oldObject ? getOwnValue(oldObject, fieldName) : undefined,
-        newObject ? getOwnValue(newObject, fieldName) : undefined,
+      collectLeafValues(
+        getOwnValue(value, fieldName),
         appendPath(path, fieldName),
-        changes
+        leaves
       );
     }
     return;
   }
 
-  changes.push({
-    fieldName: path || "value",
-    oldValue,
-    newValue
-  });
+  leaves.set(leafPath, value);
+}
+
+function toDiffValue(value: unknown): unknown {
+  if (value === EMPTY_OBJECT_VALUE) return {};
+  if (value === EMPTY_ARRAY_VALUE) return [];
+  return value;
 }
 
 // So sánh đệ quy dữ liệu cài đặt và giữ nguyên kiểu giá trị để tránh tuần tự hóa dữ liệu nhạy cảm.
 export function diffSettings(oldValue: unknown, newValue: unknown): SettingHistoryChange[] {
+  const oldLeaves = new Map<string, unknown>();
+  const newLeaves = new Map<string, unknown>();
+  collectLeafValues(oldValue, "", oldLeaves);
+  collectLeafValues(newValue, "", newLeaves);
+
   const changes: SettingHistoryChange[] = [];
-  collectChanges(oldValue, newValue, "", changes);
+  const fieldNames = [
+    ...oldLeaves.keys(),
+    ...[...newLeaves.keys()].filter((fieldName) => !oldLeaves.has(fieldName))
+  ];
+  for (const fieldName of fieldNames) {
+    const oldLeaf = oldLeaves.get(fieldName);
+    const newLeaf = newLeaves.get(fieldName);
+    if (Object.is(oldLeaf, newLeaf)) continue;
+    changes.push({
+      fieldName,
+      oldValue: toDiffValue(oldLeaf),
+      newValue: toDiffValue(newLeaf)
+    });
+  }
   return changes;
 }
 

@@ -187,6 +187,100 @@ describe("setting history service", () => {
       .not.toContain("must-never-be-persisted");
   });
 
+  it.each([null, "disabled"])(
+    "does not leak secret leaves when an object changes to %j",
+    async (newCredentials) => {
+      settingHistoryModel.create.mockResolvedValue({ _id: "history-object-transition" });
+      settingHistoryModel.find.mockReturnValue(retentionQuery([]));
+
+      await recordSettingHistory({
+        userId: "user-1",
+        actionType: "CONNECT_FACEBOOK_PAGE",
+        actionTitle: "Kết nối Facebook Page",
+        oldValue: {
+          credentials: {
+            pageName: "Trang cũ",
+            token: "object-transition-secret"
+          }
+        },
+        newValue: { credentials: newCredentials }
+      });
+
+      const payload = settingHistoryModel.create.mock.calls[0]?.[0];
+      expect(payload.changes).toContainEqual({
+        fieldName: "credentials › pageName",
+        oldValue: "Trang cũ",
+        newValue: "(không có)"
+      });
+      expect(JSON.stringify(payload)).not.toContain("object-transition-secret");
+    }
+  );
+
+  it("does not leak secret leaves when an array changes to another container", async () => {
+    settingHistoryModel.create.mockResolvedValue({ _id: "history-array-transition" });
+    settingHistoryModel.find.mockReturnValue(retentionQuery([]));
+
+    await recordSettingHistory({
+      userId: "user-1",
+      actionType: "CONNECT_FACEBOOK_PAGE",
+      actionTitle: "Kết nối Facebook Page",
+      oldValue: {
+        credentials: [{ pageName: "Trang cũ", token: "old-array-secret" }]
+      },
+      newValue: {
+        credentials: { pageName: "Trang mới", token: "new-object-secret" }
+      }
+    });
+
+    const payload = settingHistoryModel.create.mock.calls[0]?.[0];
+    expect(payload.changes).toEqual(expect.arrayContaining([
+      {
+        fieldName: "credentials › 0 › pageName",
+        oldValue: "Trang cũ",
+        newValue: "(không có)"
+      },
+      {
+        fieldName: "credentials › pageName",
+        oldValue: "(không có)",
+        newValue: "Trang mới"
+      }
+    ]));
+    expect(JSON.stringify(payload)).not.toMatch(/old-array-secret|new-object-secret/);
+  });
+
+  it("persists stable empty-container transitions without recording sensitive paths", async () => {
+    settingHistoryModel.create.mockResolvedValue({ _id: "history-empty-containers" });
+    settingHistoryModel.find.mockReturnValue(retentionQuery([]));
+
+    await recordSettingHistory({
+      userId: "user-1",
+      actionType: "UPDATE_AI_SETTINGS",
+      actionTitle: "Cập nhật cài đặt AI",
+      oldValue: {
+        removedObject: {},
+        removedArray: [],
+        switched: {},
+        token: {}
+      },
+      newValue: {
+        addedObject: {},
+        addedArray: [],
+        switched: [],
+        token: []
+      }
+    });
+
+    expect(settingHistoryModel.create).toHaveBeenCalledWith(expect.objectContaining({
+      changes: [
+        { fieldName: "removedObject", oldValue: {}, newValue: "(không có)" },
+        { fieldName: "removedArray", oldValue: [], newValue: "(không có)" },
+        { fieldName: "switched", oldValue: {}, newValue: [] },
+        { fieldName: "addedObject", oldValue: "(không có)", newValue: {} },
+        { fieldName: "addedArray", oldValue: "(không có)", newValue: [] }
+      ]
+    }));
+  });
+
   it("does not create a history row when only sensitive values changed", async () => {
     settingHistoryModel.create.mockResolvedValue({ _id: "history-secret" });
     settingHistoryModel.find.mockReturnValue(retentionQuery([]));
