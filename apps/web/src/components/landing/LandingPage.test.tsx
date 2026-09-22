@@ -38,7 +38,9 @@ describe("LandingPage", () => {
     expect(rendered).toContain("Tăng 300% hiệu suất");
     expect(rendered).toContain("Tự động chốt đơn Zalo & FB");
     expect(source.findByProps({ "data-testid": "landing-badge-ai" }).props.animate).toEqual({ y: [-8, 8, -8] });
+    expect(source.findByProps({ "data-testid": "landing-badge-ai" }).props.className).toContain("-top-5");
     expect(source.findByProps({ "data-testid": "landing-badge-performance" }).props.transition.delay).toBe(1);
+    expect(source.findByProps({ "data-testid": "landing-badge-performance" }).props.className).toContain("-bottom-5");
     expect(source.findAllByProps({ src: "/nhuu-logo-landing.svg" })).toHaveLength(2);
     expect(source.findByProps({ src: "/nhuu-logo.svg" })).toBeTruthy();
   });
