@@ -37,12 +37,13 @@ describe("LandingPage", () => {
     expect(source.findAllByProps({ src: "/nhuu-logo-landing.svg" })).toHaveLength(2);
   });
 
-  it("uses the white transparent logo variant for the landing brand", () => {
+  it("uses the blue transparent logo variant for the landing brand", () => {
     const logo = readFileSync(new URL("../../../public/nhuu-logo-landing.svg", import.meta.url), "utf8");
 
-    expect(logo).toContain('fill="#fff"');
-    expect(logo).toContain('stroke="#fff"');
-    expect(logo).not.toContain("#1264e8");
+    expect(logo).toContain('fill="#1264e8"');
+    expect(logo).toContain('stroke="#1264e8"');
+    expect(logo).not.toContain('fill="#fff"');
+    expect(logo).not.toContain('stroke="#fff"');
     expect(logo).not.toContain("<rect");
   });
 
