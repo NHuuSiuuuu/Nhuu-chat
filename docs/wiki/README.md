@@ -46,6 +46,7 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
 - Bot Pause 30 phút; queue hỗ trợ retry `0s`, `1s`, `4s`, nhưng chatbot tự động chỉ gửi một lần do connector chưa hỗ trợ khóa idempotency.
 - Bot Pause 30 phút và retry outbound theo các mốc `0s`, `1s`, `4s`.
 - Cấu hình Trợ lý AI được lưu theo tài khoản qua `GET/PATCH /api/v1/ai-settings`.
+- Trang `Cài đặt > Lịch sử` và API đọc lịch sử đã hoạt động cho thay đổi Cài đặt AI cùng kết nối/ngắt kết nối Facebook Page.
 - Mô hình Gemini có ba tier: `smart`, `balanced` và `economy`, tương ứng với model thông minh nhất, cân bằng và tiết kiệm.
 - Gợi ý trả lời hỗ trợ các chế độ thủ công, khi mở hội thoại và khi khách nhắn tin; chế độ thủ công không tự gọi API khi mở hội thoại.
 - Gợi ý dùng 6 tin nhắn cuối của cả khách hàng và nhân viên theo thứ tự thời gian, trả tối đa 3 câu và có fallback khi Gemini không khả dụng.
@@ -195,6 +196,18 @@ Cấu hình Cloudinary đủ `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` và `
 Chế độ và trạng thái được hỗ trợ: lưu `draft`, đăng `now`, hẹn `scheduled`, sau đó `publishing`, `published` hoặc `failed`. Nhập/hiển thị lịch theo `Asia/Ho_Chi_Minh`; MongoDB lưu thời điểm dưới dạng UTC. Worker kiểm tra mỗi 30 giây (`FACEBOOK_POST_SCHEDULER_INTERVAL_MS=30000`), chạy recovery ngay khi API khởi động, và dùng lease mặc định 120 giây (`FACEBOOK_POST_LEASE_MS=120000`), nên bài đến hạn trong lúc server tắt sẽ được xử lý sau restart.
 
 Retry chỉ là thao tác thủ công trên bài `failed`. Timeout Meta là kết quả mơ hồ: Meta có thể đã tạo bài dù client không nhận được phản hồi, nên phải kiểm tra Page/Meta trước khi retry để tránh trùng bài. Lease hết hạn cũng cần xác nhận thủ công. Ngoài phạm vi V1: App Review production, nhiều Page trên một user, video, nhiều ảnh, lịch lặp, chỉnh sửa/xóa bài đã publish và các tính năng bulk/calendar nâng cao.
+
+### Lịch sử hoạt động cài đặt
+
+Người dùng mở `Cài đặt > Lịch sử` (`/settings/history`) để xem Timeline gồm giá trị cũ/mới, người thực hiện, thời gian và mã phiên bản. Phạm vi hiện tại gồm cập nhật Cài đặt AI, kết nối Facebook Page qua OAuth hoặc nhập thủ công, và ngắt kết nối Facebook Page. Giao diện dùng các bộ lọc `Tất cả`, `Cài đặt AI`, `Kết nối Facebook`, tải 20 bản ghi mỗi trang và có nút chuyển trang; thao tác ngắt kết nối hiện nằm trong `Tất cả`. Các hành động xóa bình luận, chặn khách hàng và chế độ xoay vòng chưa có API nên không xuất hiện trong lịch sử.
+
+Route `GET /api/v1/setting-histories` yêu cầu xác thực với role `admin` hoặc `agent`, dùng access token trong HttpOnly cookie hoặc Bearer token tương thích client cũ. Backend lấy user từ phiên xác thực, không nhận `userId` trong query/body và không trả dữ liệu của người dùng khác. Query hỗ trợ:
+
+- `page`: số trang dương, mặc định `1`.
+- `pageSize`: mặc định `20`, tối đa `50`.
+- `actionType`: tùy chọn `UPDATE_AI_SETTINGS`, `CONNECT_FACEBOOK_PAGE` hoặc `DISCONNECT_FACEBOOK_PAGE`.
+
+Response có dạng `{ items, pagination: { page, pageSize, total, totalPages, hasNextPage } }` và sắp xếp bản ghi mới nhất trước. Lịch sử chỉ chứa metadata an toàn; Page Access Token, OAuth token, cookie, password, secret và trường xác thực nhạy cảm không được lưu hoặc trả về. Mỗi người dùng được giữ tối đa 500 bản ghi, bản ghi cũ nhất tự bị dọn khi vượt giới hạn; vì vậy đây không phải kho audit lưu vô thời hạn.
 
 ### Gửi media outbound
 

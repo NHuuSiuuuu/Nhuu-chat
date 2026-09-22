@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm trang và API Lịch sử hoạt động cho thay đổi Cài đặt AI, kết nối/ngắt kết nối Facebook Page, có xác thực theo người dùng, phân trang và giới hạn lưu 500 bản ghi mỗi người dùng.
+
 - Khôi phục sidebar 7 mục Giới thiệu trên desktop, bổ sung icon thông tin cho tab; mobile tiếp tục dùng menu accordion chung.
 
 - Thêm điều hướng URL riêng cho từng mục Giới thiệu trên mobile và Dashboard, đồng thời bỏ menu Giới thiệu bị lặp phía trên nội dung.

@@ -19,6 +19,7 @@ MVP quản lý inbox chăm sóc khách hàng Telegram và trợ lý RAG. MongoDB
 - Inbox React tối thiểu.
 - Ghim tối đa 10 tin nhắn trong mỗi hội thoại, có thanh tin đã ghim và đồng bộ realtime cho admin/agent.
 - Ghi chú nội bộ theo từng hội thoại; agent/admin có thể tạo, sửa, xóa và ghim ghi chú trong sidebar Thông tin.
+- Trang `Cài đặt > Lịch sử` hiển thị Timeline thay đổi Cài đặt AI và kết nối/ngắt kết nối Facebook Page theo từng người dùng.
 - Security headers, request ID và rate limit auth.
 
 ## Chạy local
@@ -127,6 +128,14 @@ Trước khi dùng, cấu hình Cloudinary đủ `CLOUDINARY_CLOUD_NAME`, `CLOUD
 Có ba cách lưu bài: `draft` (bản nháp, chưa gọi Meta), `scheduled` (hẹn đăng), và `now` (đăng ngay, chuyển qua `publishing`). Trạng thái kết quả là `publishing`, `published` hoặc `failed`; đây là toàn bộ tập trạng thái được hỗ trợ. Thời gian nhập/hiển thị dùng `Asia/Ho_Chi_Minh`, còn MongoDB persistence dùng `Date` UTC. Worker kiểm tra bài đến hạn mỗi 30 giây (`FACEBOOK_POST_SCHEDULER_INTERVAL_MS=30000`) và chạy một lượt recovery khi API khởi động, vì vậy bài `scheduled` quá hạn khi server tắt sẽ được xử lý sau restart. Lease mặc định là 120 giây (`FACEBOOK_POST_LEASE_MS=120000`) để phát hiện worker chết.
 
 Bài `failed` có thể retry thủ công; không có retry tự động cho lỗi timeout của Meta vì request có thể đã được Meta nhận dù client không nhận được phản hồi. Hãy kiểm tra Page và bài đã publish trên Meta trước khi bấm retry để tránh đăng trùng. Lease hết hạn cũng chuyển bài sang `failed` và yêu cầu xác nhận thủ công. OAuth đã có trong Dashboard, nhưng app vẫn cần hoàn tất App Review và chuyển sang Live Mode trước khi phục vụ người dùng public; V1 chưa hỗ trợ nhiều Page trên một user, video, nhiều ảnh, link preview, lịch lặp/recurring schedules, chỉnh sửa hoặc xóa bài đã publish, hay bulk/calendar nâng cao.
+
+### Lịch sử hoạt động cài đặt
+
+Mở `Cài đặt > Lịch sử` hoặc `/settings/history` để xem Timeline thay đổi, giá trị cũ/mới, người thực hiện, thời gian và mã phiên bản. Bản hiện tại ghi nhận các thay đổi Cài đặt AI và thao tác kết nối/ngắt kết nối Facebook Page, gồm cả kết nối OAuth và nhập thủ công. Timeline có bộ lọc `Tất cả`, `Cài đặt AI`, `Kết nối Facebook` và phân trang 20 bản ghi; thao tác ngắt kết nối hiện nằm trong `Tất cả`. Các hành động chưa có API như xóa bình luận, chặn khách hàng hoặc chế độ xoay vòng chưa được ghi nhận.
+
+API đọc lịch sử là `GET /api/v1/setting-histories?page=1&pageSize=20&actionType=UPDATE_AI_SETTINGS`. Route yêu cầu phiên đăng nhập hợp lệ với role `admin` hoặc `agent`, ưu tiên access token trong HttpOnly cookie và vẫn hỗ trợ Bearer token cho client cũ. API không nhận `userId`; backend luôn lấy người dùng từ thông tin xác thực và chỉ trả lịch sử của người đó. `page` mặc định là `1`, `pageSize` mặc định là `20` và được giới hạn tối đa `50`; `actionType` tùy chọn nhận `UPDATE_AI_SETTINGS`, `CONNECT_FACEBOOK_PAGE` hoặc `DISCONNECT_FACEBOOK_PAGE`. Kết quả mới nhất đứng trước và có dạng `{ items, pagination: { page, pageSize, total, totalPages, hasNextPage } }`.
+
+Lịch sử không lưu Page Access Token, OAuth token, cookie, password, secret hoặc trường xác thực nhạy cảm. Mỗi người dùng được giữ tối đa 500 bản ghi; sau khi tạo bản ghi vượt giới hạn, hệ thống tự xóa các bản ghi cũ nhất. Đây là lịch sử vận hành có giới hạn, không phải kho audit lưu vô thời hạn.
 
 ### Gửi ảnh và file từ Inbox
 
