@@ -133,12 +133,17 @@ describe("LandingPage", () => {
     expect(onDashboard).toHaveBeenCalledOnce();
   });
 
-  it("renders the requested navigation labels with their landing link styling", () => {
+  it("uses the required transparent absolute header and desktop navigation styling", () => {
     const renderer = renderLanding({ user: null, onDashboard: vi.fn(), onLogin: vi.fn(), onRegister: vi.fn() });
+    const header = renderer.root.findByType("header");
+    const navigation = renderer.root.findByProps({ "aria-label": "Điều hướng chính" });
 
+    expect(header.props.className).toContain("w-full absolute top-0 left-0 z-50 bg-transparent py-5 px-6 md:px-12 flex justify-between items-center");
+    expect(header.props.className).not.toContain("border");
+    expect(navigation.props.className).toContain("hidden md:flex gap-8 text-sm font-medium text-slate-600");
     for (const label of ["Sản phẩm", "Tích hợp", "Bảng giá", "Tài nguyên"]) {
       const link = renderer.root.findAllByType("a").find((candidate) => candidate.children.includes(label));
-      expect(link?.props.className).toContain("transition hover:text-blue-600");
+      expect(link?.props.className).toContain("hover:text-slate-900");
     }
   });
 
@@ -153,6 +158,10 @@ describe("LandingPage", () => {
     });
 
     const logoutButton = renderer.root.findByProps({ "aria-label": "Đăng xuất" });
+    const email = renderer.root.findAllByType("span").find((candidate) => candidate.children.includes("admin@example.com"));
+
+    expect(email?.props.className).not.toContain("hidden");
+    expect(logoutButton.props.className).not.toContain("hidden");
     act(() => logoutButton.props.onClick());
 
     expect(onLogout).toHaveBeenCalledOnce();
