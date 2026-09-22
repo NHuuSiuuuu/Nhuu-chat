@@ -1,9 +1,9 @@
 import * as React from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FacebookPageConnectionResponse } from "@nhuu-chat/contracts";
 
 import { apiRequest } from "../lib/api.js";
-import { FacebookPublishingApiError, getFacebookPageConnection } from "../lib/facebook-publishing.api.js";
+import { FacebookPublishingApiError, getFacebookPageConnection, removeFacebookPage } from "../lib/facebook-publishing.api.js";
 import { ConnectModal } from "../components/dashboard/ConnectModal.js";
 import { DashboardTopbar, type DashboardAccount } from "../components/dashboard/DashboardTopbar.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
@@ -35,6 +35,16 @@ export async function loadFacebookDashboardStatus(
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+export function createLatestRequestRunner<T>(onResult: (result: T) => void): (request: () => Promise<T>) => Promise<T> {
+  let requestId = 0;
+  return async (request) => {
+    const currentRequestId = ++requestId;
+    const result = await request();
+    if (currentRequestId === requestId) onResult(result);
+    return result;
+  };
 }
 
 // ID Facebook có dạng facebook:pageId để giữ đúng Page khi điều hướng sang Inbox.
@@ -77,21 +87,24 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
   const [mergeSearch, setMergeSearch] = useState("");
   const [selectedMergePageIds, setSelectedMergePageIds] = useState<Set<string>>(new Set());
   const [isReloading, setIsReloading] = useState(false);
+  const facebookStatusRunnerRef = useRef(createLatestRequestRunner<FacebookDashboardLoadResult>((result) => {
+    setFacebookStatus(result.connection);
+    setFacebookError(result.error);
+  }));
   const loadFacebookStatus = useCallback(async () => {
     setFacebookStatus(undefined);
     setFacebookError(null);
-    const result = await loadFacebookDashboardStatus();
-    setFacebookStatus(result.connection);
-    setFacebookError(result.error);
+    await facebookStatusRunnerRef.current(() => loadFacebookDashboardStatus());
   }, []);
-  const loadStatus = useCallback(async () => {
-    void loadFacebookStatus();
+  const loadStatus = useCallback(async (waitForFacebook = false) => {
+    const facebookPromise = loadFacebookStatus();
     const [telegram, zalo] = await Promise.all([
       apiRequest<TelegramStatus>("", "/api/v1/channels/telegram-personal/status", token, {}, refresh).catch(() => ({ connected: false, displayName: null, username: null })),
       apiRequest<ZaloStatus>("", "/api/v1/channels/zalo-personal/status", token, {}, refresh).catch(() => ({ id: "zalo", status: "disconnected" as const }))
     ]);
     setTelegramStatus(telegram);
     setZaloStatus(zalo);
+    if (waitForFacebook) await facebookPromise;
   }, [loadFacebookStatus, refresh, token]);
   useEffect(() => { void loadStatus(); }, [loadStatus]);
   const reloadStatus = async () => {
@@ -104,7 +117,6 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
   };
 
   const accounts = useMemo(() => buildDashboardAccounts(telegramStatus ?? { connected: false, displayName: null, username: null }, zaloStatus ?? { id: "zalo", status: "disconnected" }, facebookStatus), [telegramStatus, zaloStatus, facebookStatus]);
-  const mergeAccounts = accounts.filter((account): account is DashboardConnectedAccount & { platform: "telegram" | "zalo" } => account.platform !== "facebook");
   const visibleAccounts = accounts.filter((account) => {
     if (filter !== "all" && account.platform !== filter) return false;
     return !search || `${account.name} ${account.username ?? ""} ${account.platform}`.toLowerCase().includes(search.toLowerCase());
@@ -119,21 +131,28 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
     if (next.has(pageId)) next.delete(pageId); else next.add(pageId);
     return next;
   });
-  const selectAllMergePagesFromSearch = () => setSelectedMergePageIds((current) => selectAllMergePages(mergeAccounts, mergeSearch, current));
+  const selectAllMergePagesFromSearch = () => setSelectedMergePageIds((current) => selectAllMergePages(accounts, mergeSearch, current));
   const mergeSelectedPages = () => { setShowMergePages(false); onOpenInbox(); };
   const openDeactivateModal = (account: DashboardConnectedAccount) => { setDeactivateError(null); setAccountToDeactivate(account); };
   const closeDeactivateModal = () => { if (!isDeactivating) setAccountToDeactivate(null); };
   const deactivateAccount = async () => {
-    if (!accountToDeactivate || (accountToDeactivate.id !== "zalo_personal" && accountToDeactivate.id !== "telegram_personal")) return;
+    if (!accountToDeactivate || (accountToDeactivate.id !== "zalo_personal" && accountToDeactivate.id !== "telegram_personal" && accountToDeactivate.platform !== "facebook")) return;
     setIsDeactivating(true);
     setDeactivateError(null);
     try {
-      const logoutPath = accountToDeactivate.id === "zalo_personal"
-        ? "/api/v1/channels/zalo-personal/logout"
-        : "/api/v1/channels/telegram-personal/logout";
-      await apiRequest<void>("", logoutPath, token, { method: "POST" }, refresh);
+      const disconnectRequest = accountToDeactivate.platform === "facebook"
+        ? { method: "DELETE" as const }
+        : { method: "POST" as const };
+      if (disconnectRequest.method === "DELETE") {
+        await removeFacebookPage();
+      } else {
+        const logoutPath = accountToDeactivate.id === "zalo_personal"
+          ? "/api/v1/channels/zalo-personal/logout"
+          : "/api/v1/channels/telegram-personal/logout";
+        await apiRequest<void>("", logoutPath, token, disconnectRequest, refresh);
+      }
       setAccountToDeactivate(null);
-      await loadStatus();
+      await loadStatus(accountToDeactivate.platform === "facebook");
     } catch {
       setDeactivateError("Không thể hủy kích hoạt tài khoản. Vui lòng thử lại.");
     } finally {
@@ -156,7 +175,7 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
       <section className="min-h-[330px] rounded-[14px] border border-[#e8edf3] bg-white p-5" aria-label="Tài khoản đã kết nối">{(!telegramStatus || !zaloStatus) ? <div className="py-20 text-center text-[13px] text-[#8591a1]">Đang kiểm tra kết nối...</div> : <>{facebookStatus === undefined && <p className="mb-4 rounded-lg bg-blue-50 px-4 py-3 text-[13px] text-blue-700" role="status">Đang kiểm tra kết nối Facebook...</p>}{facebookError && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-red-50 px-4 py-3 text-[13px] text-red-700" role="alert"><span>{facebookError}</span><button className="rounded-lg border border-red-200 bg-white px-3 py-1.5 font-semibold hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-red-400 focus-visible:outline-offset-2" type="button" onClick={() => void loadFacebookStatus()}>Thử lại Facebook</button></div>}{visibleAccounts.length > 0 ? <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">{visibleAccounts.map((account) => <ConnectedAccountCard account={account} key={account.id} onOpen={() => onOpenInbox(account.id)} onRefresh={() => openRefreshModal(account)} onDeactivate={() => openDeactivateModal(account)} />)}</div> : facebookStatus !== undefined && !facebookError ? <div className="grid justify-items-center px-5 pb-20 pt-[100px] text-center"><div className="mb-[18px] grid h-[58px] w-[58px] place-items-center rounded-full bg-[#e9f6fc] text-[30px] text-[#22a8df]">＋</div><h3 className="mb-2 text-base">Chưa có tài khoản kết nối</h3><p className="text-[13px] text-[#8390a1]">Kết nối Facebook, Zalo hoặc Telegram để quản lý các kênh tại một nơi.</p><button className="mt-5 cursor-pointer rounded-lg border-0 bg-[#2aa9e7] px-4 py-[10px] text-[12px] font-bold text-white focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" onClick={openModal}>Kết nối tài khoản</button></div> : null}</>}</section>
     </div>
     {showConnect && <ConnectModal token={token} refresh={refresh} initialProvider={connectionProvider} onClose={() => setShowConnect(false)} onConnected={() => { void loadStatus(); }} />}
-    {showMergePages && <MergePagesModal pages={mergeAccounts} selectedIds={selectedMergePageIds} searchQuery={mergeSearch} onSearchChange={setMergeSearch} onTogglePage={toggleMergePage} onSelectAll={selectAllMergePagesFromSearch} onClose={() => setShowMergePages(false)} onMerge={mergeSelectedPages} />}
+    {showMergePages && <MergePagesModal pages={accounts} selectedIds={selectedMergePageIds} searchQuery={mergeSearch} onSearchChange={setMergeSearch} onTogglePage={toggleMergePage} onSelectAll={selectAllMergePagesFromSearch} onClose={() => setShowMergePages(false)} onMerge={mergeSelectedPages} />}
     {accountToDeactivate && <DeactivateAccountModal account={accountToDeactivate} error={deactivateError} loading={isDeactivating} onCancel={closeDeactivateModal} onConfirm={() => void deactivateAccount()} />}
   </main>;
 }
@@ -181,7 +200,7 @@ function ConnectedAccountCard({ account, onOpen, onRefresh, onDeactivate }: { ac
          <span className="truncate">{needsReconnect ? "Cần kết nối lại" : account.username ? `@${account.username}` : account.platform === "facebook" ? "Facebook Page" : `${account.platform === "zalo" ? "Zalo" : "Telegram"} cá nhân`}</span></small></span>
     </button>
     <span className={`absolute right-12 top-4 text-[19px] ${needsReconnect ? "text-[#e87927]" : "text-[#f3a51d]"}`} title={needsReconnect ? "Cần kết nối lại" : "Đang hoạt động"}>●</span>
-    {(account.id === "zalo_personal" || account.id === "telegram_personal") && <div className="absolute right-2 top-2"><button className="grid size-9 place-items-center rounded-lg border-0 bg-transparent text-xl leading-none text-[#7e8b9c] hover:bg-[#f1f5f9] hover:text-[#354258] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" aria-label="Tùy chọn tài khoản" aria-expanded={isMenuOpen} aria-haspopup="menu" onClick={() => setIsMenuOpen((current) => !current)}>⋮</button>{isMenuOpen && <div className="absolute right-0 top-10 z-20 grid min-w-[180px] gap-1 rounded-xl border border-[#e3e8ef] bg-white p-1.5 shadow-lg" role="menu"><button className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[13px] text-[#354258] hover:bg-[#f1f5f9] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" role="menuitem" onClick={() => { setIsMenuOpen(false); onRefresh(); }}><InboxIcon name="refresh" size={16} />Làm mới kết nối</button><button className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[13px] text-[#354258] hover:bg-[#fff1f1] hover:text-[#c33d3d] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" role="menuitem" onClick={() => { setIsMenuOpen(false); onDeactivate(); }}>Ngắt kết nối</button></div>}</div>}
+    {(account.id === "zalo_personal" || account.id === "telegram_personal" || account.platform === "facebook") && <div className="absolute right-2 top-2"><button className="grid size-9 place-items-center rounded-lg border-0 bg-transparent text-xl leading-none text-[#7e8b9c] hover:bg-[#f1f5f9] hover:text-[#354258] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" aria-label="Tùy chọn tài khoản" aria-expanded={isMenuOpen} aria-haspopup="menu" onClick={() => setIsMenuOpen((current) => !current)}>⋮</button>{isMenuOpen && <div className="absolute right-0 top-10 z-20 grid min-w-[180px] gap-1 rounded-xl border border-[#e3e8ef] bg-white p-1.5 shadow-lg" role="menu"><button className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[13px] text-[#354258] hover:bg-[#f1f5f9] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" role="menuitem" onClick={() => { setIsMenuOpen(false); onRefresh(); }}>Làm mới kết nối</button><button className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[13px] text-[#354258] hover:bg-[#fff1f1] hover:text-[#c33d3d] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2" type="button" role="menuitem" onClick={() => { setIsMenuOpen(false); onDeactivate(); }}>Ngắt kết nối</button></div>}</div>}
   </article>;
 }
 

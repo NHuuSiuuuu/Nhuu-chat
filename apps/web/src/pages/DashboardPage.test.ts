@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import { FacebookPublishingApiError } from "../lib/facebook-publishing.api.js";
-import { buildDashboardAccounts, conversationPathForPlatform, loadFacebookDashboardStatus } from "./DashboardPage.js";
+import { buildDashboardAccounts, conversationPathForPlatform, createLatestRequestRunner, loadFacebookDashboardStatus } from "./DashboardPage.js";
 import { buildConversationListRequestPath } from "./InboxPage.js";
 
 describe("dashboard connected accounts", () => {
@@ -107,6 +107,22 @@ describe("dashboard connected accounts", () => {
     }
   });
 
+  it("applies only the newest Facebook status request result while each caller can await completion", async () => {
+    let resolveOlder: ((value: string) => void) | undefined;
+    const appliedResults: string[] = [];
+    const runLatest = createLatestRequestRunner<string>((result) => appliedResults.push(result));
+
+    const olderRequest = runLatest(() => new Promise<string>((resolve) => { resolveOlder = resolve; }));
+    const newerRequest = runLatest(async () => "newer");
+
+    await newerRequest;
+    expect(appliedResults).toEqual(["newer"]);
+
+    resolveOlder?.("older");
+    await olderRequest;
+    expect(appliedResults).toEqual(["newer"]);
+  });
+
   it("offers a confirmation action to deactivate a connected account", () => {
     const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
 
@@ -116,6 +132,32 @@ describe("dashboard connected accounts", () => {
     expect(source).toContain("/api/v1/channels/zalo-personal/logout");
     expect(source).toContain("/api/v1/channels/telegram-personal/logout");
     expect(source).toContain("account.id === \"zalo_personal\" || account.id === \"telegram_personal\"");
+  });
+
+  it("offers refresh and disconnect actions from the account menu", () => {
+    const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("Làm mới kết nối");
+    expect(source).toContain("Ngắt kết nối");
+    expect(source).toContain("onRefresh");
+    expect(source).toContain("initialProvider");
+  });
+
+  it("includes Facebook in the merge-pages modal", () => {
+    const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("<MergePagesModal pages={accounts}");
+    expect(source).toContain('account.platform === "facebook"');
+  });
+
+  it("offers refresh and disconnect actions for a Facebook Page card", () => {
+    const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("removeFacebookPage");
+    expect(source).toContain('method: "DELETE"');
+    expect(source).toContain('account.platform === "facebook"');
+    expect(source).toContain("Làm mới kết nối");
+    expect(source).toContain("Ngắt kết nối");
   });
 
   it("renders connected accounts as a compact responsive grid without the redundant section title", () => {

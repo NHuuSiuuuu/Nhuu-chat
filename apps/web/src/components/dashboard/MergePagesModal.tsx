@@ -6,7 +6,7 @@ import { PlatformIcon } from "./PlatformIcon.js";
 export interface MergePageOption {
   id: string;
   name: string;
-  platform: "telegram" | "zalo";
+  platform: "telegram" | "zalo" | "facebook";
   username?: string;
   avatarUrl?: string | null;
 }
@@ -52,7 +52,7 @@ export function MergePagesModal({ pages, selectedIds, searchQuery, onSearchChang
             const avatarUrl = page.avatarUrl?.trim();
             return <button className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 ${isSelected ? "border-sky-300 bg-sky-50" : "border-slate-200 hover:border-sky-200 hover:bg-slate-50"}`} type="button" key={page.id} aria-pressed={isSelected} onClick={() => onTogglePage(page.id)}>
               <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-gradient-to-br from-slate-700 to-slate-900 text-sm font-bold text-white">{avatarUrl ? <img className="size-full object-cover" src={avatarUrl} alt="" /> : page.name.slice(0, 1).toUpperCase()}</span>
-              <span className="min-w-0 flex-1"><strong className="block truncate text-sm text-slate-800">{page.name}</strong><small className="mt-1 flex items-center gap-1.5 truncate text-xs text-slate-500"><PlatformIcon provider={page.platform} size={14} />{page.username ? `@${page.username}` : page.platform === "zalo" ? "Zalo" : "Telegram"}</small></span>
+              <span className="min-w-0 flex-1"><strong className="block truncate text-sm text-slate-800">{page.name}</strong><small className="mt-1 flex items-center gap-1.5 truncate text-xs text-slate-500"><PlatformIcon provider={page.platform} size={14} />{page.username ? `@${page.username}` : page.platform === "facebook" ? "Facebook" : page.platform === "zalo" ? "Zalo" : "Telegram"}</small></span>
               <span className={`grid size-5 shrink-0 place-items-center rounded-full border ${isSelected ? "border-sky-600 bg-sky-600 text-white" : "border-slate-300 text-transparent"}`} aria-hidden="true"><InboxIcon name="check" size={13} /></span>
             </button>;
           })}
