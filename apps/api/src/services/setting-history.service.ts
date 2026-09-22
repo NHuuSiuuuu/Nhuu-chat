@@ -31,10 +31,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null;
 }
 
-function appendPath(path: string, segment: string): string {
-  return path ? `${path}${PATH_SEPARATOR}${segment}` : segment;
-}
-
 function getOwnValue(value: Record<string, unknown>, fieldName: string): unknown {
   return Object.hasOwn(value, fieldName) ? value[fieldName] : undefined;
 }
@@ -51,17 +47,16 @@ function toPersistentValue(value: unknown): unknown {
 // Làm phẳng dữ liệu thành các lá an toàn, giữ riêng container rỗng và bỏ toàn bộ nhánh bí mật.
 function collectLeafValues(
   value: unknown,
-  path: string,
+  path: string[],
   leaves: Map<string, unknown>
 ): void {
-  const leafPath = path || "value";
   if (Array.isArray(value)) {
     if (value.length === 0) {
-      if (path) leaves.set(leafPath, EMPTY_ARRAY_VALUE);
+      leaves.set(JSON.stringify(path), EMPTY_ARRAY_VALUE);
       return;
     }
     for (let index = 0; index < value.length; index += 1) {
-      collectLeafValues(value[index], appendPath(path, String(index)), leaves);
+      collectLeafValues(value[index], [...path, String(index)], leaves);
     }
     return;
   }
@@ -69,21 +64,21 @@ function collectLeafValues(
   if (isPlainObject(value)) {
     const fieldNames = Object.keys(value);
     if (fieldNames.length === 0) {
-      if (path) leaves.set(leafPath, EMPTY_OBJECT_VALUE);
+      leaves.set(JSON.stringify(path), EMPTY_OBJECT_VALUE);
       return;
     }
     for (const fieldName of fieldNames) {
       if (isSensitiveFieldName(fieldName)) continue;
       collectLeafValues(
         getOwnValue(value, fieldName),
-        appendPath(path, fieldName),
+        [...path, fieldName],
         leaves
       );
     }
     return;
   }
 
-  leaves.set(leafPath, value);
+  leaves.set(JSON.stringify(path), value);
 }
 
 function toDiffValue(value: unknown): unknown {
@@ -96,20 +91,26 @@ function toDiffValue(value: unknown): unknown {
 export function diffSettings(oldValue: unknown, newValue: unknown): SettingHistoryChange[] {
   const oldLeaves = new Map<string, unknown>();
   const newLeaves = new Map<string, unknown>();
-  collectLeafValues(oldValue, "", oldLeaves);
-  collectLeafValues(newValue, "", newLeaves);
+  collectLeafValues(oldValue, [], oldLeaves);
+  collectLeafValues(newValue, [], newLeaves);
 
   const changes: SettingHistoryChange[] = [];
-  const fieldNames = [
+  const pathKeys = [
     ...oldLeaves.keys(),
-    ...[...newLeaves.keys()].filter((fieldName) => !oldLeaves.has(fieldName))
+    ...[...newLeaves.keys()].filter((pathKey) => !oldLeaves.has(pathKey))
   ];
-  for (const fieldName of fieldNames) {
-    const oldLeaf = oldLeaves.get(fieldName);
-    const newLeaf = newLeaves.get(fieldName);
+  for (const pathKey of pathKeys) {
+    const oldLeaf = oldLeaves.get(pathKey);
+    const newLeaf = newLeaves.get(pathKey);
     if (Object.is(oldLeaf, newLeaf)) continue;
+    const path: string[] = JSON.parse(pathKey);
+    // Gốc cùng kiểu container chỉ ghi thay đổi ở các lá, kể cả khi chỉ có nhánh bí mật.
+    if (path.length === 0 && (
+      (isPlainObject(oldValue) && isPlainObject(newValue)) ||
+      (Array.isArray(oldValue) && Array.isArray(newValue))
+    )) continue;
     changes.push({
-      fieldName,
+      fieldName: path.length === 0 ? "value" : path.join(PATH_SEPARATOR),
       oldValue: toDiffValue(oldLeaf),
       newValue: toDiffValue(newLeaf)
     });

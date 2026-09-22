@@ -54,6 +54,48 @@ describe("setting history diff", () => {
     ]);
   });
 
+  it("keeps nested paths distinct from literal breadcrumb keys", () => {
+    expect(diffSettings(
+      { a: { b: 1 }, "a › b": 2 },
+      { a: { b: 3 }, "a › b": 2 }
+    )).toEqual([{ fieldName: "a › b", oldValue: 1, newValue: 3 }]);
+    expect(diffSettings(
+      { "a › b": 2, a: { b: 1 } },
+      { "a › b": 4, a: { b: 3 } }
+    )).toEqual([
+      { fieldName: "a › b", oldValue: 2, newValue: 4 },
+      { fieldName: "a › b", oldValue: 1, newValue: 3 }
+    ]);
+  });
+
+  it("keeps array paths and empty key segments distinct from literal keys", () => {
+    expect(diffSettings(
+      { items: [1], "items › 0": 2, "": { name: "old" }, name: "same" },
+      { items: [3], "items › 0": 2, "": { name: "new" }, name: "same" }
+    )).toEqual([
+      { fieldName: "items › 0", oldValue: 1, newValue: 3 },
+      { fieldName: " › name", oldValue: "old", newValue: "new" }
+    ]);
+  });
+
+  it("keeps the root path distinct from a literal value field", () => {
+    expect(diffSettings(1, { value: 1 })).toEqual([
+      { fieldName: "value", oldValue: 1, newValue: undefined },
+      { fieldName: "value", oldValue: undefined, newValue: 1 }
+    ]);
+    expect(diffSettings({ value: 1 }, 1)).toEqual([
+      { fieldName: "value", oldValue: 1, newValue: undefined },
+      { fieldName: "value", oldValue: undefined, newValue: 1 }
+    ]);
+  });
+
+  it("keeps equivalent empty containers and undefined values stable", () => {
+    expect(diffSettings({}, {})).toEqual([]);
+    expect(diffSettings([], [])).toEqual([]);
+    expect(diffSettings(undefined, undefined)).toEqual([]);
+    expect(diffSettings({ value: undefined }, { value: undefined })).toEqual([]);
+  });
+
   it("reports an added array item with its index", () => {
     expect(diffSettings({ values: ["a"] }, { values: ["a", "b"] })).toEqual([
       { fieldName: "values › 1", oldValue: undefined, newValue: "b" }
@@ -278,6 +320,41 @@ describe("setting history service", () => {
         { fieldName: "addedObject", oldValue: "(không có)", newValue: {} },
         { fieldName: "addedArray", oldValue: "(không có)", newValue: [] }
       ]
+    }));
+  });
+
+  it.each([
+    { label: "adds an object", oldValue: undefined, newValue: {} },
+    { label: "removes an object", oldValue: {}, newValue: undefined },
+    { label: "adds an array", oldValue: undefined, newValue: [] },
+    { label: "removes an array", oldValue: [], newValue: undefined },
+    { label: "switches object to array", oldValue: {}, newValue: [] },
+    { label: "switches array to object", oldValue: [], newValue: {} },
+    { label: "switches object to null", oldValue: {}, newValue: null },
+    { label: "switches null to object", oldValue: null, newValue: {} },
+    { label: "switches array to primitive", oldValue: [], newValue: false },
+    { label: "switches primitive to array", oldValue: false, newValue: [] }
+  ])("represents and persists root empty containers: $label", async ({ oldValue, newValue }) => {
+    expect(diffSettings(oldValue, newValue)).toEqual([
+      { fieldName: "value", oldValue, newValue }
+    ]);
+    settingHistoryModel.create.mockResolvedValue({ _id: "history-root-container" });
+    settingHistoryModel.find.mockReturnValue(retentionQuery([]));
+
+    await recordSettingHistory({
+      userId: "user-1",
+      actionType: "UPDATE_AI_SETTINGS",
+      actionTitle: "Cập nhật cài đặt AI",
+      oldValue,
+      newValue
+    });
+
+    expect(settingHistoryModel.create).toHaveBeenCalledWith(expect.objectContaining({
+      changes: [{
+        fieldName: "value",
+        oldValue: oldValue === undefined ? "(không có)" : oldValue,
+        newValue: newValue === undefined ? "(không có)" : newValue
+      }]
     }));
   });
 
