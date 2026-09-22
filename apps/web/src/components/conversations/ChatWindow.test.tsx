@@ -103,6 +103,25 @@ describe("ChatWindow delivery indicator", () => {
   });
 });
 
+describe("ChatWindow message avatars", () => {
+  it("uses the conversation customer avatar for customer messages", () => {
+    const customerAvatarUrl = "https://example.com/customer-avatar.jpg";
+    const html = renderToStaticMarkup(<chatWindow.ChatWindow
+      conversation={{ ...conversation, customerAvatarUrl }}
+      messages={[messages[0]]}
+      onSend={async () => true}
+      quickReplies={[]}
+      pinnedMessages={[]}
+      isPinned={() => false}
+      onPinMessage={async () => undefined}
+      onUnpinMessage={async () => undefined}
+    />);
+    const customerMessageHtml = html.match(/<article[^>]*data-message-id="message-1"[\s\S]*?<\/article>/)?.[0];
+
+    expect(customerMessageHtml).toContain(`src="${customerAvatarUrl}"`);
+  });
+});
+
 describe("ChatWindow pinned messages", () => {
   it("toggles the pinned list and exposes the matching arrow direction", () => {
     expect(chatWindow.togglePinnedMessagesList(false)).toBe(true);

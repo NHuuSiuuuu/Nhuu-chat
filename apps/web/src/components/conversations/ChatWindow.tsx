@@ -178,7 +178,7 @@ export function ChatWindow({ conversation, messages, isLoadingMessages = false, 
             const pinLimitReached = pinnedMessages.length >= 10 && !messageIsPinned;
             return <article id={getMessageDomId(message.id)} data-message-id={message.id} className={`group relative my-4 flex scroll-mt-24 items-start gap-3 ${message.senderType === "customer" ? "justify-start" : "justify-end"} ${message.senderType === "agent" ? "pr-5" : ""}`} key={message.id}>
               <div className={`flex min-w-0 max-w-full items-end gap-2 ${message.senderType === "customer" ? "flex-row" : "flex-row-reverse"}`}>
-                {message.senderType === "customer" && <ConversationAvatar name={senderName} isGroup={conversation.conversationType === "group"} size="size-10" />}
+                {message.senderType === "customer" && <ConversationAvatar name={senderName} avatarUrl={conversation.customerAvatarUrl} isGroup={conversation.conversationType === "group"} size="size-10" />}
                 <div className={`flex min-w-0 items-end gap-2 ${message.senderType === "customer" ? "flex-row" : "flex-row-reverse"}`}>
                   <div className={`flex min-w-0 max-w-[min(560px,75%)] flex-col ${message.senderType === "customer" ? "items-start" : "items-end"}`}>
                     <div className={`relative max-w-full rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${message.senderType === "customer" ? "bg-white text-gray-900" : "bg-blue-100 text-gray-900"}`}><div className="space-y-2">{renderMessageAttachments(message)}{message.content && <p className="m-0 whitespace-pre-wrap">{renderMessageContent(message.content)}</p>}</div></div>
