@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Cải thiện giao diện mobile trang Cài đặt: thêm accordion tab Cài đặt trong menu chính, ẩn sidebar phụ và tối ưu bố cục Trợ lý AI trên màn hình nhỏ.
 - Thay thế toast tự xây dựng bằng `sonner`: thêm Toaster góc phải, thông báo tin nhắn đến, đăng bài, xóa bài và dọn component toast cũ.
 - Bỏ nút Làm mới khỏi các tab Nháp, Đã lên lịch và Lịch sử trong trang đăng bài Facebook.
 - Bỏ tiêu đề và mô tả lặp lại ở các tab Nháp, Đã lên lịch và Lịch sử; căn nút Làm mới về bên phải phía trên danh sách.

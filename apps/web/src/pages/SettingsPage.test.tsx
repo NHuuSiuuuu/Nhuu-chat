@@ -329,6 +329,41 @@ describe("Settings page", () => {
     expect(layout).not.toContain("max-w-6xl gap-6 px-6 py-8 max-[800px]:flex-col");
   });
 
+  it("exposes the primary settings tabs through the mobile main-navigation accordion", () => {
+    const settingsSource = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const topbarSource = readFileSync(new URL("../components/dashboard/DashboardTopbar.tsx", import.meta.url), "utf8");
+
+    expect(settingsModule.mobileSettingsItems).toEqual(["Giới thiệu", "Cài đặt chung", "Trợ lý AI", "Giao diện"]);
+    expect(settingsSource).toContain("settingsSubmenuItems={mobileSettingsItems}");
+    expect(settingsSource).toContain("onSettingsSubmenuNavigate={handleTabChange}");
+    expect(topbarSource).toContain('aria-controls="mobile-settings-submenu"');
+    expect(topbarSource).toContain("isMobileSettingsOpen");
+    expect(topbarSource).toContain("onSettingsSubmenuNavigate?.(item)");
+  });
+
+  it("hides the inner settings navigation and expands content on mobile", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const layout = source.split("function SettingsLayout")[1]?.split("function SettingsDevelopmentPlaceholder")[0] ?? "";
+
+    expect(layout).toContain('className="hidden h-fit w-[300px]');
+    expect(layout).toContain("md:block");
+    expect(layout).toContain('className="w-full min-w-0 flex-1 rounded-xl bg-white shadow-sm"');
+  });
+
+  it("stacks AI assistant controls and wraps long content on mobile", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const chatbot = source.split("function ChatbotAutomationSettings(")[1]?.split("function AiAssistantSettings")[0] ?? "";
+
+    expect(source).toContain('className="w-full min-w-0 rounded-lg border border-gray-200');
+    expect(source).toContain("flex flex-col items-start gap-4 border-b border-gray-100 py-5");
+    expect(source).toContain("md:flex-row");
+    expect(source).toContain("break-words whitespace-normal");
+    expect(chatbot).toContain("flex flex-col items-stretch gap-4 px-1 pb-4 md:flex-row md:items-center md:justify-between");
+    expect(chatbot).toContain("w-full");
+    expect(chatbot).toContain("md:w-auto");
+    expect(chatbot).toContain("flex flex-col items-start gap-3 border-b border-gray-100 pb-3 md:flex-row");
+  });
+
   it("uses one shared responsive layout for every settings tab", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
@@ -410,7 +445,8 @@ describe("Settings page", () => {
     expect(source).toContain("left-1");
     expect(source).toContain("translate-x-5");
     expect(source).toContain("border-0 p-0");
-    expect(source).toContain("min-w-0 shrink-0 flex-wrap");
+    expect(source).toContain("flex-col items-stretch gap-2");
+    expect(source).toContain("w-full");
     expect(source).toContain("max-w-full");
   });
 
@@ -516,9 +552,9 @@ describe("Settings page", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
     const normalized = source.replace(/\s+/g, " ");
 
-    expect(normalized).toContain('<div className="flex items-center justify-between border-b border-gray-100 pb-3"><h3 className="text-sm font-bold text-gray-900">Hướng dẫn</h3>');
+    expect(normalized).toContain('className="flex flex-col items-start gap-3 border-b border-gray-100 pb-3 md:flex-row md:items-center md:justify-between"');
     expect(normalized).toContain('type="button" onClick={() => void saveAssistant()}');
-    expect(normalized).toContain('<div className="mt-5 flex items-center justify-between border-b border-gray-100 pb-3"><h3 className="text-sm font-bold text-gray-800">Mẫu chào</h3>');
+    expect(normalized).toContain('<div className="mt-6 flex flex-col items-start gap-3 border-b border-gray-100 pb-3 md:flex-row md:items-center md:justify-between"><h3 className="text-sm font-bold text-gray-800">Mẫu chào</h3>');
     expect(normalized).toContain('type="button" onClick={() => setIsImportModalOpen(true)}');
     expect(source).not.toContain('<div className="mt-3 flex justify-end">');
   });

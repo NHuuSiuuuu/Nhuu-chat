@@ -48,6 +48,6 @@ describe("DashboardTopbar", () => {
     expect(source).toContain("translate-x-0");
     expect(source).toContain("-translate-x-full");
     expect(source).toContain("Đóng menu điều hướng");
-    expect(source).toContain("max-[700px]:hidden");
+    expect(source).toContain("max-[767px]:hidden");
   });
 });

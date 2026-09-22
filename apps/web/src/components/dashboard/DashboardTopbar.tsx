@@ -17,13 +17,17 @@ interface DashboardTopbarProps {
   user?: DashboardAccount | null;
   onLogout?: () => void;
   onProfile?: () => void;
+  settingsSubmenuItems?: readonly string[];
+  activeSettingsSubmenuItem?: string;
+  onSettingsSubmenuNavigate?: (item: string) => void;
 }
 
 const fallbackAccount: DashboardAccount = { email: "", role: "OWNER", username: "nhuusiuu", displayName: "nhuusiuu" };
 
-export function DashboardTopbar({ onLogoClick, onNavigate, user, onLogout, onProfile }: DashboardTopbarProps = {}) {
+export function DashboardTopbar({ onLogoClick, onNavigate, user, onLogout, onProfile, settingsSubmenuItems, activeSettingsSubmenuItem, onSettingsSubmenuNavigate }: DashboardTopbarProps = {}) {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobileSettingsOpen, setIsMobileSettingsOpen] = useState(false);
   const account = user ?? fallbackAccount;
   const isLoading = user === null;
   const accountName = isLoading ? "Đang tải..." : account.displayName ?? account.username ?? account.email.split("@")[0] ?? "Tài khoản";
@@ -53,14 +57,20 @@ export function DashboardTopbar({ onLogoClick, onNavigate, user, onLogout, onPro
     onNavigate?.(item);
   }
 
-  return <div className="min-h-16"><header className="fixed left-0 right-0 top-0 z-50 flex min-h-16 items-center justify-between bg-blue-600 px-7 text-white max-[700px]:gap-2 max-[700px]:p-3">
+  function navigateSettingsFromMobile(item: string) {
+    setIsMobileMenuOpen(false);
+    setIsMobileSettingsOpen(false);
+    onSettingsSubmenuNavigate?.(item);
+  }
+
+  return <div className="min-h-16"><header className="fixed left-0 right-0 top-0 z-50 flex min-h-16 items-center justify-between bg-blue-600 px-7 text-white max-[767px]:gap-2 max-[767px]:p-3">
     <div className="flex min-w-0 items-center gap-2">
-    <button className="hidden size-9 shrink-0 place-items-center rounded-lg border-0 bg-white/10 text-white transition hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white max-[700px]:inline-grid" type="button" aria-label={isMobileMenuOpen ? "Đóng menu điều hướng" : "Mở menu điều hướng"} aria-expanded={isMobileMenuOpen} onClick={toggleMobileMenu}><svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeLinecap="round" strokeWidth="2" /></svg></button>
-    <a className="flex min-w-[220px] items-center gap-2.5 text-left text-lg text-white no-underline max-[900px]:min-w-[150px] max-[700px]:min-w-0" href="/dashboard" onClick={(event) => { if (onLogoClick) { event.preventDefault(); onLogoClick(); } }} aria-label="Về Dashboard">
+    <button className="hidden size-9 shrink-0 place-items-center rounded-lg border-0 bg-white/10 text-white transition hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white max-[767px]:inline-grid" type="button" aria-label={isMobileMenuOpen ? "Đóng menu điều hướng" : "Mở menu điều hướng"} aria-expanded={isMobileMenuOpen} onClick={toggleMobileMenu}><svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeLinecap="round" strokeWidth="2" /></svg></button>
+    <a className="flex min-w-[220px] items-center gap-2.5 text-left text-lg text-white no-underline max-[900px]:min-w-[150px] max-[767px]:min-w-0" href="/dashboard" onClick={(event) => { if (onLogoClick) { event.preventDefault(); onLogoClick(); } }} aria-label="Về Dashboard">
     <img className="h-10 w-[112px] object-contain" src="/nhuu-logo.svg" alt="NhuuChat" /></a>
     </div>
-    <nav className="flex flex-1 items-center justify-center gap-[30px] max-[900px]:gap-4 max-[700px]:hidden" aria-label="Điều hướng chính">{dashboardNavItems.map((item) => <a className="whitespace-nowrap text-[15px] font-semibold text-white/90 no-underline" href={item === "Hộp thư" ? "/inbox" : "#"} key={item} onClick={(event) => { event.preventDefault(); onNavigate?.(item); }}>{item}</a>)}</nav>
-    <div className="relative flex min-w-[190px] items-center justify-end gap-2.5 max-[700px]:min-w-0 max-[700px]:ml-auto">
+    <nav className="flex flex-1 items-center justify-center gap-[30px] max-[900px]:gap-4 max-[767px]:hidden" aria-label="Điều hướng chính">{dashboardNavItems.map((item) => <a className="whitespace-nowrap text-[15px] font-semibold text-white/90 no-underline" href={item === "Hộp thư" ? "/inbox" : "#"} key={item} onClick={(event) => { event.preventDefault(); onNavigate?.(item); }}>{item}</a>)}</nav>
+    <div className="relative flex min-w-[190px] items-center justify-end gap-2.5 max-[767px]:min-w-0 max-[767px]:ml-auto">
       <div className="grid min-w-0 text-right text-sm"><span className="truncate">{accountName}</span><small className="mt-[3px] text-[9px] tracking-[.08em] text-white/60">{role}</small></div>
       <button className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-full border border-white/70 bg-white/20 text-sm font-bold text-white transition hover:bg-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" type="button" aria-label="Mở menu tài khoản" aria-expanded={isAccountMenuOpen} onClick={toggleAccountMenu}>{account.avatarUrl ? <img className="size-full object-cover" src={account.avatarUrl} alt={`Avatar ${accountName}`} /> : accountInitial}</button>
       <span className="text-sm text-white/80" aria-hidden="true">⌄</span>
@@ -70,10 +80,10 @@ export function DashboardTopbar({ onLogoClick, onNavigate, user, onLogout, onPro
       </div>}
     </div>
   </header>
-  {isMobileMenuOpen && <button className="fixed inset-0 z-[55] bg-slate-950/40 min-[701px]:hidden" type="button" aria-label="Đóng menu điều hướng" onClick={() => setIsMobileMenuOpen(false)} />}
-  <aside className={`fixed bottom-0 left-0 top-0 z-[60] w-72 bg-white text-slate-800 shadow-2xl transition-transform duration-200 min-[701px]:hidden ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`} aria-label="Menu điều hướng mobile" aria-hidden={!isMobileMenuOpen}>
+  {isMobileMenuOpen && <button className="fixed inset-0 z-[55] bg-slate-950/40 min-[768px]:hidden" type="button" aria-label="Đóng menu điều hướng" onClick={() => setIsMobileMenuOpen(false)} />}
+  <aside className={`fixed bottom-0 left-0 top-0 z-[60] w-72 bg-white text-slate-800 shadow-2xl transition-transform duration-200 min-[768px]:hidden ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`} aria-label="Menu điều hướng mobile" aria-hidden={!isMobileMenuOpen}>
     <div className="flex h-16 items-center justify-between border-b border-slate-100 px-4"><img className="h-9 w-[100px] object-contain" src="/nhuu-logo.svg" alt="NhuuChat" /><button className="grid size-9 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800" type="button" aria-label="Đóng menu điều hướng" onClick={() => setIsMobileMenuOpen(false)}><InboxIcon name="close" size={19} /></button></div>
-    <nav className="grid gap-1 p-3" aria-label="Điều hướng mobile">{dashboardNavItems.map((item) => <button className="rounded-lg px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700" type="button" key={item} onClick={() => navigateFromMobile(item)}>{item}</button>)}</nav>
+    <nav className="grid gap-1 p-3" aria-label="Điều hướng mobile">{dashboardNavItems.map((item) => item === "Cài đặt" && settingsSubmenuItems?.length ? <div className="grid gap-1" key={item}><button className="flex items-center justify-between rounded-lg px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700" type="button" aria-expanded={isMobileSettingsOpen} aria-controls="mobile-settings-submenu" onClick={() => setIsMobileSettingsOpen((current) => !current)}><span>{item}</span><InboxIcon name={isMobileSettingsOpen ? "chevron-up" : "chevron-down"} size={16} /></button>{isMobileSettingsOpen && <div className="ml-3 grid gap-1 border-l border-slate-200 pl-2" id="mobile-settings-submenu" role="group" aria-label="Menu Cài đặt mobile">{settingsSubmenuItems.map((settingsItem) => <button className={`rounded-lg px-3 py-2.5 text-left text-sm transition ${activeSettingsSubmenuItem === settingsItem ? "bg-sky-50 font-semibold text-sky-700" : "text-slate-600 hover:bg-slate-50 hover:text-sky-700"}`} type="button" key={settingsItem} aria-current={activeSettingsSubmenuItem === settingsItem ? "page" : undefined} onClick={() => navigateSettingsFromMobile(settingsItem)}>{settingsItem}</button>)}</div>}</div> : <button className="rounded-lg px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700" type="button" key={item} onClick={() => navigateFromMobile(item)}>{item}</button>)}</nav>
   </aside>
   </div>;
 }

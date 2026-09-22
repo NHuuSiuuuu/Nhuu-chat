@@ -12,6 +12,14 @@
   }
 }
 
+@media (min-width: 640px) and (max-width: 767px) {
+  .mt-5 > header button[class*="sm:w-auto"],
+  .mt-5 > header span[class*="sm:w-auto"],
+  [aria-label="Cấu hình chatbot"] button[class*="sm:w-auto"] {
+    width: 100%;
+  }
+}
+
 @layer base {
   *, ::before, ::after {
     box-sizing: border-box;
