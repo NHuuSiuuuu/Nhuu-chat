@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -35,12 +35,10 @@ const pagination = {
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+  const promise = new Promise<T>((promiseResolve) => {
     resolve = promiseResolve;
-    reject = promiseReject;
   });
-  return { promise, reject, resolve };
+  return { promise, resolve };
 }
 
 function textContent(value: unknown): string {
@@ -109,7 +107,7 @@ describe("SettingHistoryTimeline", () => {
     });
 
     await act(async () => {
-      const filterButton = renderer!.root.findAllByType("button").find((button) => button.props.children === "Kết nối Facebook");
+      const filterButton = renderer!.root.findAllByType("button").find((button: ReactTestInstance) => button.props.children === "Kết nối Facebook");
       expect(filterButton).toBeDefined();
       filterButton!.props.onClick();
       await Promise.resolve();
