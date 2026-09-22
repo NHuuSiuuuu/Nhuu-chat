@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa URL logo Zalo trong card Kênh tích hợp để không còn lỗi 404.
 - Thay icon outline trong card Kênh tích hợp bằng logo thương hiệu thật qua `logoUrl`, bổ sung SVG quả địa cầu cho Website Webchat.
 - Cập nhật Section Kênh tích hợp Landing Page theo thiết kế tham chiếu: 8 kênh, card bo lớn, nền sáng và typography mảnh hơn.
 - Khôi phục logo riêng của Dashboard và chuyển thay đổi logo theo ảnh tham khảo sang đúng header Landing Page `/`.

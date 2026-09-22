@@ -20,8 +20,8 @@ function FadeUp({ children, className = "", delay = 0 }: { children: React.React
 
 const channels: { name: string; description: string; logoUrl: string }[] = [
   { name: "Facebook Messenger", description: "Chăm sóc khách hàng từ Fanpage", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/b/b8/2021_Facebook_icon.svg" },
-  { name: "Zalo OA", description: "Tương tác với khách hàng trên Zalo", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/a/a1/Zalo_Logo.svg" },
-  { name: "Zalo Personal", description: "Quản lý tin nhắn Zalo cá nhân", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/a/a1/Zalo_Logo.svg" },
+  { name: "Zalo OA", description: "Tương tác với khách hàng trên Zalo", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/9/91/Icon_of_Zalo.svg" },
+  { name: "Zalo Personal", description: "Quản lý tin nhắn Zalo cá nhân", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/9/91/Icon_of_Zalo.svg" },
   { name: "Instagram", description: "Trả lời DM và comment tự động", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg" },
   { name: "WhatsApp", description: "Kết nối khách hàng quốc tế", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" },
   { name: "Telegram", description: "Quản lý group và tin nhắn", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/8/82/Telegram_logo.svg" },

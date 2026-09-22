@@ -46,7 +46,7 @@ describe("LandingPage", () => {
     expect(rendered).toContain("Google Business");
     expect(rendered).toContain("Tin nhắn từ Google Maps & Search");
     expect(source.findByProps({ src: "https://upload.wikimedia.org/wikipedia/commons/b/b8/2021_Facebook_icon.svg" })).toBeTruthy();
-    expect(source.findAllByProps({ src: "https://upload.wikimedia.org/wikipedia/commons/a/a1/Zalo_Logo.svg" })).toHaveLength(2);
+    expect(source.findAllByProps({ src: "https://upload.wikimedia.org/wikipedia/commons/9/91/Icon_of_Zalo.svg" })).toHaveLength(2);
     expect(source.findByProps({ src: "https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg" })).toBeTruthy();
     expect(source.findByProps({ src: "https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" })).toBeTruthy();
     expect(source.findByProps({ src: "https://upload.wikimedia.org/wikipedia/commons/8/82/Telegram_logo.svg" })).toBeTruthy();
