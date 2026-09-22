@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Cập nhật Section Kênh tích hợp Landing Page theo thiết kế tham chiếu: 8 kênh, card bo lớn, nền sáng và typography mảnh hơn.
 - Khôi phục logo riêng của Dashboard và chuyển thay đổi logo theo ảnh tham khảo sang đúng header Landing Page `/`.
 - Đổi logo Landing Page sang màu xanh thương hiệu trên nền trong suốt để hiển thị rõ trên header trắng.
 - Đồng bộ hình dạng logo Landing Page với logo đang dùng trong header Dashboard, giữ biến thể màu phù hợp nền trắng.
