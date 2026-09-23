@@ -30,7 +30,7 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
   - `services`: xử lý nghiệp vụ, lưu dữ liệu và outbound delivery.
   - `schemas`: schema HTTP và domain input.
 - JWT auth với role `admin`, `agent`, `customer`.
-- Quên mật khẩu qua Nodemailer/SMTP: token một lần hết hạn 30 phút, lưu hash trong MongoDB và thu hồi refresh token sau khi đổi mật khẩu.
+- Quên mật khẩu qua Nodemailer/SMTP: token một lần hết hạn 30 phút, lưu hash trong MongoDB và thu hồi toàn bộ phiên đăng nhập sau khi đổi mật khẩu.
 - Provider secret được mã hóa trước khi lưu MongoDB bằng AES-256-GCM.
 - Telegram webhook có secret validation và idempotency.
 - Chatbot tự động trên hai connector Telegram dùng chung orchestrator, delivery, automation template và RAG theo owner.
@@ -173,7 +173,11 @@ cp .env.example apps/api/.env
 
 Không commit `.env`, token, secret hoặc encryption key.
 
-Luồng đặt lại mật khẩu dùng `POST /api/v1/auth/forgot-password` và `POST /api/v1/auth/reset-password`. Endpoint gửi email trả cùng thông báo dù tài khoản có tồn tại hay không, giới hạn 5 yêu cầu mỗi IP trong 15 phút; liên kết hết hạn sau 30 phút và chỉ dùng một lần. Đặt lại thành công thu hồi refresh token hiện tại và yêu cầu đăng nhập lại.
+Mỗi lần đăng ký/đăng nhập tạo một phiên xác thực riêng trong MongoDB, cho phép các thiết bị có kho cookie riêng dùng cùng tài khoản đồng thời. Các route auth, response và tên/thuộc tính cookie giữ nguyên; Bearer token cũ vẫn được hỗ trợ. Access token có hạn 15 phút, refresh token có hạn 7 ngày và thời hạn phiên được gia hạn thêm 7 ngày sau mỗi lần refresh thành công. `POST /api/v1/auth/logout` thu hồi đúng phiên theo refresh cookie và ngắt Socket.IO của phiên đó, không ảnh hưởng phiên khác.
+
+Luồng đặt lại mật khẩu dùng `POST /api/v1/auth/forgot-password` và `POST /api/v1/auth/reset-password`. Endpoint gửi email trả cùng thông báo dù tài khoản có tồn tại hay không, giới hạn 5 yêu cầu mỗi IP trong 15 phút; liên kết hết hạn sau 30 phút và chỉ dùng một lần. Đặt lại thành công thu hồi mọi phiên, refresh token legacy và ngắt Socket.IO của tài khoản; người dùng cần đăng nhập lại. Refresh token legacy được nâng cấp thành phiên riêng khi refresh lần đầu, không cần chuyển đổi trước khi triển khai. Access token legacy không gắn phiên có thể còn hiệu lực đến khi tự hết hạn, tối đa 15 phút sau logout hoặc đặt lại mật khẩu.
+
+Quản lý phiên nhiều thiết bị hiện chỉ có ở backend: chưa có giao diện/API xem hoặc quản lý thiết bị và chưa giới hạn số thiết bị. Hai cửa sổ cùng browser profile chia sẻ cookie và dùng chung phiên. Một API instance chỉ ngắt các socket tại instance đó; khi chạy nhiều instance cần bật Redis Socket.IO adapter hiện có để lệnh ngắt phiên tới toàn cụm.
 
 `GEMINI_API_KEY` chỉ được lưu ở backend trong `apps/api/.env`; không đưa key vào frontend, request của trình duyệt hoặc repository. Endpoint `GET/PATCH /api/v1/ai-settings` dùng để đọc/cập nhật cấu hình Trợ lý AI cho tài khoản. Endpoint `POST /api/v1/conversations/:id/ai-suggestions` chỉ cho `admin` và `agent`, nhận trigger `manual`, `conversation_open` hoặc `customer_message`, đọc 6 tin nhắn cuối của cả khách hàng và nhân viên theo thứ tự thời gian, rồi trả tối đa 3 gợi ý kèm `source` là `gemini` hoặc `fallback`. Khi tính năng/model bị tắt, chế độ không khớp trigger, thiếu key, Gemini timeout/lỗi quota hoặc trả dữ liệu không hợp lệ, backend không tự tạo gợi ý hoặc dùng fallback phù hợp để không chặn composer. Prompt và response của request Gemini không được lưu vào database.
 
