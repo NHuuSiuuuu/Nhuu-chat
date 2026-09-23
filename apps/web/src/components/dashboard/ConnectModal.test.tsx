@@ -157,7 +157,7 @@ describe("ConnectModal Tailwind migration", () => {
     const selecting: connectModal.FacebookOAuthFlow = {
       status: "selecting",
       selection: "selection-token",
-      pages: [{ id: "page-1", name: "Page One", canMessage: true, canPublish: true }],
+      pages: [{ id: "page-1", name: "Page One", canMessage: true, canPublish: false }],
       selectedPageId: "page-1",
       error: null
     };
