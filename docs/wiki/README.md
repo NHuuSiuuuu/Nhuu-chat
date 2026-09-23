@@ -1,6 +1,6 @@
 # Nhuu-chat Wiki
 
-Tài liệu tổng quan vận hành và trạng thái phát triển của Nhuu-chat — nền tảng quản lý inbox chăm sóc khách hàng đa kênh, hiện ưu tiên Telegram và trợ lý RAG.
+Tài liệu tổng quan vận hành và trạng thái phát triển của Nhuu-chat — nền tảng quản lý inbox chăm sóc khách hàng đa kênh, hiện hỗ trợ Facebook Messenger, Telegram và trợ lý RAG.
 
 > Đây là Wiki source được lưu trong repository. Khi Wiki online được bật trên GitHub, nội dung file này có thể được đồng bộ sang trang Wiki tương ứng.
 
@@ -12,6 +12,7 @@ Nhuu-chat hiện là MVP tập trung vào:
 - Dashboard onboarding sau đăng nhập.
 - Kết nối Telegram cá nhân bằng QR MTProto.
 - Nhận và gửi tin nhắn Telegram trong Inbox realtime.
+- Nhận tin Messenger mới qua webhook đã xác minh chữ ký, lưu hội thoại riêng theo PSID, cập nhật Inbox realtime và trả lời văn bản qua Send API.
 - Quản lý hội thoại, unread count, avatar, tên khách hàng, nhóm và nền tảng gửi.
 - Trợ lý RAG với dữ liệu knowledge dạng tài liệu/chính sách.
 - Trợ lý AI có cấu hình model Gemini, gợi ý trả lời và phát hiện cảm xúc.
@@ -266,7 +267,7 @@ Telegram Bot lấy token mã hóa từ đăng ký `POST /api/v1/channels/telegra
 
 Hai connector nhận text, ảnh, document/file, sticker, audio/voice, video/video note, animation/GIF; lưu loại/tham chiếu media và caption. Caption đi vào template/RAG; thiếu caption thì bot yêu cầu mô tả bằng văn bản. File Bot API dùng field `document`. Chưa đọc/tải nội dung media, chưa tải/render attachment đầy đủ; outbound bot chỉ gửi text. Fallback hoặc lỗi gửi chuyển hội thoại sang `pending`, pause 30 phút; mặc định khi tạo trợ lý là chính xác `Em chưa có đủ thông tin, nhân viên sẽ hỗ trợ.`. Fallback riêng đã lưu giữ nguyên. Bot chỉ thử gửi một lần, kể cả timeout không biết Telegram đã nhận hay chưa. Gửi thủ công từ web và tin gửi thật từ Telegram cá nhân kích hoạt cùng pause; echo/ID chatbot không được tính là agent takeover. Tin đến khi pause vẫn lưu nhưng không tự phát lại sau đó.
 
-Owner Telegram cá nhân lấy từ session. Đăng ký Telegram Bot qua `POST /api/v1/channels/telegram` lưu owner admin đã xác thực cùng token mã hóa; hội thoại mới kế thừa owner này, không lấy owner từ body/webhook. Adapter không dùng đăng ký có owner để gửi cho hội thoại của người khác. Hội thoại cũ không bị đổi owner; token legacy chưa có owner không được tự cấp owner cho hội thoại mới. Chỉ cấp owner legacy sau xác minh nguồn bằng quy trình vận hành có kiểm chứng. Một token chung vẫn là giới hạn hiện tại và đăng ký thứ hai không ghi đè bản ghi hiện có. Model hội thoại mới dùng unique index `(platform, channelId, ownerId)`; database đã tồn tại phải chạy migration Zalo thủ công trước rollout. Index message `(platform, externalMessageId)` vẫn cần đánh giá collision cho các connector nhiều tài khoản khác. Facebook/Instagram chưa có connector tự gửi; Zalo cá nhân mới ở trạng thái thử nghiệm.
+Owner Telegram cá nhân lấy từ session. Đăng ký Telegram Bot qua `POST /api/v1/channels/telegram` lưu owner admin đã xác thực cùng token mã hóa; hội thoại mới kế thừa owner này, không lấy owner từ body/webhook. Adapter không dùng đăng ký có owner để gửi cho hội thoại của người khác. Hội thoại cũ không bị đổi owner; token legacy chưa có owner không được tự cấp owner cho hội thoại mới. Chỉ cấp owner legacy sau xác minh nguồn bằng quy trình vận hành có kiểm chứng. Một token chung vẫn là giới hạn hiện tại và đăng ký thứ hai không ghi đè bản ghi hiện có. Model hội thoại giữ unique index `(platform, channelId, ownerId)` cho nền tảng hiện có; Facebook dùng thêm `customerId` để tách PSID trong cùng Page. Database cũ cần migrations Facebook Page owner và Facebook conversation customer trước rollout Messenger theo [tài liệu triển khai](../deployment/vercel-railway.md); migration Zalo thủ công bên dưới vẫn áp dụng riêng. Index message `(platform, externalMessageId)` vẫn cần đánh giá collision cho các connector nhiều tài khoản khác. Instagram chưa có connector gửi; Zalo cá nhân mới ở trạng thái thử nghiệm.
 
 ### Zalo cá nhân thử nghiệm
 
@@ -336,7 +337,8 @@ Các test quan trọng của Inbox kiểm tra tự cuộn, unread state, metadat
 - Chuẩn hóa Mongo integration trong CI bằng Mongo replica set test.
 - Đánh giá MongoDB Atlas Vector Search cho RAG production.
 - Hoàn thiện tích hợp thanh toán và ví cho các tính năng AI.
-- Hoàn thiện UI, live smoke và reconnect production cho Zalo cá nhân; tích hợp Facebook và Instagram sau khi có spec được phê duyệt.
+- Chạy nghiệm thu live Messenger với Meta test Page và tester đủ quyền; cấu hình webhook, quyền và migrations theo [tài liệu triển khai](../deployment/vercel-railway.md). Việc mở cho người dùng Facebook public vẫn phụ thuộc app mode, quyền truy cập và quy trình review của Meta.
+- Hoàn thiện UI, live smoke và reconnect production cho Zalo cá nhân; tích hợp Instagram sau khi có spec được phê duyệt.
 
 ## 9. Tài liệu liên quan
 

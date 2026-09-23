@@ -1,6 +1,6 @@
 # Nhuu-chat
 
-MVP quản lý inbox chăm sóc khách hàng Telegram và trợ lý RAG. MongoDB dùng MongoDB Atlas; Redis vẫn có thể chạy local bằng Docker.
+MVP quản lý inbox chăm sóc khách hàng Facebook Messenger và Telegram cùng trợ lý RAG. MongoDB dùng MongoDB Atlas; Redis vẫn có thể chạy local bằng Docker.
 
 ## Đã hoàn thành
 
@@ -13,6 +13,7 @@ MVP quản lý inbox chăm sóc khách hàng Telegram và trợ lý RAG. MongoDB
 - Telegram webhook có secret và idempotency.
 - Chatbot tự động dùng chung orchestration/delivery cho Telegram Bot và Telegram cá nhân, có template, RAG đúng owner, fallback và bàn giao.
 - REST conversation/message API và Socket.IO room authentication.
+- Inbox Facebook Messenger thủ công cho tin nhắn văn bản mới: webhook xác minh chữ ký, lưu riêng conversation theo PSID, cập nhật realtime và gửi trả lời qua Messenger Send API.
 - CRUD danh mục thẻ hội thoại dùng chung cho admin/agent tại `/api/v1/conversation-tags`.
 - CRUD mẫu trả lời nhanh dùng chung cho admin/agent tại `/api/v1/quick-replies`, hỗ trợ lưu một ảnh đính kèm qua Cloudinary.
 - Knowledge chunking, TXT/Markdown/PDF/DOCX parser, provider-independent RAG.
@@ -82,7 +83,7 @@ Lượt gửi bot và chính sách pause của nhân viên dùng chung khóa ato
 
 Knowledge legacy thiếu owner được cách ly khỏi index: startup chỉ nạp chunk có owner khớp document có owner hợp lệ. Chunk thiếu owner, parent thiếu owner/không tồn tại hoặc owner không khớp không được đổi thành chuỗi `undefined`/`null` và không được truy xuất unscoped. Log `KNOWLEDGE_OWNER_QUARANTINED` chỉ ghi số chunk; dữ liệu gốc trong MongoDB giữ nguyên. Để phục hồi, người vận hành đọc các document/chunk thiếu owner hoặc sai liên kết, xác minh nguồn và chủ sở hữu ngoài hệ thống; đăng nhập bằng tài khoản admin của owner đã xác minh rồi gửi lại `title`/`content` qua `POST /api/v1/knowledge`. API lấy owner từ JWT, tạo document/chunk mới có scope; không dùng body `ownerId` hay tự nhận chủ cho bản ghi cũ. Nếu không xác minh được, tiếp tục cách ly. Không có migration xóa/đổi owner hàng loạt; re-ingestion phải là quyết định rõ ràng để tránh nhân bản nhiều lần.
 
-Index hội thoại mới dùng `(platform, channelId, ownerId)`, nhưng database đã tồn tại phải chạy migration Zalo bên dưới trước khi rollout. Index tin nhắn vẫn là `(platform, externalMessageId)`; connector Zalo cá nhân namespace ID inbound theo tài khoản, còn các connector khác vẫn cần đánh giá collision khi triển khai nhiều tài khoản. Facebook và Instagram chưa có adapter tự động gửi; Zalo cá nhân mới ở trạng thái thử nghiệm.
+Index hội thoại mới giữ uniqueness `(platform, channelId, ownerId)` cho các nền tảng hiện có; Facebook dùng thêm `customerId` để tách từng PSID trong cùng Page. Database cũ phải chạy migrations Facebook Page owner và Facebook conversation customer trước rollout Messenger như hướng dẫn tại [tài liệu triển khai](docs/deployment/vercel-railway.md); migration Zalo bên dưới vẫn áp dụng riêng. Index tin nhắn vẫn là `(platform, externalMessageId)`; connector Zalo cá nhân namespace ID inbound theo tài khoản, còn các connector khác vẫn cần đánh giá collision khi triển khai nhiều tài khoản. Instagram chưa có adapter gửi; Zalo cá nhân mới ở trạng thái thử nghiệm.
 
 ### Zalo cá nhân thử nghiệm
 
@@ -192,7 +193,7 @@ Test Mongo integration cần `MONGODB_TEST_URI` trỏ tới database test riêng
 - Chưa chạy Playwright E2E trên môi trường deploy thật.
 - Redis adapter và Mongo integration cần xác minh trên Atlas/CI sạch.
 - Vector store hiện là adapter in-memory cho MVP; Mongo Atlas Vector Search vẫn là lựa chọn production chưa triển khai.
-- Instagram OAuth và OAuth/webhook Facebook Messenger, Zalo cá nhân production UI/live smoke/reconnect đầy đủ, WebRTC và load test thực tế nằm ngoài MVP hiện tại. OAuth dùng để kết nối Facebook Page phục vụ đăng bài đã có, nhưng việc mở cho người dùng public vẫn phụ thuộc App Review và Live Mode của Meta.
+- Chưa nghiệm thu live với Meta test Page cho luồng Messenger inbound/reply; cần cấu hình webhook, quyền phù hợp và Page/tài khoản tester như [tài liệu triển khai](docs/deployment/vercel-railway.md). Việc mở tích hợp Facebook Page cho người dùng public vẫn phụ thuộc app mode, quyền truy cập và quy trình review của Meta. Instagram OAuth, Zalo cá nhân production UI/live smoke/reconnect đầy đủ, WebRTC và load test thực tế nằm ngoài MVP hiện tại.
 
 ## Lệnh kiểm tra
 
