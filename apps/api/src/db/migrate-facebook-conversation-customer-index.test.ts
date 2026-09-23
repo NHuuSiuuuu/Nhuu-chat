@@ -14,6 +14,17 @@ const facebookName = "platform_1_channelId_1_ownerId_1_customerId_1_facebook";
 const nonFacebookName = "platform_1_channelId_1_ownerId_1_non_facebook";
 
 describe("migrateFacebookConversationCustomerIndex", () => {
+  it("treats a missing collection as empty and creates both indexes", async () => {
+    const collection = {
+      listIndexes: () => ({ toArray: async () => { throw Object.assign(new Error("ns not found"), { code: 26, codeName: "NamespaceNotFound" }); } }),
+      createIndex: vi.fn(async (_key: unknown, options: { name: string }) => options.name),
+      dropIndex: vi.fn()
+    };
+    await expect(migrateFacebookConversationCustomerIndex(collection)).resolves.toEqual({ createdFacebookIndex: true, createdNonFacebookIndex: true, droppedLegacyIndex: false });
+    expect(collection.createIndex).toHaveBeenCalledTimes(2);
+    expect(collection.dropIndex).not.toHaveBeenCalled();
+  });
+
   it("creates both scoped indexes before dropping the legacy unique index", async () => {
     const operations: string[] = [];
     const collection = {
@@ -79,6 +90,16 @@ describe("Facebook conversation index migration against MongoDB", () => {
     await expect(collection.insertOne({ platform: "facebook", channelId: "page-1", ownerId, customerId: firstFacebook?.customerId })).rejects.toMatchObject({ code: 11000 });
     await collection.insertOne({ platform: "telegram", channelId: "chat-1", ownerId, customerId: new mongoose.Types.ObjectId() });
     await expect(collection.insertOne({ platform: "telegram", channelId: "chat-1", ownerId, customerId: new mongoose.Types.ObjectId() })).rejects.toMatchObject({ code: 11000 });
+    await expect(migrateFacebookConversationCustomerIndex(collection)).resolves.toEqual({ createdFacebookIndex: false, createdNonFacebookIndex: false, droppedLegacyIndex: false });
+    await collection.drop();
+  });
+
+  it("creates indexes in a fresh database before conversations exist", async () => {
+    const collection = mongoose.connection.db!.collection("facebook_conversation_missing_collection_test");
+    await expect(migrateFacebookConversationCustomerIndex(collection)).resolves.toEqual({ createdFacebookIndex: true, createdNonFacebookIndex: true, droppedLegacyIndex: false });
+    const indexNames = (await collection.listIndexes().toArray()).map((item) => item.name);
+    expect(indexNames).toContain(facebookName);
+    expect(indexNames).toContain(nonFacebookName);
     await expect(migrateFacebookConversationCustomerIndex(collection)).resolves.toEqual({ createdFacebookIndex: false, createdNonFacebookIndex: false, droppedLegacyIndex: false });
     await collection.drop();
   });

@@ -39,13 +39,24 @@ function compatible(index: Index, filter: Record<string, unknown>): boolean {
   return index.unique === true && index.sparse !== true && index.collation === undefined && sameFilter(index.partialFilterExpression, filter);
 }
 
+function isMissingCollection(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === 26;
+}
+
 // Tạo hai ràng buộc mới trước khi bỏ unique index cũ để không có khoảng trống cho dữ liệu trùng.
 export async function migrateFacebookConversationCustomerIndex(collection: ConversationIndexCollection): Promise<{
   createdFacebookIndex: boolean;
   createdNonFacebookIndex: boolean;
   droppedLegacyIndex: boolean;
 }> {
-  const indexes = await collection.listIndexes().toArray();
+  let indexes: Index[];
+  try {
+    indexes = await collection.listIndexes().toArray();
+  } catch (error) {
+    // MongoDB trả NamespaceNotFound khi collection chưa có; createIndex sẽ tạo collection đó.
+    if (!isMissingCollection(error)) throw error;
+    indexes = [];
+  }
   const facebookIndexes = indexes.filter((item) => sameKey(item.key, FACEBOOK_CONVERSATION_UNIQUE_INDEX));
   const nonFacebookIndexes = indexes.filter((item) => sameKey(item.key, NON_FACEBOOK_CONVERSATION_UNIQUE_INDEX) && item.name !== LEGACY_INDEX_NAME);
   const legacyIndexes = indexes.filter((item) => sameKey(item.key, NON_FACEBOOK_CONVERSATION_UNIQUE_INDEX) && item.name === LEGACY_INDEX_NAME);
