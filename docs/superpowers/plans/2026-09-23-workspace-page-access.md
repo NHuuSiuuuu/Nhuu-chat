@@ -15,7 +15,7 @@
 - Keep `User.role` values `admin`, `agent`, and `customer` as system roles; add Workspace roles `owner`, `admin`, and `staff` separately.
 - A staff membership with `allowedPages: []` can access every Facebook Page in that Workspace.
 - A Workspace ID from the client is never authorization; resolve and validate the membership on the server.
-- Apply Workspace Page RBAC to Facebook connections and Facebook Inbox only; do not alter Telegram, AI, personal settings, or other owner-scoped modules.
+- Apply Workspace Page RBAC to Facebook connections, Facebook Inbox, and Facebook Publishing; do not alter Telegram, AI, personal settings, or other owner-scoped modules.
 - Preserve `Conversation.ownerId` and current data ownership; do not expose access tokens in API responses, Socket.IO events, errors, or logs.
 - Do not run production migrations or deployment as part of this implementation.
 
@@ -103,7 +103,7 @@
 - Modify `apps/api/src/auth/auth.middleware.ts` and tests as needed.
 - Modify `apps/api/src/realtime/access.ts` and tests.
 - Modify `apps/api/src/realtime/socket.ts` and tests.
-- Modify Facebook Page, conversation, customer, message, pin, note, tag, and publishing controllers/services only where Facebook resources are accessed.
+- Modify Facebook Page, conversation, customer, message, pin, note, tag, Facebook post, and publishing scheduler controllers/services only where Facebook resources are accessed.
 - Modify `apps/api/src/channels/facebook-messenger/facebook-messenger.webhook.ts` and tests for Page-specific recipients.
 
 **Interfaces:**
@@ -141,7 +141,7 @@
 - [ ] Run the new frontend tests and confirm failure because workspace UI/API client context is missing.
 - [ ] Implement Workspace list/selector, persisted selection scoped to the signed-in user, request header injection, and Socket.IO reconnect on Workspace switch.
 - [ ] Implement responsive member list and Add/Edit modal with Tailwind, `cursor-pointer` on interactive labels/controls, and Sonner feedback.
-- [ ] Connect selected Workspace to Facebook Page connection selection, OAuth, Page list and Inbox filters.
+- [ ] Connect selected Workspace to Facebook Page connection selection, OAuth, Page list, Inbox filters, and Page-specific post composition/management.
 - [ ] Run focused frontend tests and `pnpm --filter web build`.
 - [ ] Commit the task with `feat: thêm giao diện thành viên và chọn Workspace`.
 

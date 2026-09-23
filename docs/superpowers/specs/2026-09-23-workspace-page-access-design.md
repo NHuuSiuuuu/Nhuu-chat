@@ -12,7 +12,7 @@ Cho phép chủ Workspace thêm tài khoản NhuuChat đã đăng ký làm Quả
 - `allowedPages: []` nghĩa là không giới hạn Page. Danh sách Page không rỗng giới hạn Staff đúng các Page trong danh sách. Admin và Owner có quyền trên tất cả Page trong Workspace.
 - Facebook Page connection thuộc Workspace (giữ `userId` hiện tại làm định danh chủ dữ liệu để tương thích), có nhiều connection trên một `userId`; mỗi `pageId` vẫn chỉ thuộc một Workspace. Token tiếp tục mã hóa tại backend.
 - Workspace đang hoạt động được gửi rõ trong request Facebook và handshake Socket.IO, rồi được backend xác thực theo membership của user. API/Socket phân giải membership thành Workspace owner trước khi truy vấn; quyền Page được kiểm tra phía server. Không dựa vào bộ lọc UI để bảo vệ dữ liệu.
-- Phạm vi RBAC của thay đổi này là Facebook Page connections, Facebook Inbox và quản lý thành viên Workspace. Các module Telegram, AI, cài đặt cá nhân và dữ liệu ngoài Facebook tiếp tục dùng owner scope hiện tại.
+- Phạm vi RBAC của thay đổi này là Facebook Page connections, Facebook Inbox, Facebook Publishing và quản lý thành viên Workspace. Các module Telegram, AI, cài đặt cá nhân và dữ liệu ngoài Facebook tiếp tục dùng owner scope hiện tại.
 
 ## Dữ liệu và di trú
 
@@ -37,12 +37,13 @@ Cho phép chủ Workspace thêm tài khoản NhuuChat đã đăng ký làm Quả
 - OAuth vẫn chọn Page trong danh sách Meta; selection token được ràng buộc với user và Workspace bắt đầu luồng. Mỗi lựa chọn tạo/cập nhật connection theo `pageId` mà không ghi đè các Page khác của Workspace.
 - Thêm `GET /api/v1/facebook-page/connections` để lấy Page đã kết nối và `DELETE /api/v1/facebook-page/connections/:pageId` để gỡ riêng một Page. Endpoint singular hiện có tiếp tục hoạt động với Page đầu tiên để tương thích.
 - Webhook resolve chính xác connection theo Page ID; Page ID tiếp tục duy nhất toàn hệ thống và không fan-out.
-- Inbox mặc định chỉ trả các Page được thành viên phép xem. Bộ lọc Page, số liệu, tìm kiếm, lịch sử, gửi tin và thao tác hội thoại đều phải dùng cùng access filter.
+- Facebook Publishing chọn Page đích rõ ràng, gắn post/schedule với đúng connection và chỉ liệt kê/quản lý bài thuộc Page thành viên được phép.
+- Inbox và Publishing mặc định chỉ trả các Page được thành viên phép xem. Bộ lọc Page, số liệu, tìm kiếm, lịch sử, gửi tin, đăng bài và thao tác hội thoại đều phải dùng cùng access filter.
 
 ## Cô lập và realtime
 
 - Hội thoại và customer giữ `ownerId` là chủ Workspace để tương thích dữ liệu cũ; Facebook request của thành viên được truy vấn trong phạm vi `ownerId` đó và Page được phép. Quy tắc này chỉ áp dụng cho Facebook scope; không đổi truy vấn của module khác.
-- Mọi endpoint có `conversationId`, `customerId`, `pageId` hoặc `channelId` phải xác minh tài nguyên thuộc Workspace/Page được phép trước khi đọc hay ghi.
+- Mọi Facebook endpoint có `conversationId`, `customerId`, `postId`, `connectionId`, `pageId` hoặc `channelId` phải xác minh tài nguyên thuộc Workspace/Page được phép trước khi đọc hay ghi.
 - Socket.IO handshake nhận Workspace ID đang chọn và server xác minh membership trước khi join. Sự kiện Messenger được phát cho owner/admin và các thành viên có quyền với Page tương ứng; không phát dữ liệu khách hàng hoặc nội dung tin nhắn cho thành viên không được phép. Workspace switch tạo socket context mới.
 - Tác vụ nền và webhook giữ owner scope; không tin owner ID từ client hoặc payload Meta.
 - Không đổi hành vi bot, assignment, pause, trạng thái tin nhắn và thiết lập cá nhân ngoài việc áp dụng quyền truy cập.
@@ -58,7 +59,7 @@ Cho phép chủ Workspace thêm tài khoản NhuuChat đã đăng ký làm Quả
 - Unit/integration: bootstrap Workspace cũ idempotent; tài khoản mới thành customer rồi thành owner Workspace; thêm thành viên đã đăng ký; từ chối email chưa tồn tại, membership Workspace khác và sửa/xóa owner.
 - Page access: admin/owner thấy mọi Page; staff với `allowedPages` rỗng thấy mọi Page; staff có danh sách chỉ thấy đúng Page được cấp; không thể truy cập bằng ID Page/conversation/customer ngoài quyền.
 - Facebook connections: một Workspace kết nối nhiều Page; Page trùng Workspace khác bị từ chối; cập nhật/gỡ một Page không tác động connection khác; OAuth selection giữ đúng Workspace.
-- Inbox/realtime: lọc Page áp dụng cho list, detail, send, search, counts và socket recipients; webhook route đúng Workspace theo Page ID.
+- Inbox/Publishing/realtime: lọc Page áp dụng cho list, detail, send, search, counts, create/edit/schedule/publish và socket recipients; webhook route đúng Workspace theo Page ID.
 - Migration được chạy trên fixture nhiều tài khoản cũ, chạy lặp không đổi kết quả, phát hiện dữ liệu xung đột mà không làm mất/ghi đè dữ liệu.
 - Chạy test focused, suite/build liên quan auth/database/API/realtime, lint file sửa và `git diff --check`.
 
