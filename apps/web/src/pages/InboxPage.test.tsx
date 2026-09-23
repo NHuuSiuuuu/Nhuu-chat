@@ -322,7 +322,7 @@ describe("Inbox Tailwind migration", () => {
     expect(chat).toContain("PlatformIcon");
     expect(chat).toContain('aria-label={conversationPlatformLabel(conversation.platform)}');
     expect(chat).toContain("platformIconProvider");
-    expect(chat).not.toContain('className="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">{conversationPlatformLabel(conversation.platform)}');
+    expect(chat).not.toContain('className="inline-flex items-center rounded-full text-gray-900  px-2 py-0.5 text-[11px] font-semibold text-gray-900">{conversationPlatformLabel(conversation.platform)}');
   });
 
   it("uses sonner for customer messages without notifying for agent messages", () => {
@@ -338,6 +338,29 @@ describe("Inbox Tailwind migration", () => {
     expect(source).toContain("slice(-3)");
     expect(source).toContain("selectConversation(message.conversationId)");
     expect(source).toContain("toast.dismiss(toastId)");
+  });
+
+  it("selects the requested conversation after the inbox list loads", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("selectedConversationId?: string | null");
+    expect(source).toContain("handledRequestedConversationRef.current = selectedConversationRequest");
+    expect(source).toContain("selectConversation(selectedConversationId)");
+    expect(source).toContain('params.delete("conversationId")');
+  });
+
+  it("applies per-account general settings to inbox notifications and unread navigation", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("loadGeneralSettings({ apiUrl: API_URL, token, refresh })");
+    expect(source).toContain("hasCurrentGeneralSettings && shouldNotifyForIncomingMessage(generalSettings, message.senderType)");
+    expect(source).toContain("new Notification(senderName");
+    expect(source).toContain("playIncomingNotificationSound(generalSettings.notificationSound)");
+    expect(source).toContain("orderConversationsByUnread(conversations, hasCurrentGeneralSettings && generalSettings.moveUnreadConversationsToTop)");
+    expect(source).toContain("generalSettings.openNextUnreadConversation");
+    expect(source).toContain("getNextUnreadConversationId(unreadOrdered, activeId)");
+    expect(source).toContain("if (!activeId || !await markActiveRead(activeId)) return");
+    expect(source).not.toContain("previousConversation.unreadCount > 0");
   });
 
   it("defines the socket room join handler before registering it", () => {

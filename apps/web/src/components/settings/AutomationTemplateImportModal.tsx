@@ -43,7 +43,7 @@ export function AutomationTemplateImportModal({
         </div>
         <button type="button" aria-label="Đóng" onClick={onClose}>×</button>
       </div>
-      <label className="mt-5 block cursor-pointer rounded-xl border border-dashed border-sky-300 bg-sky-50 px-4 py-5 text-center text-sm font-semibold text-sky-700">
+      <label className="mt-5 block cursor-pointer rounded-xl border border-dashed border-sky-300 text-gray-900  px-4 py-5 text-center text-sm font-semibold text-gray-900">
         <span>{isReading ? "Đang đọc file..." : "Chọn file Excel hoặc CSV"}</span>
         <input className="sr-only" type="file" accept=".xlsx,.csv" onChange={(event) => void selectFile(event.target.files?.[0])} disabled={isReading || isSaving} />
       </label>

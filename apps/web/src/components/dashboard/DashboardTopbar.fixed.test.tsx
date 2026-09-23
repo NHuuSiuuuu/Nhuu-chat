@@ -5,7 +5,7 @@ const source = readFileSync(new URL("./DashboardTopbar.tsx", import.meta.url), "
 
 describe("DashboardTopbar fixed layout", () => {
   it("stays fixed above page content", () => {
-    expect(source).toContain("fixed top-0");
+    expect(source).toContain("fixed left-0 right-0 top-0");
     expect(source).toContain("z-50");
   });
 

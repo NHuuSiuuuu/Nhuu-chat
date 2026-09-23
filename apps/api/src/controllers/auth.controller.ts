@@ -7,7 +7,8 @@ import {
   revokeRefreshToken,
   rotateRefreshToken
 } from "../services/auth.service.js";
-import { loginSchema, registerSchema } from "../schemas/auth.schemas.js";
+import { requestPasswordReset, resetPassword } from "../services/password-reset.service.js";
+import { forgotPasswordSchema, loginSchema, registerSchema, resetPasswordSchema } from "../schemas/auth.schemas.js";
 import { clearAuthCookies, REFRESH_COOKIE_NAME, readCookie, setAuthCookies } from "../auth/auth.cookies.js";
 import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
 
@@ -75,6 +76,37 @@ export const logout: RequestHandler = async (request, response, next) => {
     response.status(204).send();
   } catch (error) {
     clearAuthCookies(response);
+    next(error);
+  }
+};
+
+export const forgotPassword: RequestHandler = async (request, response, next) => {
+  try {
+    const result = forgotPasswordSchema.safeParse(request.body);
+    if (!result.success) {
+      throw new AppError(400, "INVALID_REQUEST", "A valid email is required");
+    }
+
+    await requestPasswordReset(result.data.email);
+    response.status(202).json({
+      message: "If an account exists for this email, you will receive a password reset link."
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resetPasswordController: RequestHandler = async (request, response, next) => {
+  try {
+    const result = resetPasswordSchema.safeParse(request.body);
+    if (!result.success) {
+      throw new AppError(400, "INVALID_REQUEST", "Token and a password of at least 8 characters are required");
+    }
+
+    await resetPassword(result.data.token, result.data.password);
+    clearAuthCookies(response);
+    response.status(204).send();
+  } catch (error) {
     next(error);
   }
 };

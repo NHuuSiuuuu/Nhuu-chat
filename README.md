@@ -6,6 +6,7 @@ MVP quản lý inbox chăm sóc khách hàng Telegram và trợ lý RAG. MongoDB
 
 - Workspace React/Vite + Node/Express/TypeScript.
 - JWT auth và role admin/agent/customer.
+- Quên mật khẩu qua Nodemailer/SMTP với token đặt lại một lần, hết hạn sau 30 phút.
 - Dashboard onboarding và kết nối Telegram cá nhân bằng QR MTProto; session chỉ lưu mã hóa ở backend.
 - Backend Zalo cá nhân thử nghiệm qua QR, nhận media metadata và gửi text, ảnh hoặc file; credentials chỉ lưu mã hóa ở backend.
 - MongoDB/Mongoose domain models, mã hóa provider secret AES-256-GCM.
@@ -177,6 +178,8 @@ Khi phát triển giao diện, chạy web bằng `pnpm --filter web dev`. Build 
 
 - `POST /api/v1/auth/register` nhận `name`, `email` và password từ 8 ký tự; tài khoản mới luôn có role `customer`.
 - `POST /api/v1/auth/login` trả access token, refresh token và role hiện tại của tài khoản.
+- `POST /api/v1/auth/forgot-password` nhận email và luôn trả cùng thông báo chung, không tiết lộ email có tài khoản; `POST /api/v1/auth/reset-password` nhận token cùng mật khẩu mới từ 8 ký tự. Token hết hạn sau 30 phút, dùng một lần; sau khi đặt lại, người dùng đăng nhập lại.
+- Để gửi email đặt lại, cấu hình `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER` và `SMTP_PASS` trong `apps/api/.env` (`SMTP_PASSWORD` cũng được hỗ trợ); `SMTP_USER` đồng thời được dùng làm địa chỉ người gửi. Ví dụ Gmail dùng `smtp.gmail.com`, cổng `587`, `SMTP_SECURE=false` và App Password. Có thể dùng nhà cung cấp SMTP khác; không cần đăng ký domain riêng nếu nhà cung cấp cho phép gửi từ hộp thư hiện có. `WEB_APP_URL` phải trỏ đúng frontend để tạo liên kết `/reset-password?token=...`. API giữ token dạng hash trong MongoDB, không ghi token hoặc thông tin SMTP vào log.
 - Sau đăng nhập, mọi role được đưa vào Dashboard. Người dùng phải kết nối Telegram trước khi Inbox có dữ liệu.
 - Telegram cá nhân cần `TELEGRAM_API_ID` và `TELEGRAM_API_HASH` lấy từ `my.telegram.org`; QR được quét bằng ứng dụng Telegram đã đăng nhập.
 - Thẻ hội thoại được quản lý qua API với payload `{ "name": "Mua hàng", "color": "#22c55e" }`; danh mục hiện dùng chung cho admin/agent. Việc gắn thẻ vào từng hội thoại chưa thuộc bước này.

@@ -583,7 +583,8 @@ async function ingestZaloPersonalMessage(userId: string, message: NormalizedZalo
     name: stringValue(session.displayName),
     avatarUrl: stringValue(session.avatarUrl)
   });
-  emitChatEvent("chat:message_received", String(updatedConversation._id), toMessage(storedMessage.toObject()));
+  const messagePayload = toMessage(storedMessage.toObject());
+  emitChatEvent("chat:message_received", String(updatedConversation._id), messagePayload);
   emitInboxEventToRecipients(
     "chat:conversation_updated",
     [userId, updatedConversation.assignedAgentId ? String(updatedConversation.assignedAgentId) : ""],

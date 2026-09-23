@@ -39,6 +39,14 @@ describe("App navigation", () => {
     expect(source).not.toContain('setInboxPlatform(nextPage === "inbox" ? platform : undefined)');
   });
 
+  it("makes a global incoming-message toast navigate to its conversation", () => {
+    const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("navigateToIncomingConversation(message); toast.dismiss(toastId)");
+    expect(source).toContain("setRequestedConversation({ id: message.conversationId, request: ++incomingNavigationRequestRef.current })");
+    expect(source).toContain("selectedConversationId={requestedConversation?.id}");
+  });
+
   it("routes the settings header item to /settings and renders it below the shared header", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
@@ -127,9 +135,8 @@ describe("App navigation", () => {
 
     expect(source).toContain('import { Toaster } from "sonner";');
     expect(source).toContain('position="top-right"');
-    expect(source).toContain('borderRadius: "12px"');
-    expect(source).toContain('fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"');
-    expect(source).toContain('background: "#ffffff"');
-    expect(source).toContain('color: "#273348"');
+    expect(source).toContain("richColors");
+    expect(source).toContain("closeButton");
+    expect(source).not.toContain("toastOptions={{");
   });
 });

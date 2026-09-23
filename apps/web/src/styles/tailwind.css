@@ -57,6 +57,7 @@
     display: none;
   }
 }
+
 @layer components {
   /* Giới hạn chiều cao danh sách mẫu chào nhưng vẫn cho phép cuộn khi có nhiều mẫu. */
   [aria-label="Cấu hình chatbot"] > .mt-3.grid.gap-2 {
@@ -69,4 +70,28 @@
   [aria-label="Cấu hình chatbot"] > .mt-3.grid.gap-2::-webkit-scrollbar {
     display: none;
   }
+
+  /* Giữ phần nội dung mẫu chào co lại để hai nút thao tác không bị đẩy khỏi card. */
+  [aria-label="Cấu hình chatbot"] > .mt-3.grid.gap-2 > div {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  [aria-label="Cấu hình chatbot"] > .mt-3.grid.gap-2 > div > div {
+    min-width: 0;
+    flex-wrap: nowrap;
+  }
+
+  [aria-label="Cấu hình chatbot"] > .mt-3.grid.gap-2 strong {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  [aria-label="Cấu hình chatbot"] > .mt-3.grid.gap-2 > div > div > div:last-child {
+    flex-shrink: 0;
+    align-items: center;
+  }
+
 }

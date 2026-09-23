@@ -250,4 +250,15 @@ describe("dashboard connected accounts", () => {
     expect(source).toContain("setShowMergePages(true)");
     expect(source).toContain('onClick={openMergeModal}');
   });
+
+  it("shows a spinning refresh icon while reloading dashboard data", () => {
+    const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("isReloading");
+    expect(source).toContain("setIsReloading(true)");
+    expect(source).toContain("finally");
+    expect(source).toContain('<InboxIcon name="refresh" size={18} className={isReloading ? "animate-spin" : ""} />');
+    expect(source).toContain("isReloading ? \"animate-spin\" : \"\"");
+    expect(source).not.toContain(">↻</button>");
+  });
 });

@@ -47,7 +47,7 @@ Chuyển markup của `ConnectModal.tsx` và các trạng thái QR/2FA/error/suc
 
 ### 4. Inbox và hội thoại
 
-Chuyển `InboxPage.tsx`, `ConversationList.tsx`, `ChatWindow.tsx`, `MessageComposer.tsx` và icon liên quan. Giữ header Hchat dùng chung ở Inbox, layout ba vùng, empty state, selected/hover/focus state, cuộn độc lập và responsive mobile.
+Chuyển `InboxPage.tsx`, `ConversationList.tsx`, `ChatWindow.tsx`, `MessageComposer.tsx` và icon liên quan. Giữ header NhuuChat dùng chung ở Inbox, layout ba vùng, empty state, selected/hover/focus state, cuộn độc lập và responsive mobile.
 
 ### 5. Dọn CSS cũ và tài liệu
 

@@ -26,6 +26,7 @@ export function createApp(): Express {
   const app = express();
 
   app.disable("x-powered-by");
+  app.set("trust proxy", 1);
   app.use(securityHeaders);
   app.use(requestId);
   app.use(corsAllowlist);
@@ -36,6 +37,7 @@ export function createApp(): Express {
 
     response.status(200).json(health);
   });
+  app.use("/api/v1/auth/forgot-password", rateLimit({ windowMs: 15 * 60_000, max: 5, keyPrefix: "password-reset" }));
   app.use("/api/v1/auth", rateLimit({ windowMs: 60_000, max: 60 }), authRouter);
   app.use("/api/v1/channels/telegram", telegramRouter);
   app.use("/api/v1/channels/telegram-personal", telegramPersonalRouter);

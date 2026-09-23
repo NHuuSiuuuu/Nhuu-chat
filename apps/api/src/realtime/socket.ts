@@ -55,7 +55,19 @@ export function createRealtimeServer(httpServer: HttpServer, redisUrl = process.
 }
 
 export function emitChatEvent(event: string, conversationId: string, payload: unknown): void {
-  activeServer?.to(`conversation:${conversationId}`).emit(event, payload);
+  const server = activeServer;
+  if (!server) return;
+  server.to(`conversation:${conversationId}`).emit(event, payload);
+  if (event === chatEvents.messageReceived && typeof payload === "object" && payload !== null && "senderType" in payload && payload.senderType === "customer") {
+    void ConversationModel.findById(conversationId).select("ownerId assignedAgentId").lean().then((conversation) => {
+      if (!conversation) return;
+      emitInboxEventToRecipients(
+        chatEvents.incomingMessage,
+        [conversation.ownerId ? String(conversation.ownerId) : "", conversation.assignedAgentId ? String(conversation.assignedAgentId) : ""],
+        payload
+      );
+    }).catch(() => undefined);
+  }
 }
 
 export function emitInboxEvent(event: string, ownerId: string | null, payload: unknown): void {

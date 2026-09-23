@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { corsAllowlist, originProtection } from "./security.middleware.js";
+import { corsAllowlist, originProtection, rateLimit } from "./security.middleware.js";
 
 function app() {
   const server = express();
@@ -50,5 +50,17 @@ describe("CORS and CSRF origin protection", () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ok: true });
     expect(response.headers["access-control-allow-origin"]).toBe("http://161.248.81.90:5173");
+  });
+});
+
+describe("rateLimit", () => {
+  it("keeps separately keyed limits independent for the same client", async () => {
+    const server = express();
+    server.post("/first", rateLimit({ windowMs: 60_000, max: 1, keyPrefix: "first" }), (_request, response) => response.sendStatus(200));
+    server.post("/second", rateLimit({ windowMs: 60_000, max: 1, keyPrefix: "second" }), (_request, response) => response.sendStatus(200));
+
+    expect((await request(server).post("/first")).status).toBe(200);
+    expect((await request(server).post("/second")).status).toBe(200);
+    expect((await request(server).post("/first")).status).toBe(429);
   });
 });

@@ -2,13 +2,13 @@
 
 ## Mục tiêu
 
-Hoàn thiện luồng quên mật khẩu đã có giao diện tại `/forgot-password`: gửi liên kết qua Resend, cho phép đặt mật khẩu mới bằng token dùng một lần và làm mất hiệu lực refresh token đang lưu của tài khoản.
+Hoàn thiện luồng quên mật khẩu đã có giao diện tại `/forgot-password`: gửi liên kết qua Nodemailer/SMTP, cho phép đặt mật khẩu mới bằng token dùng một lần và làm mất hiệu lực refresh token đang lưu của tài khoản.
 
 ## Phạm vi
 
 - Backend API gửi yêu cầu đặt lại mật khẩu và xác nhận mật khẩu mới.
 - Bộ lưu token đặt lại mật khẩu riêng trong MongoDB; chỉ lưu digest của token.
-- Gửi email qua Resend API.
+- Gửi email qua SMTP bằng Nodemailer.
 - Frontend nối form quên mật khẩu hiện có và bổ sung trang `/reset-password`.
 - Cấu hình môi trường, README, Wiki và CHANGELOG.
 
@@ -23,8 +23,8 @@ Không bao gồm thay đổi đăng ký/đăng nhập, chính sách mật khẩu
 - Chuẩn hóa email giống đăng nhập: trim và chữ thường.
 - Trả cùng mã trạng thái và thông báo chung dù tài khoản có tồn tại hay không.
 - Với email có tài khoản, tạo token ngẫu nhiên mật mã, hết hạn sau 30 phút; một yêu cầu mới vô hiệu token cũ của cùng user.
-- Gửi liên kết `${WEB_APP_URL}/reset-password?token=<raw-token>` bằng Resend.
-- Thêm giới hạn tốc độ riêng cho endpoint này bên cạnh giới hạn chung của nhóm auth.
+- Gửi liên kết `${WEB_APP_URL}/reset-password?token=<raw-token>` qua SMTP.
+- Thêm giới hạn 5 yêu cầu mỗi 15 phút theo IP cho endpoint này bên cạnh giới hạn chung của nhóm auth; hai limiter dùng bucket riêng. Express tin cậy đúng một reverse proxy để lấy IP client sau proxy triển khai.
 - Không ghi raw token, liên kết có token hoặc API key vào log.
 
 ### Đặt mật khẩu mới
@@ -35,20 +35,22 @@ Không bao gồm thay đổi đăng ký/đăng nhập, chính sách mật khẩu
 - Token sai, hết hạn hoặc đã dùng trả lỗi chung, không tiết lộ trạng thái tài khoản.
 - Xác thực và tiêu thụ token theo thao tác nguyên tử để hai request đồng thời không thể dùng cùng token.
 - Khi thành công, cập nhật `passwordHash` bằng hàm băm hiện có và đặt `refreshTokenHash` thành `null`.
+- Thành công còn xóa auth cookies để phiên đang mở trong trình duyệt không tiếp tục dùng cookie cũ.
 - Không tự đăng nhập người dùng sau khi đặt lại mật khẩu; họ đăng nhập lại bằng mật khẩu mới.
 
 ## Thành phần và dữ liệu
 
 - Thêm model riêng `PasswordResetToken` với `userId`, `tokenHash`, `expiresAt`, `createdAt`; unique index trên `userId` bảo đảm tối đa một token hoạt động mỗi tài khoản, unique index trên `tokenHash`, và TTL index dọn bản ghi hết hạn. Việc xác thực thời hạn vẫn kiểm tra `expiresAt` trong truy vấn; TTL cleanup không được coi là cơ chế kiểm soát hết hạn.
 - Hash token bằng SHA-256, phù hợp với token ngẫu nhiên entropy cao; raw token chỉ tồn tại trong request và nội dung email.
-- Thêm service Resend dùng HTTP API, không thêm thư viện gửi email. Cấu hình bắt buộc khi bật luồng gửi: `RESEND_API_KEY` và `AUTH_EMAIL_FROM`; dùng `WEB_APP_URL` đã có để dựng liên kết.
-- Nếu thiếu cấu hình gửi email hoặc Resend lỗi, ghi lỗi vận hành đã lọc dữ liệu nhạy cảm và trả lỗi server chung. Không giả lập thành công khi gửi thất bại.
+- Thêm service Nodemailer. Cấu hình bắt buộc khi bật luồng gửi: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` (`SMTP_PASSWORD` là bí danh tương thích); `SMTP_USER` đồng thời là địa chỉ người gửi. `SMTP_SECURE` tùy chọn mặc định theo cổng (465 bật TLS trực tiếp, các cổng khác dùng STARTTLS bắt buộc). Dùng `WEB_APP_URL` đã có để dựng liên kết.
+- Nếu thiếu cấu hình gửi email hoặc SMTP lỗi, ghi mã lỗi vận hành không chứa dữ liệu nhạy cảm và endpoint vẫn trả cùng `202`/thông báo chung để không tiết lộ trạng thái tài khoản. Token vừa tạo được dọn khi gửi thất bại.
 
 ## Frontend
 
 - Form `/forgot-password` gọi API và luôn hiển thị thông báo xác nhận chung sau phản hồi thành công.
 - Thêm route `/reset-password`; trang đọc token từ query string, có trường mật khẩu mới và xác nhận mật khẩu, hiển thị trạng thái token lỗi/hết hạn và thành công.
 - Sau thành công, xóa token khỏi URL/lịch sử hiển thị và đưa người dùng về đăng nhập.
+- Trang reset vẫn mở được nếu trình duyệt đang có session đăng nhập; sau khi hoàn tất, client xóa auth state và quay về login.
 - Giữ nguyên cấu trúc, visual language và xác thực hiện tại; không thêm thay đổi UI khác ngoài luồng này.
 
 ## Bảo mật và lỗi
@@ -58,18 +60,18 @@ Không bao gồm thay đổi đăng ký/đăng nhập, chính sách mật khẩu
 - Không lưu token thô, không đưa token vào log và không đưa API key vào client.
 - Token dùng một lần, hết hạn cứng sau 30 phút; token cũ bị thay thế khi có yêu cầu mới.
 - Phản hồi reset cho token không hợp lệ/hết hạn/đã dùng có cùng thông điệp.
-- Cấu hình Resend và địa chỉ gửi được mô tả trong `.env.example`, README và Wiki; không sửa file môi trường đang chứa secret.
+- Cấu hình SMTP và địa chỉ gửi được mô tả trong `.env.example`, README và Wiki; không sửa file môi trường đang chứa secret.
 
 ## Tiêu chí nghiệm thu
 
 1. Email hợp lệ đã đăng ký nhận email chứa liên kết reset; email không tồn tại nhận cùng response chung nhưng không gửi email.
 2. Token được lưu dạng hash, hết hạn sau 30 phút, token mới thay token cũ và token chỉ đặt lại mật khẩu thành công một lần.
 3. Dùng token thành công đổi được mật khẩu, thu hồi refresh token cũ, và đăng nhập lại bằng mật khẩu mới được.
-4. Thiếu cấu hình Resend hoặc Resend lỗi không tạo phản hồi thành công giả; lỗi không làm lộ token hoặc secret.
+4. Thiếu cấu hình gửi email hoặc SMTP lỗi vẫn trả cùng `202` và thông báo chung; lỗi được ghi log an toàn, token vừa tạo được dọn và không để lộ token/secret.
 5. Rate limit chặn gọi dồn endpoint quên mật khẩu.
 6. Frontend xử lý gửi yêu cầu, xác nhận chung, reset thành công, mật khẩu xác nhận không khớp và token lỗi/hết hạn.
 7. API focused/full tests, frontend focused tests, TypeScript/build phù hợp, formatter/linter và `git diff --check` được chạy; kết quả và mọi lỗi nền được ghi rõ.
 
 ## Quyết định đã duyệt
 
-Email provider: Resend API, gọi trực tiếp qua HTTP, không thêm dependency gửi email.
+Email provider: Nodemailer qua SMTP; không yêu cầu domain riêng nếu nhà cung cấp SMTP cho phép gửi từ hộp thư hiện có.

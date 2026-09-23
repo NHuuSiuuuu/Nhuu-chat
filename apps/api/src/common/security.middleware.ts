@@ -65,9 +65,10 @@ export const originProtection: RequestHandler = (request, response, next) => {
   next();
 };
 
-export function rateLimit(options: { windowMs: number; max: number }): RequestHandler {
+export function rateLimit(options: { windowMs: number; max: number; keyPrefix?: string }): RequestHandler {
   return (request, response, next) => {
-    const key = request.ip || "unknown";
+    const client = request.ip || "unknown";
+    const key = options.keyPrefix ? `${options.keyPrefix}:${client}` : client;
     const now = Date.now();
     const bucket = buckets.get(key);
     if (!bucket || bucket.resetAt <= now) buckets.set(key, { count: 1, resetAt: now + options.windowMs });

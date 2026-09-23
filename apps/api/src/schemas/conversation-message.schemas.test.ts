@@ -15,6 +15,13 @@ describe("conversation and message HTTP schemas", () => {
     expect(conversationListQuerySchema.safeParse({ page: "0" }).success).toBe(false);
   });
 
+  it("accepts a channel ID when filtering conversations", () => {
+    expect(conversationListQuerySchema.parse({ platform: "facebook", channelId: "page-42" })).toEqual({
+      platform: "facebook",
+      channelId: "page-42"
+    });
+  });
+
   it("accepts omitted message pagination values", () => {
     expect(messageListQuerySchema.safeParse({}).success).toBe(true);
   });

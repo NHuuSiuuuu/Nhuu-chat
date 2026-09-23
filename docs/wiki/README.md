@@ -30,6 +30,7 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
   - `services`: xử lý nghiệp vụ, lưu dữ liệu và outbound delivery.
   - `schemas`: schema HTTP và domain input.
 - JWT auth với role `admin`, `agent`, `customer`.
+- Quên mật khẩu qua Nodemailer/SMTP: token một lần hết hạn 30 phút, lưu hash trong MongoDB và thu hồi refresh token sau khi đổi mật khẩu.
 - Provider secret được mã hóa trước khi lưu MongoDB bằng AES-256-GCM.
 - Telegram webhook có secret validation và idempotency.
 - Chatbot tự động trên hai connector Telegram dùng chung orchestrator, delivery, automation template và RAG theo owner.
@@ -56,7 +57,7 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
 
 ### Inbox và giao diện chat
 
-- Dashboard dùng chung header Hchat khi chuyển sang Inbox.
+- Dashboard dùng chung header NhuuChat khi chuyển sang Inbox.
 - Layout Inbox gồm navigation rail, danh sách hội thoại và khung chat.
 - Khi mở hội thoại, khung chat tự cuộn tới tin nhắn mới nhất.
 - Khi cuộn lên xa tin mới, hiển thị nút `Tin mới nhất`; nút dùng smooth scroll.
@@ -165,11 +166,14 @@ cp .env.example apps/api/.env
 - `TELEGRAM_API_ID` và `TELEGRAM_API_HASH` cho Telegram cá nhân.
 - `TELEGRAM_BOT_TOKEN`/webhook secret nếu dùng Telegram Bot.
 - `MONGODB_TEST_URI` nếu muốn chạy integration test Mongo ổn định.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER` và `SMTP_PASS` để gửi email đặt lại mật khẩu (`SMTP_PASSWORD` cũng được hỗ trợ). `SMTP_USER` đồng thời là địa chỉ người gửi. Ví dụ Gmail dùng `smtp.gmail.com`, cổng `587`, `SMTP_SECURE=false` và App Password; có thể dùng thông tin SMTP của nhà cung cấp khác mà không cần domain riêng nếu họ cho phép gửi từ hộp thư hiện có.
 - `GEMINI_API_KEY` nếu muốn bật gợi ý trả lời Gemini.
 - `GEMINI_CHAT_MODEL` tùy chọn; mặc định là `gemini-3.5-flash-lite`.
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` và `CLOUDINARY_API_SECRET` nếu muốn lưu ảnh đính kèm mẫu trả lời nhanh.
 
 Không commit `.env`, token, secret hoặc encryption key.
+
+Luồng đặt lại mật khẩu dùng `POST /api/v1/auth/forgot-password` và `POST /api/v1/auth/reset-password`. Endpoint gửi email trả cùng thông báo dù tài khoản có tồn tại hay không, giới hạn 5 yêu cầu mỗi IP trong 15 phút; liên kết hết hạn sau 30 phút và chỉ dùng một lần. Đặt lại thành công thu hồi refresh token hiện tại và yêu cầu đăng nhập lại.
 
 `GEMINI_API_KEY` chỉ được lưu ở backend trong `apps/api/.env`; không đưa key vào frontend, request của trình duyệt hoặc repository. Endpoint `GET/PATCH /api/v1/ai-settings` dùng để đọc/cập nhật cấu hình Trợ lý AI cho tài khoản. Endpoint `POST /api/v1/conversations/:id/ai-suggestions` chỉ cho `admin` và `agent`, nhận trigger `manual`, `conversation_open` hoặc `customer_message`, đọc 6 tin nhắn cuối của cả khách hàng và nhân viên theo thứ tự thời gian, rồi trả tối đa 3 gợi ý kèm `source` là `gemini` hoặc `fallback`. Khi tính năng/model bị tắt, chế độ không khớp trigger, thiếu key, Gemini timeout/lỗi quota hoặc trả dữ liệu không hợp lệ, backend không tự tạo gợi ý hoặc dùng fallback phù hợp để không chặn composer. Prompt và response của request Gemini không được lưu vào database.
 

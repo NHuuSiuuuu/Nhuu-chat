@@ -1,95 +1,54 @@
-Act as a Senior Frontend Developer and UI/UX Designer. I need you to build an **AI Assistant Page (Chatbot Automation Tab)** for a Vietnamese chat application. Please use React (or Vue) with Tailwind CSS for styling.
+Yêu cầu xây dựng Component Đồ họa AI có Animation (Animated AI Feature Graphic):
 
-**IMPORTANT:** 
-1. All UI text MUST be in Vietnamese exactly as provided below. Do not translate the UI text to English.
-2. **DO NOT modify the Header.** The Header is already built and must remain untouched. Only focus on the content area below the Header.
-3. The content area MUST have an **increased horizontal width** with a **24px margin on both sides**.
+Hãy đóng vai trò là một Frontend Developer. Tôi cần bạn xây dựng một component đồ họa trực quan (Visual Component) giống hệt thiết kế đính kèm. Khối này dùng để minh họa cho tính năng "AI Chatbot" trên Landing Page.
 
----
+Vui lòng sử dụng React, Tailwind CSS, icon từ lucide-react (dùng icon BrainCircuit hoặc Bot) và đặc biệt dùng Framer Motion để làm hiệu ứng chuyển động mượt mà.
 
-## 1. CONTENT AREA WIDTH & MARGINS (CRITICAL)
+1. Cấu trúc Tổng thể (Container):
 
-- **Header:** Keep the existing Header as-is. Do NOT redesign or modify it.
-- **Content Area (Below Header):**
-  - Background: Light gray (`bg-gray-50`).
-  - **Horizontal Margin:** `mx-6` (24px on the left and right sides of the screen).
-  - **Max Width:** **Remove or increase the max-width limit** so the content stretches wide across the screen. Use `w-full` or `max-w-[1600px]` if a limit is needed.
-  - **Do NOT center with `mx-auto` if it leaves large empty side margins** — the goal is to make the content wider, using the full available width minus the 24px margins.
-  - **Padding Top:** `pt-6` (24px from the header).
+Một thẻ div cha có thuộc tính relative, flex items-center justify-center, chiều rộng và chiều cao cố định (ví dụ w-[400px] h-[400px]).
 
----
+2. Nền trang trí (Dashed Diamond Background):
 
-## 2. TWO-COLUMN LAYOUT INSIDE THE CONTENT AREA
+Một khung hình vuông mờ nằm dưới cùng, kích thước lớn (VD: w-[320px] h-[320px]), không có màu nền.
 
-- **Left Column (Settings Sidebar):**
-  - Fixed width: `w-[300px]` (approx 300px).
-  - White background, rounded corners (`rounded-xl`), soft shadow (`shadow-sm`).
-  - `flex-shrink-0` to prevent shrinking.
-- **Right Column (Main Content):**
-  - Takes the remaining space: `flex-1`.
-  - White background, rounded corners (`rounded-xl`), soft shadow (`shadow-sm`).
-  - **Gap between columns:** `gap-6` (24px).
+Viền nét đứt màu xanh nhạt: border-2 border-dashed border-blue-200/60 rounded-3xl.
 
----
+Animation (Framer Motion): Đặt góc xoay mặc định là 45 độ (rotate-45 thành hình thoi). Cho nó hiệu ứng xoay tròn chậm rãi, liên tục vô hạn (Rotate từ 45 độ lên 405 độ, duration: 20, repeat: Infinity, ease: "linear").
 
-## 3. LEFT COLUMN: SETTINGS SIDEBAR (Content Only)
+3. Khối Trung tâm (Main Centerpiece):
 
-- Title: **"Cài đặt"** (Bold, black).
-- Menu items (vertical list):
-  - "Cài đặt chung" (gear icon)
-  - "Thẻ hội thoại" (tag icon)
-  - **"Trợ lý AI"** (sparkle icon) — **Active state:** light blue background, blue text, with a yellow "Beta" badge.
-  - "Hỗ trợ trả lời" (chat bubble icon)
-  - "Giao diện" (monitor icon)
-  - "Cuộc gọi" (phone icon)
-  - "Chế độ xoay vòng" (refresh icon)
-  - "Đồng bộ" (cloud icon)
-  - "Công cụ" (wrench icon)
-  - "Phân quyền" (users icon)
-  - "Lịch sử" (clock icon)
+Một thẻ <motion.div> màu trắng, hình vuông bo góc lớn (w-[260px] h-[260px] bg-white rounded-[2rem] shadow-xl), đặt căn giữa tuyệt đối (absolute inset-0 m-auto).
 
----
+Bên trong thẻ trắng này là một vòng tròn màu xanh dương rực rỡ (bg-[#0090FF] w-[200px] h-[200px] rounded-full), cũng căn giữa hoàn toàn.
 
-## 4. RIGHT COLUMN: MAIN CONTENT
+Giữa vòng tròn xanh là Icon AI (BrainCircuit hoặc Bot) màu trắng, nét dày, kích thước to (w-16 h-16 text-white).
 
-### 4.1. Header & Tab Bar
-- Large bold title: **"Trợ lý AI"**.
-- A yellow "Beta" badge on the top right.
-- Tab bar with two tabs:
-  - **"Gợi ý trả lời"** (Inactive: gray text, white background).
-  - **"Chatbot tự động"** (Active: blue background, white text, rounded).
+Animation: Cho toàn bộ khối trắng này lơ lửng lên xuống nhẹ nhàng theo trục Y (Dùng Framer Motion: animate={{ y: [-8, 8, -8] }}, transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}).
 
-### 4.2. Three-Column Layout (Inside Main Content)
-- **Layout:** `flex gap-4` (or `gap-6`).
-- **Column 1 — "Trợ lý":**
-  - Width: approx `w-1/4` or `w-[220px]`.
-  - Header: **"Trợ lý"** (Bold) + a "+" icon on the right.
-  - List of assistants:
-    - **"Trợ lý mặc định"** (Active: light blue background, blue text, robot icon).
-    - **"bán hàng 1"** (Robot icon, black text).
-- **Column 2 — "Cấu hình":**
-  - Width: approx `w-1/3` or `flex-1`.
-  - **Section "Model":** Header with chevron icon + **"Model"** (Bold). Dropdown displaying **"Gemini 2.5 Flash"**.
-  - **Section "Kiến thức":** Header with chevron icon + **"Kiến thức"** (Bold) + document icon on the right.
-    - Below: A file item showing **"impl.txt"** with a document icon.
-    - Sub-text: **"Tài liệu giúp chatbot trả lời đúng ngữ cảnh."** (Gray text, small font).
-- **Column 3 — "Khung chat":**
-  - Takes the remaining space (`flex-1`).
-  - Header: **"Trợ lý mặc định"** (Bold) + chevron-down icon.
-  - Center: A circular blue avatar with a robot icon. Text below: **"Trợ lý mặc định"** (Bold) and **"Tư vấn khách hàng"** (Gray text).
-  - Bottom: A message input field with placeholder **"Gửi tin nhắn"** and a paper plane icon (Send).
+4. Các thẻ Badge trôi nổi (Floating Badges):
+Đặt các thẻ này nằm ngoài khối trung tâm bằng absolute, đè lên trên (z-10).
 
----
+Badge 1: Trạng thái trả lời (Góc trên bên phải):
 
-## 5. TECHNICAL REQUIREMENTS
+Vị trí: Bám vào góc trên bên phải của khối trung tâm (-right-12 top-8).
 
-- **Styling:** Use Tailwind CSS. 
-  - For the content container: use `w-full mx-6` (NOT `max-w-7xl mx-auto`).
-  - For the two-column layout: `flex gap-6`.
-  - For the three-column layout: `flex gap-4`.
-- **Do NOT touch the Header component.**
-- **Icons:** Use `lucide-react` or `react-icons` for all icons.
-- **State Management:** Use React `useState` for the active tab and selected assistant.
-- **Responsiveness:** On screens smaller than 1024px, stack the columns vertically.
+UI: Nền trắng, hình viên thuốc (rounded-full), đổ bóng (shadow-lg), padding vừa phải.
 
-Please provide the full code for the content area of this AI Assistant Page, with the exact width and margin specifications (wider content, 24px side margins, Header untouched).
+Nội dung: Flexbox chứa 1 chấm tròn màu xanh lá (w-2.5 h-2.5 bg-green-500 rounded-full) và text "Đang trả lời 12 khách hàng..." (text-sm font-medium text-slate-700).
+
+Animation 1: Chấm xanh lá phải có hiệu ứng nhấp nháy (Thêm class animate-ping của Tailwind vào một thẻ span bọc quanh chấm xanh, kết hợp một chấm xanh tĩnh đè lên).
+
+Animation 2: Nguyên cả khối badge lơ lửng lên xuống (y: [-4, 4, -4]) nhưng có delay: 1s để nhịp lơ lửng khác với khối trung tâm.
+
+Badge 2: Trích dẫn tin nhắn (Góc dưới bên trái):
+
+Vị trí: Bám vào góc dưới bên trái (-left-16 bottom-8).
+
+UI: Nền trắng, bo góc (rounded-2xl), đổ bóng lớn (shadow-2xl), padding p-4, chiều rộng khoảng w-[220px].
+
+Nội dung dòng 1: Text mô phỏng câu hỏi khách hàng: "Sản phẩm này có hỗ trợ trả góp không shop?" (text-sm text-slate-600 mb-2).
+
+Nội dung dòng 2: Flexbox chứa icon Check Circle (nhỏ, màu xanh blue) và text in hoa "ĐÃ TỰ ĐỘNG TRẢ LỜI" (text-[10px] font-bold text-[#0090FF]).
+
+Animation: Cũng cho khối này lơ lửng (y: [-6, 6, -6]) với delay: 2s để tạo cảm giác chuyển động ngẫu nhiên, tự nhiên.

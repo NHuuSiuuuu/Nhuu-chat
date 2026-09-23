@@ -220,6 +220,40 @@ describe("ChatWindow mobile header", () => {
   });
 });
 
+describe("ChatWindow next unread action", () => {
+  it("shows the explicit mark-read and open-next action only when enabled", () => {
+    const onOpenNextUnread = vi.fn();
+    const html = renderToStaticMarkup(<chatWindow.ChatWindow
+      conversation={conversation}
+      messages={[]}
+      onSend={async () => true}
+      quickReplies={[]}
+      pinnedMessages={[]}
+      isPinned={() => false}
+      onPinMessage={async () => undefined}
+      onUnpinMessage={async () => undefined}
+      showOpenNextUnreadAction
+      onOpenNextUnread={onOpenNextUnread}
+    />);
+
+    expect(html).toContain('aria-label="Đánh dấu đã đọc &amp; mở tiếp theo"');
+    expect(html).toContain("Đánh dấu đã đọc &amp; mở tiếp theo");
+    expect(onOpenNextUnread).not.toHaveBeenCalled();
+
+    const hiddenHtml = renderToStaticMarkup(<chatWindow.ChatWindow
+      conversation={conversation}
+      messages={[]}
+      onSend={async () => true}
+      quickReplies={[]}
+      pinnedMessages={[]}
+      isPinned={() => false}
+      onPinMessage={async () => undefined}
+      onUnpinMessage={async () => undefined}
+    />);
+    expect(hiddenHtml).not.toContain("Đánh dấu đã đọc &amp; mở tiếp theo");
+  });
+});
+
 describe("ChatWindow loading and composer layout", () => {
   it("renders a loading state instead of the empty-message label while messages load", () => {
     const source = readFileSync(new URL("./ChatWindow.tsx", import.meta.url), "utf8");

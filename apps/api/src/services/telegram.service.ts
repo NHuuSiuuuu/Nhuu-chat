@@ -80,7 +80,8 @@ export async function ingestTelegramUpdate(update: TelegramUpdate): Promise<void
     );
     const updatedConversation = await ConversationModel.findById(conversation._id).populate("customerId", "name avatarUrl").populate("tagIds", "name color").lean();
     if (updatedConversation) {
-      emitChatEvent("chat:message_received", String(conversation._id), toMessage(storedMessage.toObject()));
+      const messagePayload = toMessage(storedMessage.toObject());
+      emitChatEvent("chat:message_received", String(conversation._id), messagePayload);
       emitInboxEventToRecipients("chat:conversation_updated", [updatedConversation.ownerId ? String(updatedConversation.ownerId) : "", updatedConversation.assignedAgentId ? String(updatedConversation.assignedAgentId) : ""], toConversation(updatedConversation));
     }
     if (conversation.ownerId) {

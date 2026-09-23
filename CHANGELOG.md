@@ -5,6 +5,23 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm các trang `/login`, `/register`, `/forgot-password` và `/reset-password` có Landing Header, liên kết SPA, xác nhận mật khẩu và luồng đặt lại mật khẩu qua Nodemailer/SMTP với token một lần; API luôn trả xác nhận chung, kể cả khi gửi email lỗi.
+- Bổ sung kiểm tra dữ liệu phía trình duyệt cho trang đăng nhập/đăng ký và hiển thị lỗi bằng Sonner.
+- Tách thông báo bỏ trống theo từng trường, Việt hóa lỗi xác thực API, hiển thị lỗi đăng nhập sai dưới ô mật khẩu và báo toast khi đăng nhập thành công.
+- Bỏ style màu trắng/xám ghi đè Sonner để `richColors` hiển thị nền màu theo trạng thái toast.
+- Thiết kế lại email đặt lại mật khẩu với logo NhuuChat, nút thao tác, thời hạn liên kết và lưu ý bảo mật.
+- Làm mới minh họa Chatbot AI trên Landing Page với khung xoay, robot lơ lửng và thẻ trạng thái trả lời tự động.
+- Phát toast tin nhắn khách qua Socket.IO toàn cục đến người nhận Inbox được phân quyền và dùng giao diện sáng theo cài đặt tài khoản.
+- Cho phép click toast tin nhắn toàn cục để mở Inbox và chọn đúng hội thoại sau khi danh sách tải xong.
+
+## 2026-09-23
+
+- Cấu hình triển khai frontend trên Vercel và API/Redis trên Railway, bổ sung Dockerfile đóng gói API và giữ MongoDB trên Atlas.
+- Sửa khai báo trùng `ownerKey` khiến frontend không biên dịch được cho production.
+
+## 2026-09-22
+
+- Thêm Cài đặt chung riêng từng tài khoản cho thông báo, âm thanh, ưu tiên hội thoại chưa đọc và thao tác đánh dấu đã đọc rồi mở hội thoại chưa đọc kế tiếp.
 - Bổ sung thông báo rõ ràng khi chọn tab Cài đặt đang phát triển.
 - Thêm hiệu ứng chữ chuyển sắc xanh–cyan cho tiêu đề AI Chatbot ở Landing Page.
 - Scale Up Landing Page theo responsive: tăng typography, CTA, icon, mockup, spacing và khoảng cách grid trên desktop, giữ kích thước vừa phải trên mobile.
@@ -22,20 +39,16 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Căn lại logo Nhuu trên header Inbox theo thiết kế tham khảo và xác nhận badge tin chưa đọc nằm góc dưới phải avatar với viền trắng.
 - Thay toàn bộ dữ liệu thật trong mockup Inbox bằng fake data: `admin_demo_01`, Mai Lan, Trần Kiên và nội dung hội thoại mẫu.
 - Làm lại mockup Inbox trong Hero theo thiết kế tham khảo: thêm navbar xanh, sidebar điều hướng, danh sách hội thoại, khung chat và panel Tạo đơn bằng dữ liệu giả.
-- Tinh chỉnh Hero Landing Page theo ảnh tham khảo: typography mảnh hơn, nền gradient nhẹ, badge Hchat AI 2.0, CTA đôi và mô tả sản phẩm mới.
-- Tinh chỉnh Landing Page theo thiết kế Hchat trong `DEVELOPMENT_PROMPT.md`: bổ sung đủ 9 kênh, 9 tính năng, 4 gói giá, testimonial, thống kê và nội dung CTA/FAQ đồng nhất với ảnh tham khảo.
+- Tinh chỉnh Hero Landing Page theo ảnh tham khảo: typography mảnh hơn, nền gradient nhẹ, badge NhuuChat AI 2.0, CTA đôi và mô tả sản phẩm mới.
+- Tinh chỉnh Landing Page theo thiết kế NhuuChat trong `DEVELOPMENT_PROMPT.md`: bổ sung đủ 9 kênh, 9 tính năng, 4 gói giá, testimonial, thống kê và nội dung CTA/FAQ đồng nhất với ảnh tham khảo.
 - Thêm Landing Page public tại `/` với mockup Inbox, giới thiệu đa kênh, AI, bảng giá, FAQ và điều hướng Dashboard qua user đã đăng nhập.
 - Cập nhật nền cho tab Trợ lý AI: tab đang chọn dùng nền xanh, tab còn lại dùng nền xám nhạt.
 - Bỏ bộ lọc trên trang Lịch sử hoạt động, hiển thị trực tiếp toàn bộ bản ghi theo từng trang và giữ nguyên phân trang.
 - Thêm trang và API Lịch sử hoạt động cho thay đổi Cài đặt AI, kết nối/ngắt kết nối Facebook Page, có xác thực theo người dùng, phân trang và giới hạn lưu 500 bản ghi mỗi người dùng.
 - Sửa snapshot lịch sử bị cũ khi nhiều yêu cầu cập nhật AI hoặc kết nối Facebook chạy đồng thời; chỉ ghi ngắt kết nối cho Page thực sự bị xóa. Diff giữ kiểu container và lọc dữ liệu nhạy cảm; bỏ nhãn `Hiện tại` vốn suy ra từ vị trí sự kiện trong Timeline.
-
 - Khôi phục sidebar 7 mục Giới thiệu trên desktop, bổ sung icon thông tin cho tab; mobile tiếp tục dùng menu accordion chung.
-
 - Thêm điều hướng URL riêng cho từng mục Giới thiệu trên mobile và Dashboard, đồng thời bỏ menu Giới thiệu bị lặp phía trên nội dung.
-
 - Sửa điều hướng menu Cài đặt trên mobile: mục cha chỉ mở accordion, các mục con mới điều hướng đến từng trang.
-
 - Cải thiện giao diện mobile trang Cài đặt: thêm accordion tab Cài đặt trong menu chính, ẩn sidebar phụ và tối ưu bố cục Trợ lý AI trên màn hình nhỏ.
 - Thay thế toast tự xây dựng bằng `sonner`: thêm Toaster góc phải, thông báo tin nhắn đến, đăng bài, xóa bài và dọn component toast cũ.
 - Bỏ nút Làm mới khỏi các tab Nháp, Đã lên lịch và Lịch sử trong trang đăng bài Facebook.
@@ -47,6 +60,9 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Cập nhật trang Giới thiệu: bổ sung đăng bài Facebook vào các điểm nổi bật của Tổng quan và thêm tab hướng dẫn `Đăng bài`.
 - Sửa avatar trong từng dòng tin nhắn của khách hàng dùng đúng `customerAvatarUrl` như avatar ở Header khung chat, tránh hiển thị fallback chữ cái khi ảnh vẫn có sẵn.
 - Cập nhật modal kết nối Facebook: dùng icon SVG thương hiệu, bổ sung nút và biểu mẫu kết nối thủ công bằng Page ID + Page Access Token, giữ nguyên luồng OAuth hiện có.
+
+## 2026-09-21
+
 - Bổ sung đăng nhập Facebook bằng OAuth trong modal Dashboard: lấy danh sách Page do tài khoản quản lý, chỉ cho chọn Page có quyền đăng bài và lưu kết nối qua service hiện có; giữ nguyên luồng nhập thủ công Page ID và Page Access Token.
 - Sửa chatbot giữ ngữ cảnh khi khách trả lời viết tắt như “sv” hoặc xác nhận “có”, bổ sung lượt khách trước vào truy vấn knowledge để không trả fallback dù dữ liệu phù hợp đã có.
 - Sửa AI gợi ý trả về rỗng khi model Gemini chính quá tải: tự chuyển sang model dự phòng khả dụng và cho phép nút làm mới gọi gợi ý ở mọi chế độ đang bật.
@@ -76,6 +92,9 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Thêm icon cảnh báo cho mục `Lưu ý quan trọng` và giữ sidebar Cài đặt cố định khi cuộn trên màn hình lớn.
 - Cập nhật nội dung tab `Giới thiệu` với hướng dẫn đăng nhập nhiều tài khoản, chế độ Gộp trang, icon SVG, số thứ tự và các lưu ý vận hành Zalo.
 - Thêm tab `Giới thiệu` trong Cài đặt với sidebar Tổng quan, Dashboard, Đa tài khoản, Quản lý tin nhắn, Trợ lý AI và Bảo mật & dữ liệu; nội dung được tổng hợp từ README và CHANGELOG.
+
+## 2026-09-18
+
 - Thu gọn thẻ tag trên thanh gắn thẻ: padding dọc `py-1`, cỡ chữ `10px` và font thường.
 - Sửa thanh tag phía trên ô nhập tin nhắn tự động xuống dòng trên màn hình hẹp, thêm khoảng cách giữa các tag và bỏ cuộn ngang gây cắt nội dung.
 - Sửa thanh điều hướng mở đúng Hộp thư tại `/inbox` thay vì rơi vào trang tính năng đang phát triển.
@@ -99,6 +118,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Bỏ nút X khỏi thanh ghim thu gọn; thao tác bỏ ghim vẫn có trong danh sách tin ghim và trên từng tin nhắn.
 - Cập nhật thanh tin ghim: nút mũi tên đổi chiều khi mở/thu danh sách, mỗi tin ghim hỗ trợ bỏ ghim và sao chép nội dung.
 - Thêm ghim tối đa 10 tin nhắn cho mỗi hội thoại dành cho admin/agent: nút ghim khi hover, thanh tin đã ghim có điều hướng và cuộn tới tin gốc, API ghim/bỏ ghim cùng đồng bộ Socket.IO realtime.
+
+## 2026-09-17
 - Thay badge Zalo tự dựng bằng SVG logo Zalo thật ở cả biến thể có nền và trong suốt.
 - Thêm tooltip khi hover cho các nút hướng dẫn, đính kèm, mẫu trả lời nhanh và gửi tin nhắn trong ô soạn tin.
 - Cho phép gửi một ảnh hoặc file kèm chú thích từ Inbox tới Zalo cá nhân và Telegram cá nhân; giới hạn 20 MB, chặn định dạng nguy hiểm và lưu media qua Cloudinary.
@@ -107,9 +128,6 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Hiển thị tin nhắn gửi đi ngay trong Inbox, đồng bộ theo `clientMessageId` giữa HTTP/Socket.IO và cho phép gửi lại text/file khi delivery thất bại.
 - Hiển thị trạng thái đang gửi, đã gửi và gửi thất bại trực tiếp trên bubble; ảnh/file có indicator overlay và hỗ trợ retry từ dấu `!`.
 - Căn indicator trạng thái gửi vào một cột cố định bên phải để không đè lên nội dung và không lệch giữa các message.
-
-## 2026-09-17
-
 - Đồng bộ sidebar thông tin bên phải với sidebar hội thoại bên trái: desktop co giãn trong khoảng `300px`–`395px`, tự thu theo viewport và chuyển sang drawer dưới `1000px`.
 - Thu gọn cụm nút sửa/xóa/ghim của ghi chú để không che tên người ghi; icon ghim đang bật dùng màu vàng và không còn nhãn `Đã ghim`.
 - Hiển thị ngày/tháng/năm cùng dòng với thời gian cập nhật ghi chú và đánh dấu `• Đã sửa` khi nội dung đã được chỉnh sửa.
@@ -121,7 +139,6 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Sửa Trợ lý AI ghi nhớ chatbot đang được chọn theo từng tài khoản; sau khi refresh vẫn mở đúng trợ lý đã chọn, chỉ fallback về mặc định nếu trợ lý đó đã bị xóa.
 - Đưa logo nền tảng về bên phải dòng hội thoại và bỏ chữ tên nền tảng; chỉ giữ tên/avatar tài khoản thật khi có dữ liệu.
 - Thay glyph `Z` tự dựng trong dòng hội thoại bằng wordmark Zalo SVG không nền, giữ kích thước đồng nhất với logo Telegram.
-
 ## 2026-09-16
 
 - Sửa trường hợp API trả tên tài khoản trùng tên nền tảng: không còn dựng avatar chữ `Z` cho Zalo, luôn hiển thị biểu tượng nền tảng thật.
@@ -240,7 +257,7 @@ Các ghi chú nâng cấp được viết rõ ràng để cả team dễ theo d�
 - Bổ sung tên thật, avatar, nhận diện hội thoại nhóm và metadata nền tảng trong conversation contract.
 - Thu gọn sidebar hội thoại desktop xuống chế độ avatar-only kiểu Telegram và giảm chiều cao composer nhập tin nhắn.
 - Đổi sidebar hội thoại desktop sang kéo-thả ở mép để điều chỉnh độ rộng liên tục, không thu gọn bằng nút click.
-- Thêm route `/settings` và trang Cài đặt theo `DEVELOPMENT_PROMPT.md`, giữ nguyên header Hchat ở phía trên.
+- Thêm route `/settings` và trang Cài đặt theo `DEVELOPMENT_PROMPT.md`, giữ nguyên header NhuuChat ở phía trên.
 - Bổ sung tùy chọn chọn màu custom khi thêm thẻ hội thoại và lưu màu đã chọn cùng tag.
 - Đặt `Cài đặt chung` làm tab hoạt động mặc định vì là mục đầu tiên trong Settings.
 - Cập nhật icon riêng tương ứng cho từng option trong sidebar Cài đặt.
@@ -253,7 +270,7 @@ Các ghi chú nâng cấp được viết rõ ràng để cả team dễ theo d�
 - Khôi phục và đăng ký listener inbound cho toàn bộ session Telegram cá nhân đang active ngay khi API khởi động để tin nhắn từ Telegram được đồng bộ lên Inbox kể cả trước khi người dùng gửi tin từ web.
 - Sửa lỗi Inbox mất message Telegram vừa nhận khi response lịch sử về sau ghi đè state realtime; lịch sử nay được merge không trùng và tự chọn hội thoại mới nhận qua Socket.IO.
 - Thiết kế lại Dashboard kết nối kênh theo giao diện tham chiếu: bộ lọc nền tảng, card tài khoản, trạng thái rỗng và modal chọn kênh có QR Telegram cùng hướng dẫn 2FA.
-- Bổ sung header Hchat màu navy trên Dashboard với logo thương hiệu, menu điều hướng và thông tin owner để khớp thiết kế tham chiếu.
+- Bổ sung header NhuuChat màu navy trên Dashboard với logo thương hiệu, menu điều hướng và thông tin owner để khớp thiết kế tham chiếu.
 - Căn lại Dashboard theo ảnh tham chiếu: bỏ margin mặc định của body, dùng font Arial, nền #F0F2F7 và giới hạn vùng nội dung trung tâm.
 - Thay ký hiệu Unicode bằng SVG icon theo đúng nền tảng, gồm Telegram paper-plane, Zalo, Facebook, Instagram và WhatsApp; tăng kích thước chữ menu header.
 - Làm lại modal “Thêm kết nối” theo prompt mới: backdrop blur, modal rộng 2 cột, sidebar 260px, item 64px, QR có corner bracket và hướng dẫn Telegram bằng tiếng Việt.
@@ -262,5 +279,5 @@ Các ghi chú nâng cấp được viết rõ ràng để cả team dễ theo d�
 - Chuẩn hóa toàn bộ vị trí logo vào ô vuông bo góc 32px, dùng nhất quán trong sidebar, bộ lọc và hướng dẫn Telegram theo ảnh tham chiếu.
 - Làm lại trang Hội thoại theo phương án 1: navigation sidebar 44px, conversation sidebar 395px, toolbar tìm kiếm/lọc/thêm, danh sách hội thoại có selected/unread/hover state và empty state Livechat ở vùng chat chính.
 - Khi bấm tài khoản Telegram đã kết nối trên Dashboard, chuyển vào trang Hội thoại với bố cục Livechat mới; thêm composer và header hội thoại theo presentation layer hiện có.
-- Giữ header Hchat dùng chung khi chuyển từ Dashboard sang trang Hội thoại; layout inbox nằm bên dưới header và tự chiếm phần chiều cao còn lại.
+- Giữ header NhuuChat dùng chung khi chuyển từ Dashboard sang trang Hội thoại; layout inbox nằm bên dưới header và tự chiếm phần chiều cao còn lại.
 - Thêm `DEVELOPMENT_PROMPT.md` ở thư mục gốc để lưu prompt và handoff dài; agent chỉ đọc file khi người dùng yêu cầu trực tiếp.

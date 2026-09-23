@@ -21,6 +21,7 @@
     "mammoth": "^1.12.2",
     "mongoose": "^9.9.5",
     "multer": "^2.3.0",
+    "nodemailer": "^10.0.10",
     "pdf-parse": "^2.4.5",
     "redis": "^6.2.1",
     "socket.io": "^4.8.1",
@@ -31,6 +32,7 @@
   },
   "devDependencies": {
     "@types/multer": "^2.2.0",
+    "@types/nodemailer": "^8.0.2",
     "mongodb-memory-server": "^11.2.0",
     "socket.io-client": "^4.8.3"
   }

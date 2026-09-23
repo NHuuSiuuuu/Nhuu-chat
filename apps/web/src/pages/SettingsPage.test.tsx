@@ -192,7 +192,7 @@ describe("Settings page", () => {
     expect(source).toContain('icon="user"');
     expect(source).toContain('icon="layers"');
     expect(source).toContain("flex gap-4 mb-4");
-    expect(source).toContain("h-8 w-8");
+    expect(source).toContain("rounded-full bg-blue-100");
     expect(source).toContain("Chế độ gộp trang");
     expect(source).toContain("Chọn pages để chat");
     expect(source).toContain("Lưu ý quan trọng");
@@ -386,9 +386,20 @@ describe("Settings page", () => {
     expect(source).toContain("Xóa mẫu chào");
     expect(source).toContain("Cho phép Gemini viết lại");
     expect(source).toContain("allowAiRewrite");
+  });
+
+  it("keeps greeting actions reachable when names and keywords are long", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const styles = readFileSync(new URL("../styles/tailwind.css", import.meta.url), "utf8");
+
+    expect(source).toContain('className="min-w-0"');
+    expect(source).toContain('className="flex shrink-0 gap-1"');
+    expect(styles).toContain('[aria-label="Cấu hình chatbot"] > .mt-3.grid.gap-2 > div');
     expect(styles).toContain('[aria-label="Cấu hình chatbot"] > .mt-3.grid.gap-2 {');
     expect(styles).toContain('overflow-y: auto;');
     expect(styles).toContain('scrollbar-width: none;');
+    expect(styles).toContain("-webkit-line-clamp: 2");
+    expect(styles).toContain("flex-shrink: 0");
   });
 
   it("uses the wide AI assistant content layout from the UI prompt", () => {

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { chatEvents, type AiSettingsContract, type AiSuggestionsResponse, type ChatMessageContract, type ConversationContract, type ConversationPinEventPayload, type ConversationTagContract, type QuickReplyContract } from "@nhuu-chat/contracts";
+import { chatEvents, type AiSettingsContract, type AiSuggestionsResponse, type ChatMessageContract, type ConversationContract, type ConversationPinEventPayload, type ConversationTagContract, type GeneralSettingsContract, type QuickReplyContract } from "@nhuu-chat/contracts";
 import { apiRequest } from "../lib/api.js";
 import { createChatSocket } from "../lib/socket.js";
 import { resolveApiBaseUrl } from "../lib/api-url.js";
@@ -11,6 +11,8 @@ import type { ComposerSendPayload } from "../components/conversations/MessageCom
 import { appendUniqueMessage, mergeMessages, upsertConversation } from "../state/inbox-realtime.js";
 import { applyPinnedMessagesEvent, createPinnedMessagesRequestGuard, findPinnedMessage, getPinnedMessagesForConversation, replacePinnedMessages, type ConversationPinnedMessagesState } from "../state/inbox-pins.js";
 import { clampConversationListWidth, CONVERSATION_LIST_MAX_WIDTH, CONVERSATION_LIST_MIN_WIDTH, markConversationRead } from "../state/inbox-ui.js";
+import { getNextUnreadConversationId, getNotificationSoundTones, orderConversationsByUnread, shouldNotifyForIncomingMessage } from "../state/general-settings.js";
+import { loadGeneralSettings } from "../components/settings/general-settings.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
 import { ConversationAvatar } from "../components/conversations/ConversationAvatar.js";
 import { DashboardTopbar, type DashboardAccount } from "../components/dashboard/DashboardTopbar.js";
@@ -21,7 +23,33 @@ const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 const CONVERSATION_TAGS_API_URL = "/api/v1/conversation-tags";
 const AI_SETTINGS_API_URL = "/api/v1/ai-settings";
 const QUICK_REPLIES_API_URL = "/api/v1/quick-replies";
+const DEFAULT_GENERAL_SETTINGS: GeneralSettingsContract = { browserNotificationsEnabled: true, notificationSound: "default", moveUnreadConversationsToTop: true, openNextUnreadConversation: false };
 const DEFAULT_AI_SETTINGS: AiSettingsContract = { modelTier: "smart", enabled: true, suggestionsEnabled: true, sentimentEnabled: true, suggestionMode: "on_open", sentimentWindow: 3 };
+
+function playIncomingNotificationSound(sound: GeneralSettingsContract["notificationSound"]): void {
+  const tones = getNotificationSoundTones(sound);
+  if (!tones || typeof AudioContext === "undefined") return;
+  try {
+    const context = new AudioContext();
+    let startAt = context.currentTime;
+    for (const tone of tones) {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.frequency.value = tone.frequency;
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.exponentialRampToValueAtTime(0.12, startAt + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + tone.durationMs / 1000);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(startAt);
+      oscillator.stop(startAt + tone.durationMs / 1000);
+      startAt += tone.durationMs / 1000 + 0.07;
+    }
+    window.setTimeout(() => { void context.close().catch(() => undefined); }, Math.max(250, (startAt - context.currentTime) * 1000));
+  } catch {
+    // Autoplay restrictions must not interfere with realtime message handling.
+  }
+}
 
 function platformIconProvider(platform: ChatMessageContract["platform"]): ConnectionProviderId {
   return platform === "telegram_personal" ? "telegram" : platform === "zalo_personal" ? "zalo" : platform;
@@ -124,7 +152,7 @@ export async function loadInboxQuickReplies(request: () => Promise<{ quickReplie
 type InboxAccount = DashboardAccount & { id?: string };
 type RetryPayloadEntry = { conversationId: string; payload: ComposerSendPayload; previewUrl?: string };
 
-export function InboxPage({ token, refresh, platform, channelId, onBack, onLogoClick, onNavigate, user, onLogout, onProfile }: { token: string; refresh?: () => Promise<string | null>; platform?: string; channelId?: string; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void; user?: InboxAccount | null; onLogout?: () => void; onProfile?: () => void }) {
+export function InboxPage({ token, refresh, platform, channelId, selectedConversationId, selectedConversationRequest, onBack, onLogoClick, onNavigate, user, onLogout, onProfile }: { token: string; refresh?: () => Promise<string | null>; platform?: string; channelId?: string; selectedConversationId?: string | null; selectedConversationRequest?: number; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void; user?: InboxAccount | null; onLogout?: () => void; onProfile?: () => void }) {
   const [conversations, setConversations] = useState<ConversationContract[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageContract[]>([]);
@@ -137,6 +165,9 @@ export function InboxPage({ token, refresh, platform, channelId, onBack, onLogoC
   const [aiSuggestionsError, setAiSuggestionsError] = useState<string | null>(null);
   const [aiSettings, setAiSettings] = useState<AiSettingsContract>(DEFAULT_AI_SETTINGS);
   const [aiSettingsLoaded, setAiSettingsLoaded] = useState(false);
+  const [generalSettings, setGeneralSettings] = useState<GeneralSettingsContract>(DEFAULT_GENERAL_SETTINGS);
+  const [generalSettingsLoaded, setGeneralSettingsLoaded] = useState(false);
+  const [generalSettingsToken, setGeneralSettingsToken] = useState<string | null>(null);
   const [isCustomerTyping, setIsCustomerTyping] = useState(false);
   const [availableTags, setAvailableTags] = useState<ConversationTagContract[]>([]);
   const [quickReplies, setQuickReplies] = useState<QuickReplyContract[]>([]);
@@ -156,10 +187,14 @@ export function InboxPage({ token, refresh, platform, channelId, onBack, onLogoC
   const retryPayloadsRef = React.useRef(new Map<string, RetryPayloadEntry>());
   const optimisticMessageIdsRef = React.useRef(new Map<string, string>());
   const incomingToastIdsRef = React.useRef<string[]>([]);
+  const handledRequestedConversationRef = React.useRef<number | null>(null);
+  const notifiedMessageIdsRef = React.useRef<string[]>([]);
   aiSuggestionsGuardRef.current.setActiveConversation(activeId);
   pinnedMessagesGuardRef.current.setActiveConversation(activeId);
   const pinnedMessages = getPinnedMessagesForConversation(pinnedMessagesState, activeId);
   const active = conversations.find((item) => item.id === activeId) ?? null;
+  const hasCurrentGeneralSettings = generalSettingsLoaded && generalSettingsToken === token;
+  const orderedConversations = orderConversationsByUnread(conversations, hasCurrentGeneralSettings && generalSettings.moveUnreadConversationsToTop);
   (globalThis as typeof globalThis & { __nhuuChatConversationContext?: { id: string | null; token: string; refresh?: () => Promise<string | null> } }).__nhuuChatConversationContext = { id: activeId, token, refresh };
   const aiSuggestionsEnabled = aiSettings.enabled && aiSettings.suggestionsEnabled;
   const [readRequestKey, setReadRequestKey] = useState(0);
@@ -177,7 +212,7 @@ export function InboxPage({ token, refresh, platform, channelId, onBack, onLogoC
     for (const messageId of retryPayloadsRef.current.keys()) releaseRetryPayload(messageId);
   }, []);
   // Uses generation and revision guards so delayed read responses cannot undo newer realtime activity.
-  async function markActiveRead(id: string) {
+  async function markActiveRead(id: string): Promise<boolean> {
     const previousReadState = readStateRef.current.get(id);
     const currentRevision = conversationRevisionRef.current.get(id) ?? 0;
     const currentUnread = conversationsRef.current.find((item) => item.id === id)?.unreadCount ?? 0;
@@ -206,6 +241,7 @@ export function InboxPage({ token, refresh, platform, channelId, onBack, onLogoC
           return next;
         });
       }
+      return true;
     } catch {
       const readState = readStateRef.current.get(id);
       if (readState?.generation === generation && readState.revision === (conversationRevisionRef.current.get(id) ?? 0) && readState.confirmedGeneration !== generation) {
@@ -217,6 +253,7 @@ export function InboxPage({ token, refresh, platform, channelId, onBack, onLogoC
           return next;
         });
       }
+      return false;
     }
   }
   // Loads suggestions for only the visible conversation so stale responses cannot replace newer composer state.
@@ -263,6 +300,16 @@ export function InboxPage({ token, refresh, platform, channelId, onBack, onLogoC
     return () => { cancelled = true; };
   }, [platform, channelId, token, refresh]);
   useEffect(() => {
+    if (!selectedConversationId || selectedConversationRequest === undefined || isConversationListLoading || handledRequestedConversationRef.current === selectedConversationRequest) return;
+    if (!conversations.some((conversation) => conversation.id === selectedConversationId)) return;
+    handledRequestedConversationRef.current = selectedConversationRequest;
+    selectConversation(selectedConversationId);
+    const params = new URLSearchParams(window.location.search);
+    params.delete("conversationId");
+    const query = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+  }, [conversations, isConversationListLoading, selectedConversationId, selectedConversationRequest]);
+  useEffect(() => {
     let cancelled = false;
     void apiRequest<{ tags: ConversationTagContract[] }>(API_URL, CONVERSATION_TAGS_API_URL, token, {}, refresh)
       .then((result) => { if (!cancelled) setAvailableTags(result.tags); })
@@ -279,6 +326,16 @@ export function InboxPage({ token, refresh, platform, channelId, onBack, onLogoC
     void apiRequest<AiSettingsContract>(API_URL, AI_SETTINGS_API_URL, token, {}, refresh)
       .then((settings) => { if (!cancelled) { setAiSettings(settings); setAiSettingsLoaded(true); } })
       .catch(() => { if (!cancelled) { setAiSettings(DEFAULT_AI_SETTINGS); setAiSettingsLoaded(true); } });
+    return () => { cancelled = true; };
+  }, [token, refresh]);
+  useEffect(() => {
+    let cancelled = false;
+    setGeneralSettingsLoaded(false);
+    setGeneralSettingsToken(null);
+    setGeneralSettings(DEFAULT_GENERAL_SETTINGS);
+    void loadGeneralSettings({ apiUrl: API_URL, token, refresh })
+      .then((settings) => { if (!cancelled) { setGeneralSettings(settings); setGeneralSettingsToken(token); setGeneralSettingsLoaded(true); } })
+      .catch(() => { if (!cancelled) { setGeneralSettings(DEFAULT_GENERAL_SETTINGS); setGeneralSettingsToken(token); setGeneralSettingsLoaded(true); } });
     return () => { cancelled = true; };
   }, [token, refresh]);
   useEffect(() => {
@@ -340,19 +397,26 @@ export function InboxPage({ token, refresh, platform, channelId, onBack, onLogoC
           optimisticMessageIdsRef.current.delete(message.clientMessageId);
         }
       }
-      if (message.senderType === "customer" && !incomingToastIdsRef.current.includes(message.id)) {
+      if (hasCurrentGeneralSettings && shouldNotifyForIncomingMessage(generalSettings, message.senderType) && !notifiedMessageIdsRef.current.includes(message.id)) {
+        notifiedMessageIdsRef.current = [...notifiedMessageIdsRef.current, message.id].slice(-100);
         const conversation = conversationsRef.current.find((item) => item.id === message.conversationId);
         const senderName = message.senderName?.trim() || conversation?.customerName?.trim() || "Khách hàng";
-        const previousToastId = incomingToastIdsRef.current.length >= 3 ? incomingToastIdsRef.current[0] : undefined;
-        if (previousToastId) {
-          toast.dismiss(previousToastId);
-          removeIncomingToast(previousToastId);
+        if (generalSettings.notificationSound !== "off") playIncomingNotificationSound(generalSettings.notificationSound);
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          try { new Notification(senderName, { body: message.content || "Đã gửi một tin nhắn mới" }); } catch { /* Browser notification is best effort. */ }
         }
-        incomingToastIdsRef.current = [...incomingToastIdsRef.current, message.id].slice(-3);
-        toast.custom((toastId) => <button className="flex w-[min(380px,calc(100vw-2rem))] items-center gap-3 rounded-xl bg-slate-800 p-3 text-left text-white shadow-2xl ring-1 ring-white/10 transition hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300" type="button" onClick={() => { selectConversation(message.conversationId); toast.dismiss(toastId); removeIncomingToast(message.id); }}>
-          <ConversationAvatar name={senderName} avatarUrl={conversationsRef.current.find((item) => item.id === message.conversationId)?.customerAvatarUrl} size="size-12" />
-          <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><strong className="truncate text-sm">{senderName}</strong><PlatformIcon provider={platformIconProvider(message.platform)} size={16} plain /></span><span className="mt-1 block truncate text-xs text-slate-300">{message.content || "Đã gửi một tin nhắn mới"}</span></span>
-        </button>, { id: message.id, duration: 5000, onDismiss: () => removeIncomingToast(message.id), onAutoClose: () => removeIncomingToast(message.id) });
+        if (!incomingToastIdsRef.current.includes(message.id)) {
+          const previousToastId = incomingToastIdsRef.current.length >= 3 ? incomingToastIdsRef.current[0] : undefined;
+          if (previousToastId) {
+            toast.dismiss(previousToastId);
+            removeIncomingToast(previousToastId);
+          }
+          incomingToastIdsRef.current = [...incomingToastIdsRef.current, message.id].slice(-3);
+          toast.custom((toastId) => <button className="flex w-[min(380px,calc(100vw-2rem))] items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left text-slate-800 shadow-xl transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500" type="button" onClick={() => { selectConversation(message.conversationId); toast.dismiss(toastId); removeIncomingToast(message.id); }}>
+            <ConversationAvatar name={senderName} avatarUrl={conversationsRef.current.find((item) => item.id === message.conversationId)?.customerAvatarUrl} size="size-12" />
+            <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><strong className="truncate text-sm">{senderName}</strong><PlatformIcon provider={platformIconProvider(message.platform)} size={16} plain /></span><span className="mt-1 block truncate text-xs text-slate-600">{message.content || "Đã gửi một tin nhắn mới"}</span></span>
+          </button>, { id: message.id, duration: 5000, onDismiss: () => removeIncomingToast(message.id), onAutoClose: () => removeIncomingToast(message.id) });
+        }
       }
       if (message.conversationId === activeId) {
         setIsCustomerTyping(false);
@@ -373,17 +437,21 @@ export function InboxPage({ token, refresh, platform, channelId, onBack, onLogoC
       conversationRevisionRef.current.set(conversation.id, revision);
       const readState = readStateRef.current.get(conversation.id);
       if (conversation.unreadCount === 0 && readState) readStateRef.current.set(conversation.id, { ...readState, baseline: 0, revision, confirmedGeneration: readState.generation, confirmedRevision: revision });
-      setConversations((current) => {
-        const next = upsertConversation(current, conversation);
-        conversationsRef.current = next;
-        return next;
-      });
+      const updatedConversations = upsertConversation(conversationsRef.current, conversation);
+      conversationsRef.current = updatedConversations;
+      setConversations(updatedConversations);
       if (conversation.id === activeId && conversation.unreadCount > 0) void markActiveRead(conversation.id);
     });
     joinActiveRoom();
     return () => { socket.off("connect", joinActiveRoom); socket.off(chatEvents.messagePinUpdated, handleMessagePinUpdated); socket.disconnect(); };
-  }, [token, platform, channelId, activeId, aiSettingsLoaded, aiSettings.suggestionMode, aiSuggestionsEnabled]);
+  }, [token, platform, channelId, activeId, aiSettingsLoaded, aiSettings.suggestionMode, aiSuggestionsEnabled, generalSettings, hasCurrentGeneralSettings]);
   function selectConversation(id: string) { setActiveId(id); setReadRequestKey((current) => current + 1); setIsConversationListOpen(false); }
+  async function openNextUnreadConversation() {
+    if (!activeId || !await markActiveRead(activeId)) return;
+    const unreadOrdered = orderConversationsByUnread(conversationsRef.current, hasCurrentGeneralSettings && generalSettings.moveUnreadConversationsToTop);
+    const nextUnreadId = getNextUnreadConversationId(unreadOrdered, activeId);
+    if (nextUnreadId) selectConversation(nextUnreadId);
+  }
   function removeIncomingToast(id: string) {
     incomingToastIdsRef.current = incomingToastIdsRef.current.filter((toastId) => toastId !== id);
   }
@@ -522,5 +590,5 @@ export function InboxPage({ token, refresh, platform, channelId, onBack, onLogoC
     <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Hộp thư"><InboxIcon name="inbox" /></button>
     {/* <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Khách hàng"><InboxIcon name="users" /></button><div className="inbox-nav-spacer flex-1" /><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Trợ giúp"><InboxIcon name="help" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Cài đặt"><InboxIcon name="settings" /></button> */}
     {/* {onBack && <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-gray-100 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Về Dashboard" onClick={onBack}>←</button>} */}
-    </aside><div className="min-h-0 max-[899px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} collapsed={isConversationListCollapsed} onResizeStart={handleConversationListResizeStart} /></div><div className="flex min-h-0 min-w-0 flex-col"><div className={`flex min-h-0 flex-1 flex-col ${isConversationListOpen ? "max-[899px]:hidden" : ""}`}><ChatWindow {...chatWindowPinProps} conversation={active} messages={messages} isLoadingMessages={isLoadingMessages} onSend={sendText} onRetryMessage={retryMessage} quickReplies={quickReplies} draft={getConversationDraft(drafts, activeId)} onDraftChange={updateActiveDraft} onOpenConversationList={() => setIsConversationListOpen(true)} isCustomerTyping={isCustomerTyping} aiSuggestions={aiSuggestions} isAiSuggestionsLoading={isAiSuggestionsLoading} aiSuggestionsError={aiSuggestionsError} onRefreshAiSuggestions={refreshAiSuggestions} aiSuggestionsEnabled={aiSuggestionsEnabled} availableTags={availableTags} onTagsChange={updateActiveConversationTags} onToggleBot={toggleActiveBot} isTogglingBot={isTakingOver} toggleBotError={takeoverError} /></div></div>{isConversationListOpen && <><button className="fixed inset-0 z-40 bg-slate-900/30 min-[900px]:hidden" type="button" onClick={() => setIsConversationListOpen(false)} aria-label="Đóng danh sách hội thoại" /><div className="fixed left-[44px] right-0 top-16 bottom-0 z-50 flex min-[900px]:hidden"><ConversationList items={conversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} /></div></>}</div></div></main>;
+    </aside><div className="min-h-0 max-[899px]:hidden"><ConversationList items={orderedConversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} collapsed={isConversationListCollapsed} onResizeStart={handleConversationListResizeStart} /></div><div className="flex min-h-0 min-w-0 flex-col"><div className={`flex min-h-0 flex-1 flex-col ${isConversationListOpen ? "max-[899px]:hidden" : ""}`}><ChatWindow {...chatWindowPinProps} conversation={active} messages={messages} isLoadingMessages={isLoadingMessages} onSend={sendText} onRetryMessage={retryMessage} quickReplies={quickReplies} draft={getConversationDraft(drafts, activeId)} onDraftChange={updateActiveDraft} onOpenConversationList={() => setIsConversationListOpen(true)} showOpenNextUnreadAction={hasCurrentGeneralSettings && generalSettings.openNextUnreadConversation && Boolean(getNextUnreadConversationId(orderedConversations, activeId ?? ""))} onOpenNextUnread={openNextUnreadConversation} isCustomerTyping={isCustomerTyping} aiSuggestions={aiSuggestions} isAiSuggestionsLoading={isAiSuggestionsLoading} aiSuggestionsError={aiSuggestionsError} onRefreshAiSuggestions={refreshAiSuggestions} aiSuggestionsEnabled={aiSuggestionsEnabled} availableTags={availableTags} onTagsChange={updateActiveConversationTags} onToggleBot={toggleActiveBot} isTogglingBot={isTakingOver} toggleBotError={takeoverError} /></div></div>{isConversationListOpen && <><button className="fixed inset-0 z-40 bg-slate-900/30 min-[900px]:hidden" type="button" onClick={() => setIsConversationListOpen(false)} aria-label="Đóng danh sách hội thoại" /><div className="fixed left-[44px] right-0 top-16 bottom-0 z-50 flex min-[900px]:hidden"><ConversationList items={orderedConversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} /></div></>}</div></div></main>;
 }

@@ -346,7 +346,8 @@ function attachPersonalMessageSync(userId: string, client: TelegramClient): void
       await conversation.populate("customerId", "name avatarUrl");
       await conversation.populate("tagIds", "name color");
       const conversationPayload = toConversation(conversation.toObject(), account ? { name: account.displayName, avatarUrl: account.avatarUrl ?? undefined } : undefined);
-      emitChatEvent("chat:message_received", String(conversation._id), toMessage(storedMessage.toObject()));
+      const messagePayload = toMessage(storedMessage.toObject());
+      emitChatEvent("chat:message_received", String(conversation._id), messagePayload);
       emitInboxEventToRecipients("chat:conversation_updated", [userId, conversation.assignedAgentId ? String(conversation.assignedAgentId) : ""], conversationPayload);
       if (!isOutgoing) {
         // Ghi nhận lỗi và bàn giao an toàn mà không tạo lần gửi mới khi replay.

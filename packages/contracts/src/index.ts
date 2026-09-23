@@ -210,6 +210,7 @@ export interface FacebookPostResponse {
 
 export const chatEvents = {
   messageReceived: "chat:message_received",
+  incomingMessage: "chat:incoming_message",
   conversationUpdated: "chat:conversation_updated",
   deliveryUpdated: "chat:delivery_updated",
   messagePinUpdated: "chat:message_pin_updated",

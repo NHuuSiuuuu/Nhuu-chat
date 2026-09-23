@@ -129,6 +129,23 @@ describe("conversation controller", () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it("forwards the selected channel ID when listing conversations", async () => {
+    serviceMocks.listConversations.mockResolvedValue({ conversations: [], total: 0 });
+    const { response } = responseRecorder();
+    const next = vi.fn();
+
+    await listConversations({
+      auth: adminAuth,
+      query: { platform: "facebook", channelId: "page-42" }
+    } as never, response as never, next);
+
+    expect(serviceMocks.listConversations).toHaveBeenCalledWith({
+      platform: "facebook",
+      channelId: "page-42"
+    }, adminAuth);
+    expect(next).not.toHaveBeenCalled();
+  });
+
   it("rejects invalid conversation pagination before calling the service", async () => {
     const { response } = responseRecorder();
     const next = vi.fn();

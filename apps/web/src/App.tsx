@@ -1,6 +1,9 @@
 import * as React from "react";
-import { Suspense, useCallback, useEffect, useState } from "react";
-import { Toaster } from "sonner";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { toast, Toaster } from "sonner";
+import { chatEvents, type ChatMessageContract } from "@nhuu-chat/contracts";
+import { createChatSocket } from "./lib/socket.js";
+import { loadGeneralSettings } from "./components/settings/general-settings.js";
 import { InboxPage } from "./pages/InboxPage.js";
 import { conversationPathForPlatform, DashboardPage } from "./pages/DashboardPage.js";
 import { TelegramPersonalPage } from "./pages/TelegramPersonalPage.js";
@@ -14,6 +17,8 @@ import { DevelopmentPage, developmentPathForSection, developmentSectionFromPath,
 import { NetflixIntro } from "./components/NetflixIntro.js";
 import { FacebookPublishingPage } from "./pages/FacebookPublishingPage.js";
 import { LandingPage } from "./components/landing/LandingPage.js";
+import { AuthRoutePage } from "./components/auth/AuthRoutePage.js";
+import { authRouteFromPath, authenticatedAuthRedirect, type AuthRoute } from "./components/auth/auth-route.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 
@@ -22,13 +27,15 @@ interface AuthResponse {
 }
 
 type AppPage = "landing" | "dashboard" | "telegram" | "inbox" | "settings" | "profile" | "development";
-type RoutePage = AppPage | "posts";
+type RoutePage = AppPage | "posts" | AuthRoute;
 type InboxPlatform = "telegram_personal" | "zalo_personal" | `facebook:${string}` | undefined;
 type HeaderNavItem = "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt";
 const INBOX_PLATFORM_STORAGE_KEY = "nhuu-chat.inbox-platform";
 
-function pageFromPath(pathname: string): RoutePage {
+export function pageFromPath(pathname: string): RoutePage {
   if (pathname === "/") return "landing";
+  const authRoute = authRouteFromPath(pathname);
+  if (authRoute) return authRoute;
   if (pathname === "/inbox") return "inbox";
   if (pathname === "/telegram") return "telegram";
   if (pathname === "/settings" || pathname.startsWith("/settings/")) return "settings";
@@ -39,8 +46,17 @@ function pageFromPath(pathname: string): RoutePage {
   return "dashboard";
 }
 
+function isAuthPage(page: RoutePage): page is AuthRoute {
+  return page === "login" || page === "register" || page === "forgot-password" || page === "reset-password";
+}
+
+export function shouldRenderIntro(showIntro: boolean, page: RoutePage): boolean {
+  return showIntro && !isAuthPage(page);
+}
+
 function pathForPage(page: RoutePage, developmentSection?: DevelopmentSection): string {
   if (page === "landing") return "/";
+  if (isAuthPage(page)) return `/${page}`;
   if (page === "inbox") return "/inbox";
   if (page === "telegram") return "/telegram";
   if (page === "settings") return "/settings";
@@ -53,6 +69,10 @@ function pathForPage(page: RoutePage, developmentSection?: DevelopmentSection): 
 export function getRouteTitle(route: string): string {
   const titles: Record<RoutePage, string> = {
     landing: "NhuuChat - Quản lý tin nhắn đa kênh",
+    login: "Đăng nhập - NhuuChat",
+    register: "Đăng ký - NhuuChat",
+    "forgot-password": "Quên mật khẩu - NhuuChat",
+    "reset-password": "Đặt lại mật khẩu - NhuuChat",
     dashboard: "Bảng điều khiển - NhuuChat",
     inbox: "Hộp thư - NhuuChat",
     settings: "Cài đặt - NhuuChat",
@@ -108,11 +128,14 @@ export function App() {
   const [authReady, setAuthReady] = useState(false);
   const [page, setPage] = useState<RoutePage>(() => pageFromPath(window.location.pathname));
   const [inboxPlatform, setInboxPlatform] = useState<InboxPlatform>(() => inboxPlatformFromLocation());
+  const [requestedConversation, setRequestedConversation] = useState<{ id: string; request: number } | null>(() => {
+    const id = new URLSearchParams(window.location.search).get("conversationId");
+    return id ? { id, request: 0 } : null;
+  });
+  const incomingNavigationRequestRef = useRef(0);
   const [developmentSection, setDevelopmentSection] = useState<DevelopmentSection>(() => developmentSectionFromPath(window.location.pathname));
   const [showIntro, setShowIntro] = useState(true);
   const [introReady, setIntroReady] = useState(false);
-  const [showAuthForm, setShowAuthForm] = useState(false);
-  const [authFormMode, setAuthFormMode] = useState<"login" | "register">("login");
   const navigate = useCallback((nextPage: RoutePage, platform?: InboxPlatform, nextDevelopmentSection?: DevelopmentSection) => {
     setPage(nextPage);
     if (nextPage === "inbox") {
@@ -123,11 +146,38 @@ export function App() {
     const nextPath = nextPage === "inbox" ? pathForInbox(platform) : pathForPage(nextPage, nextDevelopmentSection);
     if (`${window.location.pathname}${window.location.search}` !== nextPath) window.history.pushState({}, "", nextPath);
   }, []);
+  const navigateAuth = useCallback((route: AuthRoute) => {
+    setPage(route);
+    if (window.location.pathname !== `/${route}`) window.history.pushState({}, "", `/${route}`);
+  }, []);
+  // Ghi yêu cầu mở chat vào state để toast luôn chọn đúng hội thoại, kể cả khi Inbox đã đang mở.
+  const navigateToIncomingConversation = useCallback((message: ChatMessageContract) => {
+    const platform: InboxPlatform = message.platform === "telegram_personal" || message.platform === "zalo_personal"
+      ? message.platform
+      : undefined;
+    setPage("inbox");
+    setInboxPlatform(platform);
+    setRequestedConversation({ id: message.conversationId, request: ++incomingNavigationRequestRef.current });
+    persistInboxPlatform(platform);
+    const params = new URLSearchParams();
+    if (platform) params.set("platform", platform);
+    params.set("conversationId", message.conversationId);
+    window.history.pushState({}, "", `/inbox?${params.toString()}`);
+  }, []);
+  const completePasswordReset = useCallback(() => {
+    clearAuth();
+    setAuth(null);
+    navigateAuth("login");
+  }, [navigateAuth]);
   useEffect(() => {
     const handlePopState = () => {
       const nextPage = pageFromPath(window.location.pathname);
       setPage(nextPage);
-      if (nextPage === "inbox") setInboxPlatform(inboxPlatformFromLocation());
+      if (nextPage === "inbox") {
+        setInboxPlatform(inboxPlatformFromLocation());
+        const conversationId = new URLSearchParams(window.location.search).get("conversationId");
+        setRequestedConversation(conversationId ? { id: conversationId, request: ++incomingNavigationRequestRef.current } : null);
+      }
       setDevelopmentSection(developmentSectionFromPath(window.location.pathname));
     };
     window.addEventListener("popstate", handlePopState);
@@ -136,6 +186,16 @@ export function App() {
   useEffect(() => {
     document.title = getRouteTitle(page);
   }, [page]);
+  useEffect(() => {
+    if (isAuthPage(page)) setShowIntro(false);
+  }, [page]);
+  useEffect(() => {
+    const redirectPath = authenticatedAuthRedirect(authReady && Boolean(auth), window.location.pathname);
+    if (redirectPath) {
+      window.history.replaceState({}, "", redirectPath);
+      setPage("dashboard");
+    }
+  }, [auth, authReady, page]);
   useEffect(() => {
     let cancelled = false;
     void preloadIntroDependencies().finally(() => {
@@ -177,24 +237,55 @@ export function App() {
     });
     return () => { cancelled = true; };
   }, [loadSession]);
+  useEffect(() => {
+    if (!authReady || !auth || !canAccessInbox(auth.user.role)) return;
+    let settingsLoaded = false;
+    let notificationsEnabled = false;
+    const seenMessageIds = new Set<string>();
+    const socket = createChatSocket(API_URL);
+    const handleIncomingMessage = (message: ChatMessageContract) => {
+      if (message.senderType !== "customer" || !settingsLoaded || !notificationsEnabled || seenMessageIds.has(message.id)) return;
+      seenMessageIds.add(message.id);
+      if (seenMessageIds.size > 100) seenMessageIds.delete(seenMessageIds.values().next().value as string);
+      const activeConversationId = (globalThis as typeof globalThis & { __nhuuChatConversationContext?: { id: string | null } }).__nhuuChatConversationContext?.id;
+      if (window.location.pathname === "/inbox" && activeConversationId === message.conversationId) return;
+      const senderName = message.senderName?.trim() || "Khách hàng";
+      const preview = message.content?.trim() || "Đã gửi một tin nhắn mới";
+      toast.custom((toastId) => <button type="button" onClick={() => { navigateToIncomingConversation(message); toast.dismiss(toastId); }} className="flex w-[min(380px,calc(100vw-2rem))] items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left text-slate-800 shadow-xl transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500">
+        <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-600"><svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.6 8.6 0 0 1-3.5-.8L3 21l1.9-5A8.2 8.2 0 0 1 3 11.5 8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z" /></svg></span>
+        <span className="min-w-0 flex-1"><strong className="block truncate text-sm">{senderName}</strong><span className="mt-1 block truncate text-xs text-slate-600">{preview}</span></span>
+      </button>, { id: `incoming-${message.id}`, duration: 5000 });
+    };
+    socket.on(chatEvents.incomingMessage, handleIncomingMessage);
+    void loadGeneralSettings({ apiUrl: API_URL, token: "cookie-session", refresh }).then((settings) => {
+      settingsLoaded = true;
+      notificationsEnabled = settings.browserNotificationsEnabled;
+    }).catch(() => undefined);
+    return () => {
+      socket.off(chatEvents.incomingMessage, handleIncomingMessage);
+      socket.disconnect();
+    };
+  }, [auth, authReady, navigateToIncomingConversation, refresh]);
   const logout = useCallback(() => {
     persistInboxPlatform(undefined);
-    void fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).finally(() => { clearAuth(); setAuth(null); });
-  }, []);
+    void fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).finally(() => {
+      clearAuth();
+      setAuth(null);
+      navigate("landing");
+    });
+  }, [navigate]);
   let appContent: React.ReactNode;
   if (!authReady) {
     appContent = <PageSkeleton />;
+  } else if (isAuthPage(page) && auth && page !== "reset-password") {
+    appContent = <PageSkeleton />;
+  } else if (isAuthPage(page)) {
+    const authRoute = page;
+    appContent = <AuthRoutePage route={authRoute} onNavigateAuth={navigateAuth} onResetSuccess={completePasswordReset} onAuthenticated={(next) => { setAuth({ user: next.user }); navigate("dashboard"); }} />;
   } else if (page === "landing") {
-    appContent = <>
-      <LandingPage user={auth?.user ?? null} onDashboard={() => navigate("dashboard")} onLogin={() => { setAuthFormMode("login"); setShowAuthForm(true); }} onRegister={() => { setAuthFormMode("register"); setShowAuthForm(true); }} onLogout={logout} />
-      {showAuthForm && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4" role="presentation">
-        <div className="max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl shadow-2xl">
-          <AuthPage embedded initialMode={authFormMode} onAuthenticated={(next) => { setAuth({ user: next.user }); setShowAuthForm(false); }} onBack={() => setShowAuthForm(false)} />
-        </div>
-      </div>}
-    </>;
+    appContent = <LandingPage user={auth?.user ?? null} onDashboard={() => navigate("dashboard")} onLogin={() => navigateAuth("login")} onRegister={() => navigateAuth("register")} onLogout={logout} />;
   } else if (!auth) {
-    appContent = <AuthPage onAuthenticated={(next) => setAuth({ user: next.user })} />;
+    appContent = <AuthRoutePage route="login" onNavigateAuth={navigateAuth} onResetSuccess={completePasswordReset} onAuthenticated={(next) => { setAuth({ user: next.user }); navigate("dashboard"); }} />;
   } else if (!canAccessInbox(auth.user.role)) {
     appContent = <main><h1>Nhuu Chat</h1><p>Tài khoản của anh đã đăng nhập nhưng chưa có quyền mở inbox. Hãy nhờ admin cấp role agent.</p><button onClick={() => { void fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).finally(() => { clearAuth(); setAuth(null); }); }}>Đăng xuất</button></main>;
   } else {
@@ -220,71 +311,14 @@ export function App() {
       if (window.location.pathname !== nextPath) window.history.pushState({}, "", nextPath);
     };
     const topbarProps = { user: auth.user, onLogout: logout, onProfile: openProfile };
-    appContent = <ProtectedRoute token="cookie-session">{page === "dashboard" ? <DashboardPage {...topbarProps} token="" refresh={refresh} onOpenInbox={(platform) => navigate("inbox", platform)} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} settingsSubmenuItems={mobileSettingsItems} nestedSettingsSubmenuItems={{ "Giới thiệu": mobileAboutSections }} onSettingsSubmenuNavigate={navigateFromMobileSettings} onNestedSettingsSubmenuNavigate={navigateFromMobileAbout} /> : page === "telegram" ? <TelegramPersonalPage token="" refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage {...topbarProps} token="" refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "profile" ? <ProfilePage {...topbarProps} token="" onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "posts" ? <FacebookPublishingPage {...topbarProps} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "development" ? <DevelopmentPage {...topbarProps} section={developmentSection} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : <InboxPage {...topbarProps} token="" platform={inboxConversationPlatform} channelId={inboxChannelId} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} />}</ProtectedRoute>;
+    appContent = <ProtectedRoute token="cookie-session">{page === "dashboard" ? <DashboardPage {...topbarProps} token="" refresh={refresh} onOpenInbox={(platform) => navigate("inbox", platform)} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} settingsSubmenuItems={mobileSettingsItems} nestedSettingsSubmenuItems={{ "Giới thiệu": mobileAboutSections }} onSettingsSubmenuNavigate={navigateFromMobileSettings} onNestedSettingsSubmenuNavigate={navigateFromMobileAbout} /> : page === "telegram" ? <TelegramPersonalPage token="" refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage {...topbarProps} token="" refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "profile" ? <ProfilePage {...topbarProps} token="" onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "posts" ? <FacebookPublishingPage {...topbarProps} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "development" ? <DevelopmentPage {...topbarProps} section={developmentSection} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : <InboxPage {...topbarProps} token="" platform={inboxConversationPlatform} channelId={inboxChannelId} selectedConversationId={requestedConversation?.id} selectedConversationRequest={requestedConversation?.request} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} />}</ProtectedRoute>;
   }
   return <>
     <Suspense fallback={<PageSkeleton />}>{appContent}</Suspense>
     <Toaster
       position="top-right"
-      toastOptions={{
-        style: {
-          borderRadius: "12px",
-          boxShadow: "0 10px 25px -8px rgb(15 23 42 / 0.2)",
-          fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
-          background: "#ffffff",
-          color: "#273348",
-          border: "1px solid #e2e8f0"
-        },
-        success: { style: { color: "#166534" } },
-        error: { style: { color: "#be123c" } }
-      }}
+      richColors
     />
-    {showIntro && <NetflixIntro ready={introReady} onComplete={() => setShowIntro(false)} />}
+    {shouldRenderIntro(showIntro, page) && <NetflixIntro ready={introReady} onComplete={() => setShowIntro(false)} />}
   </>;
-}
-
-function AuthPage({ embedded = false, initialMode = "login", onAuthenticated, onBack }: { embedded?: boolean; initialMode?: "login" | "register"; onAuthenticated: (auth: AuthResponse) => void; onBack?: () => void }) {
-  const [mode, setMode] = useState<"login" | "register">(initialMode);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setSubmitting(true);
-    try {
-      const response = await fetch(`${API_URL}/api/v1/auth/${mode}`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), password })
-      });
-      const body = await response.json() as AuthResponse & { error?: { message?: string } };
-      if (!response.ok) throw new Error(body.error?.message ?? "Không thể xác thực tài khoản");
-      onAuthenticated(body);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Không thể kết nối máy chủ");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return <main className={embedded ? "bg-slate-100 px-4 py-6 text-slate-800" : "grid min-h-screen place-items-center bg-slate-100 px-4 py-10 text-slate-800"} aria-labelledby="auth-title">
-    <section className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg sm:p-8">
-      <h1 id="auth-title" className="text-2xl font-bold text-slate-900">Nhuu Chat</h1>
-      <p className="mt-2 text-sm text-slate-500">{mode === "login" ? "Đăng nhập để mở inbox." : "Tạo tài khoản mới để sử dụng hệ thống."}</p>
-      <form className="mt-6 grid gap-4" onSubmit={submit}>
-      {mode === "register" && <label className="grid gap-1.5 text-sm font-medium text-slate-700">Tên hiển thị<input className="rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100" value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" /></label>}
-      <label className="grid gap-1.5 text-sm font-medium text-slate-700">Email<input className="rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label>
-      <label className="grid gap-1.5 text-sm font-medium text-slate-700">Mật khẩu<input className="rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>
-      {error && <p className="text-sm text-rose-600" role="alert">{error}</p>}
-      <button className="rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500" type="submit" disabled={submitting}>{submitting ? "Đang xử lý..." : mode === "login" ? "Đăng nhập" : "Đăng ký"}</button>
-    </form>
-     <div className="mt-5 flex flex-wrap items-center gap-4"><button className="text-sm font-medium text-sky-600 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500" type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}>
-       {mode === "login" ? "Chưa có tài khoản? Đăng ký" : "Đã có tài khoản? Đăng nhập"}
-     </button>{onBack && <button className="text-sm font-medium text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline" type="button" onClick={onBack}>Quay lại trang chủ</button>}</div></section>
-  </main>;
 }
