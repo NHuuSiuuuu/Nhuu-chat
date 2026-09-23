@@ -19,6 +19,7 @@ import { quickReplyRouter } from "./routes/quick-reply.routes.js";
 import { assistantRouter } from "./routes/assistants.routes.js";
 import { facebookPageRouter } from "./routes/facebook-page.routes.js";
 import { facebookPostRouter } from "./routes/facebook-post.routes.js";
+import { facebookMessengerWebhookRouter } from "./routes/facebook-messenger-webhook.routes.js";
 import { settingHistoryRouter } from "./routes/setting-history.routes.js";
 import { corsAllowlist, originProtection, rateLimit, requestId, securityHeaders } from "./common/security.middleware.js";
 
@@ -31,6 +32,7 @@ export function createApp(): Express {
   app.use(requestId);
   app.use(corsAllowlist);
   app.use(originProtection);
+  app.use("/api/v1/webhooks/facebook/messenger", express.raw({ type: "application/json" }), facebookMessengerWebhookRouter);
   app.use(express.json());
   app.get("/health", (_request, response) => {
     const health: HealthResponse = { status: "ok", service: "nhuu-chat" };
