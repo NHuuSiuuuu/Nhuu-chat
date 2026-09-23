@@ -6,6 +6,8 @@ import { requireRole } from "./auth.middleware.js";
 import { hashPassword, issueTokens } from "../services/auth.service.js";
 import { verifyAccessToken } from "../services/auth.service.js";
 import { UserModel } from "../models/user.model.js";
+import { WorkspaceModel } from "../models/workspace.model.js";
+import { WorkspaceMemberModel } from "../models/workspace-member.model.js";
 import { startTestDatabase, stopTestDatabase } from "../test/mongo-repl-set.js";
 
 process.env.JWT_SECRET ??= "test-jwt-secret-that-is-at-least-32-characters";
@@ -20,11 +22,12 @@ function cookieValue(setCookie: string[] | string | undefined, name: string): st
 describe("authentication and roles", () => {
   beforeAll(async () => {
     await startTestDatabase();
-    await UserModel.syncIndexes();
+    await Promise.all([UserModel.syncIndexes(), WorkspaceModel.syncIndexes(), WorkspaceMemberModel.syncIndexes()]);
   }, 120_000);
 
   beforeEach(async () => {
     await UserModel.deleteMany({});
+    await Promise.all([WorkspaceModel.deleteMany({}), WorkspaceMemberModel.deleteMany({})]);
   });
 
   afterAll(async () => {
@@ -56,6 +59,10 @@ describe("authentication and roles", () => {
     expect(document).not.toBeNull();
     expect(document?.role).toBe("customer");
     expect(document?.passwordHash).not.toBe("correct horse battery staple");
+    const workspace = await WorkspaceModel.findOne({ ownerUserId: document?._id }).lean();
+    expect(workspace?.name).toBe("New Customer");
+    await expect(WorkspaceMemberModel.findOne({ workspaceId: workspace?._id, userId: document?._id }).lean())
+      .resolves.toMatchObject({ role: "owner", allowedPages: [] });
   });
 
   it("rejects invalid registration fields", async () => {
