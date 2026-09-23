@@ -22,7 +22,8 @@ vi.mock("socket.io", () => ({
 
 const authMocks = vi.hoisted(() => ({ verifyAccessToken: vi.fn(), isAuthSessionActive: vi.fn() }));
 vi.mock("../services/auth.service.js", () => authMocks);
-vi.mock("../models/conversation.model.js", () => ({ ConversationModel: {} }));
+const conversationMocks = vi.hoisted(() => ({ findById: vi.fn() }));
+vi.mock("../models/conversation.model.js", () => ({ ConversationModel: conversationMocks }));
 
 import { createRealtimeServer, disconnectAuthSession, disconnectAuthUser, emitInboxEventToRecipients } from "./socket.js";
 
@@ -145,6 +146,67 @@ describe("inbox realtime recipients", () => {
     await connected(socket);
 
     expect(socket.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it("honors a conversation join received while session readiness is pending", async () => {
+    let finishCheck!: (active: boolean) => void;
+    authMocks.isAuthSessionActive.mockImplementation(() => new Promise<boolean>((resolve) => { finishCheck = resolve; }));
+    conversationMocks.findById.mockReturnValue({ lean: () => Promise.resolve({ platform: "telegram", ownerId: "user-1", assignedAgentId: null }) });
+    const socket = {
+      data: { auth: { id: "user-1", email: "admin@example.com", role: "admin", sessionId: "sid-a" } },
+      join: vi.fn().mockResolvedValue(undefined), on: vi.fn(), rooms: new Set<string>(), disconnect: vi.fn(), disconnected: false
+    };
+    const connected = socketMocks.on.mock.calls.find(([event]) => event === "connection")?.[1] as (socket: unknown) => Promise<boolean>;
+    const readiness = connected(socket);
+    await vi.waitFor(() => expect(authMocks.isAuthSessionActive).toHaveBeenCalledWith("user-1", "sid-a"));
+    try {
+      const joinRoom = socket.on.mock.calls.find(([event]) => event === "chat:join_room")?.[1] as
+        | ((conversationId: string, callback: (result: { ok: boolean }) => void) => Promise<void>)
+        | undefined;
+      expect(joinRoom).toBeTypeOf("function");
+      const callback = vi.fn();
+      const joining = joinRoom!("conversation-1", callback);
+      expect(conversationMocks.findById).not.toHaveBeenCalled();
+
+      finishCheck(true);
+      await readiness;
+      await joining;
+
+      expect(conversationMocks.findById).toHaveBeenCalledWith("conversation-1");
+      expect(socket.join).toHaveBeenCalledWith("conversation:conversation-1");
+      expect(callback).toHaveBeenCalledWith({ ok: true });
+    } finally {
+      finishCheck(true);
+      await readiness;
+    }
+  });
+
+  it("withholds user-data rooms when revocation happens during a pending session check", async () => {
+    let finishCheck!: (active: boolean) => void;
+    authMocks.isAuthSessionActive.mockImplementation(() => new Promise<boolean>((resolve) => { finishCheck = resolve; }));
+    const socket = {
+      data: { auth: { id: "user-1", email: "admin@example.com", role: "admin", sessionId: "sid-a" } },
+      join: vi.fn().mockResolvedValue(undefined), on: vi.fn(), rooms: new Set<string>(), disconnect: vi.fn(), disconnected: false
+    };
+    socketMocks.disconnectSockets.mockImplementation(() => {
+      socket.disconnected = true;
+      socket.disconnect(true);
+    });
+    const connected = socketMocks.on.mock.calls.find(([event]) => event === "connection")?.[1] as (socket: unknown) => Promise<boolean>;
+    const readiness = connected(socket);
+    await vi.waitFor(() => expect(authMocks.isAuthSessionActive).toHaveBeenCalledWith("user-1", "sid-a"));
+    try {
+      expect(socket.join.mock.calls.map(([room]) => room)).toEqual(["auth-session:sid-a"]);
+      disconnectAuthSession("sid-a");
+      finishCheck(true);
+      await readiness;
+
+      expect(socket.disconnect).toHaveBeenCalledWith(true);
+      expect(socket.join.mock.calls.map(([room]) => room)).toEqual(["auth-session:sid-a"]);
+    } finally {
+      finishCheck(true);
+      await readiness;
+    }
   });
 
   it("restricts realtime CORS to configured web origins", () => {
