@@ -22,6 +22,7 @@ export interface FacebookOAuthPage {
   id: string;
   name: string;
   canPublish: boolean;
+  canMessage: boolean;
 }
 
 interface FacebookOAuthPageSecret extends FacebookOAuthPage {
@@ -157,7 +158,7 @@ export class FacebookOAuthService {
     url.searchParams.set("client_id", appId);
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("state", state);
-    url.searchParams.set("scope", "pages_show_list,pages_read_engagement,pages_manage_posts");
+    url.searchParams.set("scope", "pages_show_list,pages_read_engagement,pages_manage_posts,pages_messaging,pages_manage_metadata");
     return { authorizationUrl: url.toString() };
   }
 
@@ -186,7 +187,13 @@ export class FacebookOAuthService {
       const page = value as GraphPage;
       if (typeof page.id !== "string" || typeof page.name !== "string" || typeof page.access_token !== "string") return [];
       const tasks = Array.isArray(page.tasks) ? page.tasks : [];
-      return [{ id: page.id, name: page.name, accessToken: page.access_token, canPublish: tasks.includes("CREATE_CONTENT") }];
+      return [{
+        id: page.id,
+        name: page.name,
+        accessToken: page.access_token,
+        canPublish: tasks.includes("CREATE_CONTENT"),
+        canMessage: ["MESSAGE", "MESSAGING", "MODERATE"].some((task) => tasks.includes(task))
+      }];
     });
     const selectionToken = this.randomToken();
     await this.stateStore.save(selectionToken, { kind: "selection", userId: saved.userId, pages }, OAUTH_STATE_TTL_SECONDS);
@@ -209,7 +216,7 @@ export class FacebookOAuthService {
     try {
       if (saved.kind !== "selection" || saved.userId !== userId) throw new AppError(400, "FACEBOOK_OAUTH_SELECTION_INVALID", "Facebook Page selection is invalid or expired");
       const page = saved.pages.find((candidate) => candidate.id === pageId);
-      if (!page || !page.canPublish) throw new AppError(400, "FACEBOOK_OAUTH_PAGE_NOT_PUBLISHABLE", "The selected Facebook Page cannot publish content");
+      if (!page || !page.canMessage) throw new AppError(400, "FACEBOOK_OAUTH_PAGE_NOT_MESSAGING_CAPABLE", "The selected Facebook Page cannot access Messenger");
       connection = await connect(userId, { pageId: page.id, pageAccessToken: page.accessToken });
     } catch (error) {
       await this.stateStore.releaseClaim(selectionToken, claimToken).catch(() => undefined);

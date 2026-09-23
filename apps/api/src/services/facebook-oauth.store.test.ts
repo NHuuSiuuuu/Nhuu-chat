@@ -233,7 +233,7 @@ describe("RedisFacebookOAuthStore", () => {
     const value = {
       kind: "selection" as const,
       userId: "user-1",
-      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true }]
+      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true, canMessage: true }]
     };
     await store.save("selection-token", value, 600);
     redis.get.mockClear();

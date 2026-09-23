@@ -103,6 +103,29 @@ function graphPictureUrl(body: unknown): string | null {
   return typeof url === "string" && url.length > 0 ? url : null;
 }
 
+async function fetchGraphResponse(fetchGraph: GraphFetch, url: URL, timeoutMs: number): Promise<{ response: Response; body: unknown }> {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      (async () => {
+        const response = await fetchGraph(url.toString(), { method: "GET", signal: controller.signal });
+        return { response, body: await response.json() };
+      })(),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          controller.abort();
+          reject(new Error("Facebook Page validation timed out"));
+        }, timeoutMs);
+      })
+    ]);
+  } catch {
+    throw new AppError(400, "FACEBOOK_PAGE_VALIDATION_FAILED", "Facebook Page credentials could not be validated");
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export class FacebookPageService {
   private readonly model: ConnectionModel;
   private readonly fetchGraph: GraphFetch;
@@ -124,28 +147,7 @@ export class FacebookPageService {
     url.searchParams.set("fields", "id,name,picture.type(large)");
     url.searchParams.set("access_token", input.pageAccessToken);
 
-    let response: Response;
-    let body: unknown;
-    const controller = new AbortController();
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    try {
-      ({ response, body } = await Promise.race([
-        (async () => {
-          const graphResponse = await this.fetchGraph(url.toString(), { method: "GET", signal: controller.signal });
-          return { response: graphResponse, body: await graphResponse.json() };
-        })(),
-        new Promise<never>((_resolve, reject) => {
-          timeout = setTimeout(() => {
-            controller.abort();
-            reject(new Error("Facebook Page validation timed out"));
-          }, this.graphRequestTimeoutMs);
-        })
-      ]));
-    } catch {
-      throw new AppError(400, "FACEBOOK_PAGE_VALIDATION_FAILED", "Facebook Page credentials could not be validated");
-    } finally {
-      if (timeout) clearTimeout(timeout);
-    }
+    const { response, body } = await fetchGraphResponse(this.fetchGraph, url, this.graphRequestTimeoutMs);
 
     if (!response.ok || graphErrorCode(body) !== undefined) {
       const code = graphErrorCode(body);
@@ -158,6 +160,25 @@ export class FacebookPageService {
     const metadata = body && typeof body === "object" ? body as { id?: unknown; name?: unknown } : {};
     if (metadata.id !== input.pageId) {
       throw new AppError(400, "FACEBOOK_PAGE_ID_MISMATCH", "Facebook returned a different Page ID");
+    }
+
+    // Conversations API requires Messenger access for the Page token and is safe to probe without sending a message.
+    const conversationsUrl = new URL(`https://graph.facebook.com/${this.graphApiVersion}/${encodeURIComponent(input.pageId)}/conversations`);
+    conversationsUrl.searchParams.set("limit", "1");
+    conversationsUrl.searchParams.set("access_token", input.pageAccessToken);
+    const capability = await fetchGraphResponse(this.fetchGraph, conversationsUrl, this.graphRequestTimeoutMs);
+    if (!capability.response.ok || graphErrorCode(capability.body) !== undefined) {
+      const code = graphErrorCode(capability.body);
+      if (code === 190 || capability.response.status === 401) {
+        throw new AppError(401, "FACEBOOK_PAGE_TOKEN_INVALID", "Facebook Page access token is invalid");
+      }
+      if (code === 10 || code === 200 || capability.response.status === 403) {
+        throw new AppError(403, "FACEBOOK_PAGE_MESSAGING_PERMISSION_MISSING", "Facebook Page messaging permission is missing");
+      }
+      throw new AppError(400, "FACEBOOK_PAGE_VALIDATION_FAILED", "Facebook Page credentials could not be validated");
+    }
+    if (!capability.body || typeof capability.body !== "object" || !Array.isArray((capability.body as { data?: unknown }).data)) {
+      throw new AppError(400, "FACEBOOK_PAGE_VALIDATION_FAILED", "Facebook Page credentials could not be validated");
     }
 
     const encryptedPageAccessToken = this.encrypt(input.pageAccessToken);
