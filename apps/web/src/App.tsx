@@ -251,7 +251,7 @@ export function App() {
       if (window.location.pathname === "/inbox" && activeConversationId === message.conversationId) return;
       const senderName = message.senderName?.trim() || "Khách hàng";
       const preview = message.content?.trim() || "Đã gửi một tin nhắn mới";
-      toast.custom((toastId) => <button type="button" onClick={() => { navigateToIncomingConversation(message); toast.dismiss(toastId); }} className="flex w-[min(380px,calc(100vw-2rem))] items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left text-slate-800 shadow-xl transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500">
+      toast.custom((toastId) => <button type="button" onClick={() => { navigateToIncomingConversation(message); toast.dismiss(toastId); }} className="flex w-[min(380px,calc(100vw-2rem))] items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left text-slate-800 shadow-xl transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 cursor-pointer">
         <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-600"><svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.6 8.6 0 0 1-3.5-.8L3 21l1.9-5A8.2 8.2 0 0 1 3 11.5 8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z" /></svg></span>
         <span className="min-w-0 flex-1"><strong className="block truncate text-sm">{senderName}</strong><span className="mt-1 block truncate text-xs text-slate-600">{preview}</span></span>
       </button>, { id: `incoming-${message.id}`, duration: 5000 });
@@ -287,7 +287,7 @@ export function App() {
   } else if (!auth) {
     appContent = <AuthRoutePage route="login" onNavigateAuth={navigateAuth} onResetSuccess={completePasswordReset} onAuthenticated={(next) => { setAuth({ user: next.user }); navigate("dashboard"); }} />;
   } else if (!canAccessInbox(auth.user.role)) {
-    appContent = <main><h1>Nhuu Chat</h1><p>Tài khoản của anh đã đăng nhập nhưng chưa có quyền mở inbox. Hãy nhờ admin cấp role agent.</p><button onClick={() => { void fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).finally(() => { clearAuth(); setAuth(null); }); }}>Đăng xuất</button></main>;
+    appContent = <main><h1>Nhuu Chat</h1><p>Tài khoản của anh đã đăng nhập nhưng chưa có quyền mở inbox. Hãy nhờ admin cấp role agent.</p><button className="cursor-pointer transition-opacity hover:opacity-80" onClick={() => { void fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).finally(() => { clearAuth(); setAuth(null); }); }}>Đăng xuất</button></main>;
   } else {
     const inboxChannelId = inboxPlatform?.startsWith("facebook:")
       ? inboxPlatform.slice("facebook:".length)

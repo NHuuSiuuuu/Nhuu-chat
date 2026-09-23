@@ -41,7 +41,7 @@ export function AutomationTemplateImportModal({
           <h3 className="text-lg font-bold text-gray-900" id="automation-template-import-title">Import kịch bản</h3>
           <p className="mt-1 text-xs text-gray-400">Chọn file .xlsx hoặc .csv gồm 4 cột: Tên mẫu, Từ khóa, Nội dung trả lời, Đang bật.</p>
         </div>
-        <button type="button" aria-label="Đóng" onClick={onClose}>×</button>
+        <button className="cursor-pointer transition-opacity hover:opacity-80" type="button" aria-label="Đóng" onClick={onClose}>×</button>
       </div>
       <label className="mt-5 block cursor-pointer rounded-xl border border-dashed border-sky-300 text-gray-900  px-4 py-5 text-center text-sm font-semibold text-gray-900">
         <span>{isReading ? "Đang đọc file..." : "Chọn file Excel hoặc CSV"}</span>
@@ -57,8 +57,8 @@ export function AutomationTemplateImportModal({
         </table>
       </div>}
       <div className="mt-5 flex justify-end gap-2">
-        <button className="rounded-lg px-4 py-2 text-sm font-semibold text-gray-500" type="button" onClick={onClose}>Hủy</button>
-        <button className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" type="button" disabled={preview.length === 0 || errors.length > 0 || isReading || isSaving} onClick={() => void onImport(preview)}>{isSaving ? "Đang nhập..." : "Xác nhận nhập"}</button>
+        <button className="rounded-lg px-4 py-2 text-sm font-semibold text-gray-500 cursor-pointer transition-opacity hover:opacity-80" type="button" onClick={onClose}>Hủy</button>
+        <button className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed" type="button" disabled={preview.length === 0 || errors.length > 0 || isReading || isSaving} onClick={() => void onImport(preview)}>{isSaving ? "Đang nhập..." : "Xác nhận nhập"}</button>
       </div>
     </section>
   </div>;

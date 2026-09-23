@@ -191,9 +191,9 @@ export function SettingHistoryTimelineView({
               : <ol className="ml-3 border-l border-gray-200">{items.map((item) => <SettingHistoryTimelineItem item={item} key={item.id} />)}</ol>}
 
         {pagination.totalPages > 1 && <nav className="mt-6 flex items-center justify-between gap-3" aria-label="Phân trang lịch sử">
-          <button className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Trang trước" type="button" disabled={pagination.page <= 1 || isLoading} onClick={() => onPageChange(pagination.page - 1)}>Trước</button>
+          <button className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer" aria-label="Trang trước" type="button" disabled={pagination.page <= 1 || isLoading} onClick={() => onPageChange(pagination.page - 1)}>Trước</button>
           <span className="text-sm font-medium text-gray-500">Trang {pagination.page} / {pagination.totalPages}</span>
-          <button className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Trang sau" type="button" disabled={!pagination.hasNextPage || isLoading} onClick={() => onPageChange(pagination.page + 1)}>Sau</button>
+          <button className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer" aria-label="Trang sau" type="button" disabled={!pagination.hasNextPage || isLoading} onClick={() => onPageChange(pagination.page + 1)}>Sau</button>
         </nav>}
       </div>
 

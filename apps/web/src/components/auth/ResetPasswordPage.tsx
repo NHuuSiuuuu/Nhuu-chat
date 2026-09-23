@@ -68,10 +68,10 @@ export function ResetPasswordPage({ onNavigateLogin, onResetSuccess }: { onNavig
           <input id="reset-password-confirm" name="password-confirmation" type="password" autoComplete="new-password" required minLength={8} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} className="h-11 rounded-xl border border-[#dce5f0] bg-white/70 px-3.5 text-sm font-normal text-[#17233b] shadow-[0_2px_4px_rgba(42,74,116,0.08)] outline-none transition placeholder:text-[#91a7c3] focus:border-[#4c91ff] focus:bg-white focus:ring-4 focus:ring-[#2b7fff]/10" />
         </label>
         {error && <p className="text-sm text-rose-600" role="alert">{error}</p>}
-        <button type="submit" disabled={submitting || !token} className="mt-1 flex h-11 items-center justify-center rounded-xl bg-gradient-to-r from-[#0875ff] to-[#09bce9] text-sm font-bold text-white shadow-[0_5px_12px_rgba(15,133,242,0.22)] transition hover:brightness-105 focus:outline-none focus:ring-4 focus:ring-[#0875ff]/20 disabled:cursor-not-allowed disabled:opacity-60">{submitting ? "Đang cập nhật..." : "Cập nhật mật khẩu"}</button>
+        <button type="submit" disabled={submitting || !token} className="mt-1 flex h-11 items-center justify-center rounded-xl bg-gradient-to-r from-[#0875ff] to-[#09bce9] text-sm font-bold text-white shadow-[0_5px_12px_rgba(15,133,242,0.22)] transition hover:brightness-105 focus:outline-none focus:ring-4 focus:ring-[#0875ff]/20 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer">{submitting ? "Đang cập nhật..." : "Cập nhật mật khẩu"}</button>
       </form>
       <footer className="mt-6 text-center text-sm text-[#7186a5]">
-        <button type="button" onClick={onNavigateLogin} className="font-semibold text-[#006eff] hover:underline">← Quay lại đăng nhập</button>
+        <button type="button" onClick={onNavigateLogin} className="font-semibold text-[#006eff] hover:underline cursor-pointer">← Quay lại đăng nhập</button>
       </footer>
     </section>
   </div>;
