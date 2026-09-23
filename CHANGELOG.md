@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Đánh dấu các mục Cài đặt chưa hoàn thiện bằng nhãn “Sắp có”, làm mờ và vô hiệu hóa thao tác.
 - Thêm các trang `/login`, `/register`, `/forgot-password` và `/reset-password` có Landing Header, liên kết SPA, xác nhận mật khẩu và luồng đặt lại mật khẩu qua Nodemailer/SMTP với token một lần; API luôn trả xác nhận chung, kể cả khi gửi email lỗi.
 - Bổ sung kiểm tra dữ liệu phía trình duyệt cho trang đăng nhập/đăng ký và hiển thị lỗi bằng Sonner.
 - Tách thông báo bỏ trống theo từng trường, Việt hóa lỗi xác thực API, hiển thị lỗi đăng nhập sai dưới ô mật khẩu và báo toast khi đăng nhập thành công.

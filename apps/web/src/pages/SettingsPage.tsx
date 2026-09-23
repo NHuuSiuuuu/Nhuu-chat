@@ -25,7 +25,17 @@ const suggestionLabelByMode: Record<AiSuggestionMode, string> = { off: "Thủ c�
 const sentimentWindowByLabel: Record<string, AiSentimentWindow> = { "3 tin gần nhất": 3, "6 tin gần nhất": 6, "10 tin gần nhất": 10 };
 const sentimentLabelByWindow: Record<AiSentimentWindow, string> = { 3: "3 tin gần nhất", 6: "6 tin gần nhất", 10: "10 tin gần nhất" };
 const pickerColors = ["#9ca3af", "#ef4444", "#f97316", "#eab308", "#22c55e", "#14b8a6", "#3b82f6", "#8b5cf6", "#ec4899", "#38bdf8"];
-const settingsItems = ["Giới thiệu", "Cài đặt chung", "Thẻ hội thoại", "Trợ lý AI", "Hỗ trợ trả lời", "Giao diện", "Phân quyền", "Lịch sử"] as const;
+const settingsMenuItems = [
+  { item: "Giới thiệu", isComingSoon: false },
+  { item: "Cài đặt chung", isComingSoon: false },
+  { item: "Thẻ hội thoại", isComingSoon: false },
+  { item: "Trợ lý AI", isComingSoon: false },
+  { item: "Hỗ trợ trả lời", isComingSoon: true },
+  { item: "Giao diện", isComingSoon: true },
+  { item: "Phân quyền", isComingSoon: true },
+  { item: "Lịch sử", isComingSoon: false }
+] as const;
+const settingsItems = settingsMenuItems.map(({ item }) => item);
 export const mobileSettingsItems = ["Giới thiệu", "Cài đặt chung", "Trợ lý AI", "Giao diện"] as const;
 const settingsIconByItem = {
   "Cài đặt chung": "settings",
@@ -41,7 +51,7 @@ const settingsIconByItem = {
   "Lịch sử": "clock",
   "Giới thiệu": "info"
 } as const;
-type SettingsItem = typeof settingsItems[number];
+type SettingsItem = typeof settingsMenuItems[number]["item"];
 const placeholderSettingsItems = new Set<SettingsItem>([
   "Hỗ trợ trả lời",
   "Giao diện",
@@ -77,7 +87,7 @@ export function settingsPathForItem(item: SettingsItem): string {
 }
 
 export function settingsItemFromPath(pathname: string): SettingsItem {
-  return settingsItemBySlug[pathname.replace(/^\/settings\/?/, "")] ?? settingsItems[0];
+  return settingsItemBySlug[pathname.replace(/^\/settings\/?/, "")] ?? settingsItems[0] as SettingsItem;
 }
 
 export function publicationButtonLabel(enabled: boolean): { button: string; status: string } {
@@ -988,7 +998,7 @@ function SettingsLayout({ activeTab, onTabChange, onAboutSectionChange, children
     }
     onTabChange(item);
   }
-  return <main className="min-h-screen bg-gray-50 text-gray-800"><SettingsDashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} settingsSubmenuItems={mobileSettingsItems} activeSettingsSubmenuItem={activeTab} onSettingsSubmenuNavigate={handleTabChange} onAboutSectionNavigate={onAboutSectionChange} /><div className="mx-3 flex w-auto items-start gap-6 pt-4 pb-8 md:mx-4 lg:mx-6 lg:pt-6 max-[1024px]:flex-col"><aside className="hidden h-fit w-[300px] shrink-0 rounded-xl bg-white p-3 shadow-sm md:block lg:sticky lg:top-[88px] lg:h-[calc(100vh-112px)] lg:overflow-y-auto max-[1024px]:w-full"><h1 className="px-3 pb-3 text-lg font-bold">Cài đặt</h1><nav className="grid gap-1" aria-label="Menu cài đặt">{settingsItems.map((item) => <button className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${activeTab === item ? "text-gray-900  font-semibold text-gray-900" : "text-gray-600 hover:bg-gray-50"} ${isSettingsPlaceholderTab(item) ? "cursor-not-allowed opacity-60" : ""} cursor-pointer`} aria-disabled={isSettingsPlaceholderTab(item)} key={item} type="button" onClick={() => handleTabChange(item)}><InboxIcon name={settingsIconByItem[item]} size={17} /> <span>{item}</span>{item === "Trợ lý AI" && <small className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Beta</small>}</button>)}</nav></aside><section className="w-full min-w-0 flex-1 rounded-xl bg-white shadow-sm">{children}</section></div></main>;
+  return <main className="min-h-screen bg-gray-50 text-gray-800"><SettingsDashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} settingsSubmenuItems={mobileSettingsItems} activeSettingsSubmenuItem={activeTab} onSettingsSubmenuNavigate={handleTabChange} onAboutSectionNavigate={onAboutSectionChange} /><div className="mx-3 flex w-auto items-start gap-6 pt-4 pb-8 md:mx-4 lg:mx-6 lg:pt-6 max-[1024px]:flex-col"><aside className="hidden h-fit w-[300px] shrink-0 rounded-xl bg-white p-3 shadow-sm md:block lg:sticky lg:top-[88px] lg:h-[calc(100vh-112px)] lg:overflow-y-auto max-[1024px]:w-full"><h1 className="px-3 pb-3 text-lg font-bold">Cài đặt</h1><nav className="grid gap-1" aria-label="Menu cài đặt">{settingsMenuItems.map(({ item, isComingSoon }) => <button className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${isComingSoon ? "cursor-not-allowed opacity-50 text-slate-400" : activeTab === item ? "text-gray-900  font-semibold text-gray-900" : "text-gray-600 hover:bg-gray-50 cursor-pointer"}`} aria-disabled={isComingSoon} disabled={isComingSoon} key={item} type="button" onClick={isComingSoon ? undefined : () => handleTabChange(item)}><InboxIcon name={settingsIconByItem[item]} size={17} /> <span>{item}</span>{isComingSoon && <small className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Sắp có</small>}{item === "Trợ lý AI" && <small className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Beta</small>}</button>)}</nav></aside><section className="w-full min-w-0 flex-1 rounded-xl bg-white shadow-sm">{children}</section></div></main>;
 }
 
 function SettingsDevelopmentPlaceholder({ title }: { title: string }) {

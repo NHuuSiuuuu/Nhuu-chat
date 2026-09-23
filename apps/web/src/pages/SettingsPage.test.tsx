@@ -248,7 +248,14 @@ describe("Settings page", () => {
   });
 
   it("marks unfinished settings tabs as development placeholders", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
     expect(typeof settingsModule.isSettingsPlaceholderTab).toBe("function");
+
+    expect(source).toContain('item: "Hỗ trợ trả lời", isComingSoon: true');
+    expect(source).toContain('item: "Giao diện", isComingSoon: true');
+    expect(source).toContain('item: "Phân quyền", isComingSoon: true');
+    expect(source).toContain('disabled={isComingSoon}');
+    expect(source).toContain('>Sắp có</small>');
 
     if (typeof settingsModule.isSettingsPlaceholderTab === "function") {
       expect([
@@ -556,7 +563,8 @@ describe("Settings page", () => {
 
     expect(source).toContain("isSettingsPlaceholderTab(activeTab)");
     expect(source).toContain("Chức năng đang được phát triển");
-    expect(source).toContain("aria-disabled={isSettingsPlaceholderTab(item)}");
+    expect(source).toContain("disabled={isComingSoon}");
+    expect(source).toContain("onClick={isComingSoon ? undefined : () => handleTabChange(item)}");
     expect(source).toContain("handleTabChange(item)");
     expect(source).toContain("cursor-not-allowed");
     expect(source).toContain('import { toast } from "sonner";');
