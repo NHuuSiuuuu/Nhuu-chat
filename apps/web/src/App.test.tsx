@@ -81,6 +81,14 @@ describe("App navigation", () => {
     expect(source).toContain('<div id="root" style="min-height:100vh;background:#f0f2f7">');
   });
 
+  it("shows a retry state when the auth API does not answer instead of leaving the page skeleton indefinitely", () => {
+    const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("AUTH_REQUEST_TIMEOUT_MS");
+    expect(source).toContain("Không nhận được phản hồi từ API");
+    expect(source).toContain("Thử lại");
+  });
+
   it("coordinates the intro with preload readiness and a Suspense fallback", async () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 

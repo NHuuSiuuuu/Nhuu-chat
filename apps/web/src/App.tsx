@@ -10,6 +10,7 @@ import { TelegramPersonalPage } from "./pages/TelegramPersonalPage.js";
 import { clearAuth, type AuthRole, type AuthState } from "./state/auth.store.js";
 import { ProtectedRoute } from "./components/common/ProtectedRoute.js";
 import { resolveApiBaseUrl } from "./lib/api-url.js";
+import { fetchJsonWithTimeout } from "./lib/fetch-with-timeout.js";
 import { canAccessInbox } from "./state/inbox-access.js";
 import { aboutPathForSection, mobileAboutSections, mobileSettingsItems, settingsPathForItem, SettingsPage } from "./pages/SettingsPage.js";
 import { ProfilePage } from "./pages/ProfilePage.js";
@@ -21,6 +22,7 @@ import { AuthRoutePage } from "./components/auth/AuthRoutePage.js";
 import { authRouteFromPath, authenticatedAuthRedirect, type AuthRoute } from "./components/auth/auth-route.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
+const AUTH_REQUEST_TIMEOUT_MS = 8_000;
 
 interface AuthResponse {
   user: { id: string; email: string; role: AuthRole };
@@ -126,6 +128,8 @@ function PageSkeleton() {
 export function App() {
   const [auth, setAuth] = useState<AuthState | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [sessionUnavailable, setSessionUnavailable] = useState(false);
+  const [sessionRetryCount, setSessionRetryCount] = useState(0);
   const [page, setPage] = useState<RoutePage>(() => pageFromPath(window.location.pathname));
   const [inboxPlatform, setInboxPlatform] = useState<InboxPlatform>(() => inboxPlatformFromLocation());
   const [requestedConversation, setRequestedConversation] = useState<{ id: string; request: number } | null>(() => {
@@ -203,40 +207,47 @@ export function App() {
     });
     return () => { cancelled = true; };
   }, []);
-  const refresh = useCallback(async (): Promise<string | null> => {
-    const response = await fetch(`${API_URL}/api/v1/auth/refresh`, { method: "POST", credentials: "include" });
+  const refresh = useCallback(async (signal?: AbortSignal): Promise<string | null> => {
+    const { response, body } = await fetchJsonWithTimeout<AuthResponse>(`${API_URL}/api/v1/auth/refresh`, { method: "POST", credentials: "include" }, AUTH_REQUEST_TIMEOUT_MS, signal);
     if (!response.ok) {
       clearAuth();
       setAuth(null);
       return null;
     }
-    const body = await response.json() as AuthResponse;
     setAuth({ user: body.user });
     return "cookie-session";
   }, []);
 
-  const loadSession = useCallback(async (): Promise<boolean> => {
-    const sessionResponse = await fetch(`${API_URL}/api/v1/auth/session`, { method: "POST", credentials: "include" });
+  const loadSession = useCallback(async (signal?: AbortSignal): Promise<boolean> => {
+    const { response: sessionResponse, body: sessionBody } = await fetchJsonWithTimeout<AuthResponse>(`${API_URL}/api/v1/auth/session`, { method: "POST", credentials: "include" }, AUTH_REQUEST_TIMEOUT_MS, signal);
     if (sessionResponse.ok) {
-      const body = await sessionResponse.json() as AuthResponse;
-      setAuth({ user: body.user });
+      setAuth({ user: sessionBody.user });
       return true;
     }
-    if (!await refresh()) return false;
-    const retryResponse = await fetch(`${API_URL}/api/v1/auth/session`, { method: "POST", credentials: "include" });
+    if (!await refresh(signal)) return false;
+    const { response: retryResponse, body: retryBody } = await fetchJsonWithTimeout<AuthResponse>(`${API_URL}/api/v1/auth/session`, { method: "POST", credentials: "include" }, AUTH_REQUEST_TIMEOUT_MS, signal);
     if (!retryResponse.ok) return false;
-    const body = await retryResponse.json() as AuthResponse;
-    setAuth({ user: body.user });
+    setAuth({ user: retryBody.user });
     return true;
   }, [refresh]);
 
   useEffect(() => {
     let cancelled = false;
-    void loadSession().finally(() => {
+    const controller = new AbortController();
+    void loadSession(controller.signal).catch(() => {
+      if (!cancelled) {
+        clearAuth();
+        setAuth(null);
+        setSessionUnavailable(true);
+      }
+    }).finally(() => {
       if (!cancelled) setAuthReady(true);
     });
-    return () => { cancelled = true; };
-  }, [loadSession]);
+    return () => {
+      cancelled = true;
+      controller.abort(new DOMException("Auth bootstrap was cancelled", "AbortError"));
+    };
+  }, [loadSession, sessionRetryCount]);
   useEffect(() => {
     if (!authReady || !auth || !canAccessInbox(auth.user.role)) return;
     let settingsLoaded = false;
@@ -275,7 +286,9 @@ export function App() {
     });
   }, [navigate]);
   let appContent: React.ReactNode;
-  if (!authReady) {
+  if (sessionUnavailable) {
+    appContent = <main className="grid min-h-screen place-items-center bg-slate-100 p-6" role="alert"><section className="w-full max-w-lg rounded-2xl bg-white p-8 text-center shadow-sm"><h1 className="text-xl font-semibold text-slate-900">Không nhận được phản hồi từ API</h1><p className="mt-3 text-slate-600">Máy chủ chưa phản hồi trong thời gian cho phép. Anh có thể thử kết nối lại.</p><button className="mt-6 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700" onClick={() => { setSessionUnavailable(false); setAuthReady(false); setSessionRetryCount((count) => count + 1); }}>Thử lại</button></section></main>;
+  } else if (!authReady) {
     appContent = <PageSkeleton />;
   } else if (isAuthPage(page) && auth && page !== "reset-password") {
     appContent = <PageSkeleton />;
@@ -319,6 +332,6 @@ export function App() {
       position="top-right"
       richColors
     />
-    {shouldRenderIntro(showIntro, page) && <NetflixIntro ready={introReady} onComplete={() => setShowIntro(false)} />}
+    {shouldRenderIntro(showIntro, page) && !sessionUnavailable && <NetflixIntro ready={introReady} onComplete={() => setShowIntro(false)} />}
   </>;
 }
