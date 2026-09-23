@@ -125,9 +125,13 @@ describe("password reset service", () => {
       { tokenHash, expiresAt: { $gt: expect.any(Date) } },
       { session: expect.any(Object), includeResultMetadata: false }
     );
-    const [, update] = mocks.updateUser.mock.calls[0] as [unknown, { $set: { passwordHash: string; refreshTokenHash: null } }];
+    const [, update] = mocks.updateUser.mock.calls[0] as [unknown, {
+      $set: { passwordHash: string; refreshTokenHash: null };
+      $inc: { authSessionRevision: number };
+    }];
     expect(await verifyPassword(update.$set.passwordHash, "new-password-123")).toBe(true);
     expect(update.$set.refreshTokenHash).toBeNull();
+    expect(update.$inc).toEqual({ authSessionRevision: 1 });
     expect(mocks.updateUser.mock.calls[0]?.[2]).toEqual({ session: expect.any(Object) });
     expect(mocks.deleteSessions).toHaveBeenCalledExactlyOnceWith(
       { userId: "user-1" }, { session: expect.any(Object) }

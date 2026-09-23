@@ -50,7 +50,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
   }
 }
 
-// Cập nhật mật khẩu và tiêu thụ token trong cùng transaction để token chỉ được dùng thành công một lần.
+// Cập nhật mật khẩu, khóa ghi tạo phiên và tiêu thụ token trong cùng transaction.
 export async function resetPassword(token: string, password: string): Promise<string> {
   const tokenHash = digestToken(token);
   const passwordHash = await hashPassword(password);
@@ -69,7 +69,10 @@ export async function resetPassword(token: string, password: string): Promise<st
 
       const result = await UserModel.updateOne(
         { _id: resetToken.userId } as never,
-        { $set: { passwordHash, refreshTokenHash: null } },
+        {
+          $set: { passwordHash, refreshTokenHash: null },
+          $inc: { authSessionRevision: 1 }
+        },
         { session }
       );
       if (result.matchedCount !== 1) {

@@ -116,19 +116,38 @@ async function issueSessionTokens(user: AuthUser, sessionId: string): Promise<To
   return { accessToken, refreshToken };
 }
 
-// Tạo cặp token gắn với một phiên và chỉ trả token sau khi digest đã được lưu.
-async function createAuthSession(user: AuthUser): Promise<{ tokens: TokenPair; sessionId: string }> {
+// Ghi vào user và phiên trong cùng transaction để đồng bộ với thao tác đặt lại mật khẩu.
+async function createAuthSession(
+  user: AuthUser,
+  expectedPasswordHash: string
+): Promise<{ tokens: TokenPair; sessionId: string }> {
   const sessionId = randomUUID();
   const tokens = await issueSessionTokens(user, sessionId);
   const now = new Date();
+  await ensureAuthSessionsCollection();
+  const mongoSession = await mongoose.startSession();
+  try {
+    await mongoSession.withTransaction(async () => {
+      const result = await UserModel.updateOne(
+        { _id: user.id, passwordHash: expectedPasswordHash },
+        { $inc: { authSessionRevision: 1 } },
+        { session: mongoSession }
+      );
+      if (result.matchedCount !== 1) {
+        throw new AppError(401, "INVALID_CREDENTIALS", "Email or password is incorrect");
+      }
 
-  await AuthSessionModel.create({
-    sessionId,
-    userId: user.id,
-    refreshTokenHash: refreshDigest(tokens.refreshToken),
-    lastUsedAt: now,
-    expiresAt: new Date(now.getTime() + REFRESH_TOKEN_TTL_MS)
-  });
+      await AuthSessionModel.create([{
+        sessionId,
+        userId: user.id,
+        refreshTokenHash: refreshDigest(tokens.refreshToken),
+        lastUsedAt: now,
+        expiresAt: new Date(now.getTime() + REFRESH_TOKEN_TTL_MS)
+      }], { session: mongoSession });
+    });
+  } finally {
+    await mongoSession.endSession();
+  }
 
   return { tokens, sessionId };
 }
@@ -178,7 +197,7 @@ export async function register(
     email: document.email,
     role: document.role
   };
-  const { tokens } = await createAuthSession(user);
+  const { tokens } = await createAuthSession(user, document.passwordHash);
 
   return { user, tokens };
 }
@@ -199,7 +218,7 @@ export async function login(email: string, password: string): Promise<{
     email: document.email,
     role: document.role
   };
-  const { tokens } = await createAuthSession(user);
+  const { tokens } = await createAuthSession(user, document.passwordHash);
 
   return { user, tokens };
 }

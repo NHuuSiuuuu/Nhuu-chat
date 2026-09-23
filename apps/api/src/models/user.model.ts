@@ -37,6 +37,7 @@ const userSchema = new Schema(
     passwordHash: { type: String, required: true, select: false },
     role: { type: String, enum: roles, required: true },
     refreshTokenHash: { type: String, default: null, select: false },
+    authSessionRevision: { type: Number, default: 0, select: false },
     aiSettings: { type: aiSettingsSchema, default: () => ({}) },
     generalSettings: { type: generalSettingsSchema, default: () => ({}) }
   },
@@ -48,6 +49,7 @@ userSchema.set("toJSON", {
     const safeResult = result as Record<string, unknown>;
     delete safeResult.passwordHash;
     delete safeResult.refreshTokenHash;
+    delete safeResult.authSessionRevision;
     return result;
   }
 });

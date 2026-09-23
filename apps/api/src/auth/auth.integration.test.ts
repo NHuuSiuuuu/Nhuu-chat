@@ -1,7 +1,7 @@
 import request from "supertest";
 import { decodeJwt, SignJWT } from "jose";
 import { createHash } from "node:crypto";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createApp } from "../app.js";
 import { requireRole } from "./auth.middleware.js";
@@ -34,6 +34,8 @@ describe("authentication and roles", () => {
     await AuthSessionModel.deleteMany({});
     await PasswordResetTokenModel.deleteMany({});
   });
+
+  afterEach(() => vi.restoreAllMocks());
 
   afterAll(async () => {
     await stopTestDatabase();
@@ -239,6 +241,61 @@ describe("authentication and roles", () => {
     }
     expect((await request(app).post("/api/v1/auth/refresh")
       .set("Cookie", `nhuu_refresh_token=${legacy.refreshToken}`)).status).toBe(401);
+  });
+
+  it("serializes a password reset against a login inserting a session", async () => {
+    const user = await UserModel.create({
+      email: "reset-race@example.com",
+      name: "Reset Race User",
+      passwordHash: await hashPassword("old-password-123"),
+      role: "admin"
+    });
+    const rawResetToken = "reset-token-during-login";
+    await PasswordResetTokenModel.create({
+      userId: user._id,
+      tokenHash: createHash("sha256").update(rawResetToken).digest("hex"),
+      expiresAt: new Date(Date.now() + 60_000)
+    });
+    let markCreateStarted!: () => void;
+    const createStarted = new Promise<void>((resolve) => { markCreateStarted = resolve; });
+    let releaseCreate!: () => void;
+    const holdCreate = new Promise<void>((resolve) => { releaseCreate = resolve; });
+    const realCreate = AuthSessionModel.create.bind(AuthSessionModel);
+    vi.spyOn(AuthSessionModel, "create").mockImplementationOnce((async (...args: Parameters<typeof AuthSessionModel.create>) => {
+      markCreateStarted();
+      await holdCreate;
+      return realCreate(...args);
+    }) as typeof AuthSessionModel.create);
+    const consumeSpy = vi.spyOn(PasswordResetTokenModel, "findOneAndDelete");
+    const app = createApp();
+    app.get("/admin-only", requireRole("admin"), (_request, response) => response.sendStatus(200));
+    const login = request(app).post("/api/v1/auth/login").send({
+      email: user.email, password: "old-password-123"
+    }).then((response) => response);
+    let reset!: Promise<{ status: number }>;
+    let resetWhilePaused: "settled" | "waiting" = "waiting";
+
+    try {
+      await createStarted;
+      reset = request(app).post("/api/v1/auth/reset-password").send({
+        token: rawResetToken, password: "new-password-123"
+      }).then((response) => response);
+      await vi.waitFor(() => expect(consumeSpy).toHaveBeenCalled(), { timeout: 10_000 });
+      resetWhilePaused = await Promise.race([
+        reset.then(() => "settled" as const),
+        new Promise<"waiting">((resolve) => setTimeout(() => resolve("waiting"), 750))
+      ]);
+    } finally {
+      releaseCreate();
+    }
+
+    const [loginResponse, resetResponse] = await Promise.all([login, reset]);
+    expect(resetWhilePaused).toBe("waiting");
+    expect(loginResponse.status).toBe(200);
+    expect(resetResponse.status).toBe(204);
+    expect(await AuthSessionModel.countDocuments({ userId: user._id })).toBe(0);
+    const access = cookieValue(loginResponse.headers["set-cookie"], "nhuu_access_token");
+    expect((await request(app).get("/admin-only").set("Cookie", `nhuu_access_token=${access}`)).status).toBe(401);
   });
 
   it("logs out a legacy refresh token without revoking newer sessions", async () => {
