@@ -17,6 +17,8 @@ describe("global intro visibility", () => {
     const { shouldRenderIntro } = await import("./App.js");
     expect(shouldRenderIntro(true, "register")).toBe(false);
     expect(shouldRenderIntro(true, "reset-password")).toBe(false);
+    expect(shouldRenderIntro(true, "login", false)).toBe(true);
+    expect(shouldRenderIntro(true, "login", true)).toBe(false);
     expect(shouldRenderIntro(false, "landing")).toBe(false);
     expect(shouldRenderIntro(true, "landing")).toBe(true);
   });

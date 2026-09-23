@@ -23,6 +23,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Chuẩn hóa cursor và hover của nút, liên kết tương tác xuyên frontend; bổ sung hover rõ hơn cho nút xem mật khẩu và mục hội thoại.
 - Ngăn tự động zoom trên mobile khi focus input, select hoặc textarea bằng cách giữ cỡ chữ tối thiểu 16px.
 - Chuyển điều hướng frontend sang React Router v6; bảo vệ Dashboard và route nội bộ bằng phiên cookie đã xác minh, chuyển người chưa đăng nhập về `/login`.
+- Giữ NetflixIntro làm màn hình chờ trong suốt lúc xác minh phiên với backend, thay cho skeleton không liên quan khi API phản hồi chậm hoặc timeout.
 
 ## 2026-09-23
 

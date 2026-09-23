@@ -53,8 +53,8 @@ function isAuthPage(page: RoutePage): page is AuthRoute {
   return page === "login" || page === "register" || page === "forgot-password" || page === "reset-password";
 }
 
-export function shouldRenderIntro(showIntro: boolean, page: RoutePage): boolean {
-  return showIntro && !isAuthPage(page);
+export function shouldRenderIntro(showIntro: boolean, page: RoutePage, authReady = true): boolean {
+  return showIntro && (!authReady || !isAuthPage(page));
 }
 
 function pathForPage(page: RoutePage, developmentSection?: DevelopmentSection): string {
@@ -142,7 +142,8 @@ export function App() {
   });
   const incomingNavigationRequestRef = useRef(0);
   const [showIntro, setShowIntro] = useState(true);
-  const [introReady, setIntroReady] = useState(false);
+  const [introDependenciesReady, setIntroDependenciesReady] = useState(false);
+  const introReady = introDependenciesReady && authReady;
   const navigate = useCallback((nextPage: RoutePage, platform?: InboxPlatform, nextDevelopmentSection?: DevelopmentSection) => {
     if (nextPage === "inbox") {
       setInboxPlatform(platform);
@@ -182,8 +183,8 @@ export function App() {
     document.title = getRouteTitle(page);
   }, [page]);
   useEffect(() => {
-    if (isAuthPage(page)) setShowIntro(false);
-  }, [page]);
+    if (authReady && isAuthPage(page)) setShowIntro(false);
+  }, [authReady, page]);
   useEffect(() => {
     const redirectPath = authenticatedAuthRedirect(authReady && Boolean(auth), location.pathname);
     if (redirectPath) {
@@ -193,7 +194,7 @@ export function App() {
   useEffect(() => {
     let cancelled = false;
     void preloadIntroDependencies().finally(() => {
-      if (!cancelled) setIntroReady(true);
+      if (!cancelled) setIntroDependenciesReady(true);
     });
     return () => { cancelled = true; };
   }, []);
@@ -334,6 +335,6 @@ export function App() {
       position="top-right"
       richColors
     />
-    {shouldRenderIntro(showIntro, page) && !sessionUnavailable && <NetflixIntro ready={introReady} onComplete={() => setShowIntro(false)} />}
+    {shouldRenderIntro(showIntro, page, authReady) && <NetflixIntro ready={introReady} onComplete={() => setShowIntro(false)} />}
   </>;
 }

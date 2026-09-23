@@ -99,6 +99,9 @@ describe("App navigation", () => {
     expect(source).toContain("showIntro");
     expect(source).toContain("useState(true)");
     expect(source).toContain("introReady");
+    expect(source).toContain("const introReady = introDependenciesReady && authReady");
+    expect(source).toContain("shouldRenderIntro(showIntro, page, authReady)");
+    expect(source).not.toContain("&& !sessionUnavailable && <NetflixIntro");
     expect(source).toContain("<NetflixIntro");
     expect(source).toContain("ready={introReady}");
     expect(source).toContain("Promise.all");
