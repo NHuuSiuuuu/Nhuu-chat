@@ -66,10 +66,7 @@ function dependencies(fetchResponse: unknown = {
     findOneAndDelete: vi.fn()
   };
   model.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(null) });
-  const fetchGraph = vi.fn().mockImplementation(async (input: string) => ({
-    ok: true,
-    json: vi.fn().mockResolvedValue(new URL(input).pathname.endsWith("/conversations") ? { data: [] } : fetchResponse)
-  }));
+  const fetchGraph = vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue(fetchResponse) });
   const deps: FacebookPageServiceDependencies = {
     model: model as never,
     fetchGraph,
@@ -109,10 +106,7 @@ describe("FacebookPageService", () => {
       "https://graph.facebook.com/v26.0/page-123?fields=id%2Cname%2Cpicture.type%28large%29&access_token=secret-token",
       expect.objectContaining({ method: "GET" })
     );
-    expect(fetchGraph).toHaveBeenCalledWith(
-      "https://graph.facebook.com/v26.0/page-123/conversations?limit=1&access_token=secret-token",
-      expect.objectContaining({ method: "GET" })
-    );
+    expect(fetchGraph).toHaveBeenCalledOnce();
     expect(deps.encryptSecret).toHaveBeenCalledWith("secret-token");
     expect(model.create).toHaveBeenCalledWith(expect.objectContaining({
       userId: "user-1",
@@ -222,25 +216,25 @@ describe("FacebookPageService", () => {
     expect(model.create).not.toHaveBeenCalled();
   });
 
-  it("rejects a Page token without Messenger permission before encryption or persistence", async () => {
+  it("connects an identity-valid Page without probing Conversations API task eligibility", async () => {
     const { deps, model, fetchGraph } = dependencies();
+    model.create.mockResolvedValue(record());
     fetchGraph.mockResolvedValueOnce({
       ok: true, status: 200,
       json: vi.fn().mockResolvedValue({ id: "page-123", name: "Nhuu Store" })
     }).mockResolvedValueOnce({
       ok: false, status: 403,
-      json: vi.fn().mockResolvedValue({ error: { code: 200, message: "pages_messaging denied for secret-token" } })
+      json: vi.fn().mockResolvedValue({ error: { code: 200, message: "Conversations task denied for secret-token" } })
     });
 
-    const error = await new FacebookPageService(deps).connect("user-1", {
+    const connection = await new FacebookPageService(deps).connect("user-1", {
       pageId: "page-123", pageAccessToken: "secret-token"
-    }).catch((caught: unknown) => caught);
+    });
 
-    expect(error).toEqual(new AppError(403, "FACEBOOK_PAGE_MESSAGING_PERMISSION_MISSING", "Facebook Page messaging permission is missing"));
-    expect(JSON.stringify(error)).not.toMatch(/secret-token|ciphertext|pages_messaging denied/);
-    expect(deps.encryptSecret).not.toHaveBeenCalled();
-    expect(model.create).not.toHaveBeenCalled();
-    expect(model.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(connection).toMatchObject({ pageId: "page-123", status: "connected" });
+    expect(JSON.stringify(connection)).not.toMatch(/secret-token|ciphertext|Conversations task denied/);
+    expect(fetchGraph).toHaveBeenCalledOnce();
+    expect(model.create).toHaveBeenCalledOnce();
   });
 
   it("returns one user's connection without exposing encrypted storage", async () => {
@@ -329,8 +323,8 @@ describe("FacebookPageService", () => {
     })));
   });
 
-  it("creates one history record when OAuth selection delegates to connect", async () => {
-    const { deps, model } = dependencies();
+  it("connects a messaging-only OAuth Page and creates one history record", async () => {
+    const { deps, model, fetchGraph } = dependencies();
     model.create.mockResolvedValue(record());
     const service = new FacebookPageService(deps);
     const oauthStore = {
@@ -344,7 +338,7 @@ describe("FacebookPageService", () => {
           id: "page-123",
           name: "Nhuu Store",
           accessToken: "oauth-page-secret",
-          canPublish: true,
+          canPublish: false,
           canMessage: true
         }]
       }),
@@ -360,6 +354,7 @@ describe("FacebookPageService", () => {
       (userId, input) => service.connect(userId, input)
     );
 
+    expect(fetchGraph).toHaveBeenCalledOnce();
     expect(settingHistoryServiceMocks.recordSettingHistory).toHaveBeenCalledOnce();
     await vi.waitFor(() => expect(settingHistoryModelMocks.create).toHaveBeenCalledOnce());
     expect(JSON.stringify(settingHistoryServiceMocks.recordSettingHistory.mock.calls[0]?.[0]))
