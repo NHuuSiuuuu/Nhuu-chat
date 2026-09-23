@@ -7,7 +7,7 @@ export const FACEBOOK_CONVERSATION_UNIQUE_INDEX = { platform: 1, channelId: 1, o
 export const NON_FACEBOOK_CONVERSATION_UNIQUE_INDEX = { platform: 1, channelId: 1, ownerId: 1 };
 const FACEBOOK_INDEX_NAME = "platform_1_channelId_1_ownerId_1_customerId_1_facebook";
 const NON_FACEBOOK_INDEX_NAME = "platform_1_channelId_1_ownerId_1_non_facebook";
-const LEGACY_INDEX_NAME = "platform_1_channelId_1_ownerId_1";
+const LEGACY_PAGE_INDEX = { platform: 1, channelId: 1 };
 const NON_FACEBOOK_PLATFORMS = ["instagram", "zalo", "telegram", "telegram_personal", "zalo_personal"];
 const FACEBOOK_FILTER = { platform: "facebook" };
 const NON_FACEBOOK_FILTER = { platform: { $in: NON_FACEBOOK_PLATFORMS } };
@@ -58,8 +58,10 @@ export async function migrateFacebookConversationCustomerIndex(collection: Conve
     indexes = [];
   }
   const facebookIndexes = indexes.filter((item) => sameKey(item.key, FACEBOOK_CONVERSATION_UNIQUE_INDEX));
-  const nonFacebookIndexes = indexes.filter((item) => sameKey(item.key, NON_FACEBOOK_CONVERSATION_UNIQUE_INDEX) && item.name !== LEGACY_INDEX_NAME);
-  const legacyIndexes = indexes.filter((item) => sameKey(item.key, NON_FACEBOOK_CONVERSATION_UNIQUE_INDEX) && item.name === LEGACY_INDEX_NAME);
+  const ownerScopedIndexes = indexes.filter((item) => sameKey(item.key, NON_FACEBOOK_CONVERSATION_UNIQUE_INDEX));
+  const nonFacebookIndexes = ownerScopedIndexes.filter((item) => sameFilter(item.partialFilterExpression, NON_FACEBOOK_FILTER));
+  const legacyIndexes = indexes.filter((item) => sameKey(item.key, LEGACY_PAGE_INDEX)
+    || (sameKey(item.key, NON_FACEBOOK_CONVERSATION_UNIQUE_INDEX) && !sameFilter(item.partialFilterExpression, NON_FACEBOOK_FILTER)));
   if (facebookIndexes.some((item) => !compatible(item, FACEBOOK_FILTER))
     || nonFacebookIndexes.some((item) => !compatible(item, NON_FACEBOOK_FILTER))
     || legacyIndexes.some((item) => item.unique !== true || item.partialFilterExpression !== undefined || item.sparse === true || item.collation !== undefined)) {

@@ -6,6 +6,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 ## [Unreleased]
 
 - Bổ sung hướng dẫn triển khai Inbox Messenger: callback HTTPS, verify token và app secret, quyền OAuth, migration MongoDB và quản lý secret backend.
+- Hỗ trợ thay thế đồng thời bubble optimistic và echo Messenger bằng cùng bản tin đã lưu; sắp xếp tin realtime theo thời điểm tạo và migration cũng xử lý legacy unique index `(platform, channelId)`.
 - Đặc tả MVP Inbox Facebook Messenger thủ công qua webhook và Send API, tách khỏi giai đoạn AI tự trả lời.
 - Lập kế hoạch triển khai Inbox Facebook Messenger theo từng lát kết nối, webhook, gửi tin và Inbox.
 - Làm rõ kiểm tra quyền Messenger tại thao tác đăng ký webhook/gửi tin, tránh dùng Conversations API làm điều kiện kết nối Page.

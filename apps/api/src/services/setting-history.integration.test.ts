@@ -20,13 +20,18 @@ beforeEach(async () => {
   await Promise.all([UserModel.deleteMany({}), FacebookPageConnectionModel.deleteMany({}), SettingHistoryModel.deleteMany({})]);
 });
 
-function service() {
+function service(messengerClient = {
+  subscribePage: async () => undefined,
+  unsubscribePage: async () => undefined
+}) {
   return new FacebookPageService({
     fetchGraph: async (url) => {
       const id = new URL(url).pathname.split("/").at(-1)!;
       return new Response(JSON.stringify({ id, name: `  ${id}  ` }), { status: 200 });
     },
     encryptSecret: (value) => `ciphertext:${value}`,
+    decryptSecret: (value) => value.replace(/^ciphertext:/, ""),
+    messengerClient,
     graphApiVersion: "v26.0"
   });
 }
@@ -49,30 +54,38 @@ describe("setting history with MongoDB", () => {
     expect((await UserModel.findById(userId).lean())?.aiSettings).toMatchObject({ enabled: false, sentimentEnabled: false });
   });
 
-  it("serializes concurrent initial Page connects with exact persisted metadata and response fields", async () => {
+  it("audits one successful connect when concurrent Page claims use compare-and-swap", async () => {
     const userId = String(new mongoose.Types.ObjectId());
-    const pages = service();
-    const results = await Promise.all([
-      pages.connect(userId, { pageId: "page-a", pageAccessToken: "test-secret-a" }),
-      pages.connect(userId, { pageId: "page-b", pageAccessToken: "test-secret-b" })
-    ]);
-    await vi.waitFor(async () => expect(await SettingHistoryModel.countDocuments({ userId })).toBe(2));
+    let signalSubscriptionStarted!: () => void;
+    let releaseSubscription!: () => void;
+    const subscriptionStarted = new Promise<void>((resolve) => { signalSubscriptionStarted = resolve; });
+    const subscriptionGate = new Promise<void>((resolve) => { releaseSubscription = resolve; });
+    const pages = service({
+      subscribePage: async () => { signalSubscriptionStarted(); await subscriptionGate; },
+      unsubscribePage: async () => undefined
+    });
+    const firstConnect = pages.connect(userId, { pageId: "page-a", pageAccessToken: "test-secret-a" });
+    await subscriptionStarted;
+    await expect(pages.connect(userId, { pageId: "page-b", pageAccessToken: "test-secret-b" }))
+      .rejects.toMatchObject({ code: "FACEBOOK_PAGE_CONNECTION_BUSY" });
+    releaseSubscription();
+    const results = [await firstConnect];
+    await vi.waitFor(async () => expect(await SettingHistoryModel.countDocuments({ userId })).toBe(1));
 
     const rows = await SettingHistoryModel.find({ userId }).lean();
     const changes = rows.map((row) => row.changes.find((change: { fieldName: string }) => change.fieldName === "pageId"));
     const first = changes.find((change) => change.oldValue === "(không có)");
     const second = changes.find((change) => change.oldValue !== "(không có)");
     expect(first).toBeDefined();
-    expect(second.oldValue).toBe(first.newValue);
-    expect(second.newValue).not.toBe(first.newValue);
+    expect(second).toBeUndefined();
     const saved = await FacebookPageConnectionModel.findOne({ userId }).lean();
-    expect(saved?.pageId).toBe(second.newValue);
-    expect(results.find((result) => result.pageId === second.newValue)).toEqual({
+    expect(saved?.pageId).toBe(first.newValue);
+    expect(results.find((result) => result.pageId === first.newValue)).toEqual({
       id: String(saved?._id), pageId: saved?.pageId, pageName: saved?.pageName,
       avatarUrl: null, status: "connected", lastValidatedAt: saved?.lastValidatedAt.toISOString(),
       lastErrorCode: null, createdAt: saved?.createdAt.toISOString(), updatedAt: saved?.updatedAt.toISOString()
     });
-    expect(results.map((result) => result.pageName).sort()).toEqual(["page-a", "page-b"]);
+    expect(results[0]?.pageName).toMatch(/^page-[ab]$/);
     expect(JSON.stringify(rows)).not.toMatch(/ciphertext|test-secret/);
   });
 
@@ -80,7 +93,12 @@ describe("setting history with MongoDB", () => {
     const userId = String(new mongoose.Types.ObjectId());
     await FacebookPageConnectionModel.create({ userId, pageId: "page-a", pageName: "Page A", encryptedPageAccessToken: "ciphertext" });
     const pages = service();
-    await Promise.all([pages.remove(userId), pages.remove(userId)]);
+    const results = await Promise.allSettled([pages.remove(userId), pages.remove(userId)]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.find((result) => result.status === "rejected")).toMatchObject({
+      status: "rejected",
+      reason: { code: "FACEBOOK_PAGE_CONNECTION_BUSY" }
+    });
     await vi.waitFor(async () => expect(await SettingHistoryModel.countDocuments({ userId })).toBe(1));
 
     expect(await FacebookPageConnectionModel.countDocuments({ userId })).toBe(0);

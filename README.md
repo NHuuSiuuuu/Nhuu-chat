@@ -104,7 +104,7 @@ Với database đã tồn tại, thực hiện theo đúng thứ tự: sao lưu,
 MONGODB_URI='mongodb+srv://...' pnpm --filter api run migrate:zalo-personal-conversation-index
 ```
 
-Migration tạo unique index `(platform, channelId, ownerId)` trước khi xóa legacy `(platform, channelId)`, không tự chạy khi startup và có thể chạy lại. Nếu đã có owner-scoped index dùng `partialFilterExpression`, `sparse` hoặc `collation`, migration dừng mà không xóa legacy index; người vận hành phải kiểm tra và sửa index không tương thích trước khi chạy lại.
+Migration tạo unique index `(platform, channelId, ownerId)` trước khi xóa legacy `(platform, channelId)`, không tự chạy khi startup và có thể chạy lại. Nếu đã có owner-scoped index dùng `partialFilterExpression`, `sparse` hoặc `collation`, migration dừng mà không xóa legacy index; người vận hành phải kiểm tra và sửa index không tương thích trước khi chạy lại. Khi rollout Facebook Messenger, chạy migration này trước `migrate:facebook-conversation-customer-index`; tuyệt đối không chạy lại sau migration Facebook vì nó sẽ tạo ràng buộc toàn cục cản nhiều PSID trên cùng Page.
 
 ### Trả lời nhanh và ảnh Cloudinary
 

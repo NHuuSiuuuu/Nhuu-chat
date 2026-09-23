@@ -288,7 +288,7 @@ Trước rollout trên database cũ: sao lưu, mở maintenance window, chạy l
 MONGODB_URI='mongodb+srv://...' pnpm --filter api run migrate:zalo-personal-conversation-index
 ```
 
-Migration tạo unique index `(platform, channelId, ownerId)` trước khi xóa legacy `(platform, channelId)`, không tự chạy ở startup và có thể chạy lại. Nếu owner-scoped index hiện có dùng `partialFilterExpression`, `sparse` hoặc `collation`, migration dừng an toàn trước khi tạo/xóa index; cần kiểm tra và sửa index đó rồi mới chạy lại.
+Migration tạo unique index `(platform, channelId, ownerId)` trước khi xóa legacy `(platform, channelId)`, không tự chạy ở startup và có thể chạy lại. Nếu owner-scoped index hiện có dùng `partialFilterExpression`, `sparse` hoặc `collation`, migration dừng an toàn trước khi tạo/xóa index; cần kiểm tra và sửa index đó rồi mới chạy lại. Khi rollout Facebook Messenger, chạy migration này trước `migrate:facebook-conversation-customer-index`; không chạy lại sau migration Facebook vì index toàn cục sẽ chặn nhiều PSID cùng Page.
 
 Phối hợp gửi: `sendLeaseId`/`sendLeaseAt` trên hội thoại làm khóa atomic dùng chung giữa các API process. Bot giữ khóa cho lần kiểm tra pause cuối và thao tác gửi; pause của nhân viên lấy cùng khóa trước khi commit. Không khởi tạo gửi bot sau takeover đã commit, vẫn không retry khi kết quả mạng mơ hồ. Chờ khóa tối đa 15 giây; khóa không tự hết hạn để tránh hai process cùng gửi. Nếu process chết/nhả khóa thất bại, người vận hành xác minh process/lượt gửi cũ đã dừng, kiểm tra đúng hội thoại và lease ID rồi mới xóa khóa có điều kiện theo ID, giữ pause và không xóa claim hay tự gửi lại. Tin đã khởi tạo trước takeover vẫn có thể được Telegram giao muộn.
 

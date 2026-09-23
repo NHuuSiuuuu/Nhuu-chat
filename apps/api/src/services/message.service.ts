@@ -360,7 +360,10 @@ async function persistFacebookOutboundMessage(input: Parameters<typeof createOut
     if (!isDuplicateKey(error) || !input.externalMessageId) throw error;
     const existing = await MessageModel.findOne({ platform: "facebook", externalMessageId: input.externalMessageId }).lean();
     if (!existing) throw error;
-    return { toObject: () => existing };
+    const metadata = input.clientMessageId
+      ? { ...(existing.metadata ?? {}), clientMessageId: input.clientMessageId }
+      : existing.metadata;
+    return { toObject: () => ({ ...existing, ...(metadata ? { metadata } : {}) }) };
   }
 }
 

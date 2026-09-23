@@ -10,6 +10,7 @@ import {
 } from "./migrate-facebook-conversation-customer-index.js";
 
 const legacy = { platform: 1, channelId: 1, ownerId: 1 };
+const olderLegacy = { platform: 1, channelId: 1 };
 const facebookName = "platform_1_channelId_1_ownerId_1_customerId_1_facebook";
 const nonFacebookName = "platform_1_channelId_1_ownerId_1_non_facebook";
 
@@ -38,6 +39,17 @@ describe("migrateFacebookConversationCustomerIndex", () => {
     expect(operations).toEqual([`create:${facebookName}`, `create:${nonFacebookName}`, "drop:platform_1_channelId_1_ownerId_1"]);
   });
 
+  it("drops the supported two-field legacy unique index after creating scoped replacements", async () => {
+    const operations: string[] = [];
+    const collection = {
+      listIndexes: () => ({ toArray: async () => [{ name: "platform_1_channelId_1", key: olderLegacy, unique: true }] }),
+      createIndex: vi.fn(async (_key: unknown, options: { name: string }) => { operations.push(`create:${options.name}`); return options.name; }),
+      dropIndex: vi.fn(async (name: string) => { operations.push(`drop:${name}`); })
+    };
+    await expect(migrateFacebookConversationCustomerIndex(collection)).resolves.toEqual({ createdFacebookIndex: true, createdNonFacebookIndex: true, droppedLegacyIndex: true });
+    expect(operations).toEqual([`create:${facebookName}`, `create:${nonFacebookName}`, "drop:platform_1_channelId_1"]);
+  });
+
   it("is idempotent when only the compatible scoped indexes remain", async () => {
     const collection = {
       listIndexes: () => ({ toArray: async () => [
@@ -57,6 +69,16 @@ describe("migrateFacebookConversationCustomerIndex", () => {
         { name: "platform_1_channelId_1_ownerId_1", key: legacy, unique: true },
         { name: facebookName, key: FACEBOOK_CONVERSATION_UNIQUE_INDEX, unique: true, partialFilterExpression: { platform: "telegram" } }
       ] }),
+      createIndex: vi.fn(), dropIndex: vi.fn()
+    };
+    await expect(migrateFacebookConversationCustomerIndex(collection)).rejects.toThrow("incompatible");
+    expect(collection.createIndex).not.toHaveBeenCalled();
+    expect(collection.dropIndex).not.toHaveBeenCalled();
+  });
+
+  it("refuses to drop a legacy key that has unsupported index options", async () => {
+    const collection = {
+      listIndexes: () => ({ toArray: async () => [{ name: "platform_1_channelId_1", key: olderLegacy, unique: true, sparse: true }] }),
       createIndex: vi.fn(), dropIndex: vi.fn()
     };
     await expect(migrateFacebookConversationCustomerIndex(collection)).rejects.toThrow("incompatible");
@@ -91,6 +113,16 @@ describe("Facebook conversation index migration against MongoDB", () => {
     await collection.insertOne({ platform: "telegram", channelId: "chat-1", ownerId, customerId: new mongoose.Types.ObjectId() });
     await expect(collection.insertOne({ platform: "telegram", channelId: "chat-1", ownerId, customerId: new mongoose.Types.ObjectId() })).rejects.toMatchObject({ code: 11000 });
     await expect(migrateFacebookConversationCustomerIndex(collection)).resolves.toEqual({ createdFacebookIndex: false, createdNonFacebookIndex: false, droppedLegacyIndex: false });
+    await collection.drop();
+  });
+
+  it("replaces the older platform/channel unique index so a Page can have multiple customers", async () => {
+    const collection = mongoose.connection.db!.collection("facebook_conversation_older_index_test");
+    await collection.createIndex(olderLegacy, { name: "platform_1_channelId_1", unique: true });
+    const ownerId = new mongoose.Types.ObjectId();
+    await collection.insertOne({ platform: "facebook", channelId: "page-1", ownerId, customerId: new mongoose.Types.ObjectId() });
+    await expect(migrateFacebookConversationCustomerIndex(collection)).resolves.toMatchObject({ droppedLegacyIndex: true });
+    await collection.insertOne({ platform: "facebook", channelId: "page-1", ownerId, customerId: new mongoose.Types.ObjectId() });
     await collection.drop();
   });
 

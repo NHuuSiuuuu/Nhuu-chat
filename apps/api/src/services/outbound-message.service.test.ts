@@ -724,10 +724,11 @@ describe("sendOutboundMessage", () => {
     dependencyMocks.facebookSendText.mockResolvedValue({ externalMessageId: "mid-echo" });
     dependencyMocks.createMessage.mockRejectedValue(Object.assign(new Error("duplicate"), { code: 11000 }));
 
-    const result = await sendOutboundMessage({ conversationId: "conversation-1", content: "Reply" }, agentAuth);
+    const result = await sendOutboundMessage({ conversationId: "conversation-1", content: "Reply", clientMessageId: "client-echo-1" }, agentAuth);
 
     expect(dependencyMocks.findMessage).toHaveBeenCalledWith({ platform: "facebook", externalMessageId: "facebook:page-1:mid-echo" });
     expect(result.message.id).toBe("echo-message");
+    expect(result.message.clientMessageId).toBe("client-echo-1");
     expect(dependencyMocks.createMessage).toHaveBeenCalledTimes(1);
   });
 
