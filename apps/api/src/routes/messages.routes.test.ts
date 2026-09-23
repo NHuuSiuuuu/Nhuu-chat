@@ -7,6 +7,13 @@ const auth = vi.hoisted(() => ({ verifyAccessToken: vi.fn() }));
 
 vi.mock("../controllers/messages.controller.js", () => controller);
 vi.mock("../services/auth.service.js", () => auth);
+vi.mock("../models/workspace-member.model.js", () => ({ WorkspaceMemberModel: {
+  findOne: () => ({ sort: () => ({ lean: async () => ({ workspaceId: "507f1f77bcf86cd799439022", userId: "agent-1", role: "owner", allowedPages: [] }) }) }),
+  find: () => ({ limit: () => ({ lean: async () => [] }) })
+} }));
+vi.mock("../models/workspace.model.js", () => ({ WorkspaceModel: {
+  findById: () => ({ select: () => ({ lean: async () => ({ ownerUserId: "agent-1" }) }) })
+} }));
 
 import { errorHandler } from "../common/errors.js";
 import { messageRouter } from "./messages.routes.js";

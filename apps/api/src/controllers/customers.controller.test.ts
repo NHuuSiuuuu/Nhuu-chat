@@ -2,8 +2,9 @@ import express, { type ErrorRequestHandler } from "express";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const database = vi.hoisted(() => ({ findByIdAndUpdate: vi.fn(), lean: vi.fn() }));
+const database = vi.hoisted(() => ({ findByIdAndUpdate: vi.fn(), lean: vi.fn(), exists: vi.fn() }));
 vi.mock("../models/customer.model.js", () => ({ CustomerModel: database }));
+vi.mock("../models/conversation.model.js", () => ({ ConversationModel: { exists: database.exists } }));
 
 import { errorHandler } from "../common/errors.js";
 import { updateCustomerTags } from "./customers.controller.js";
@@ -11,6 +12,7 @@ import { updateCustomerTags } from "./customers.controller.js";
 function createTestApp(onError = (_error: unknown) => {}) {
   const app = express();
   app.use(express.json());
+  app.use((req, _res, next) => { Object.assign(req, { auth: { id: "staff-1", email: "staff@example.com", role: "customer" }, workspace: { id: "workspace-1", ownerUserId: "owner-1", role: "staff", allowedPages: ["page-1"] } }); next(); });
   app.patch("/customers/:id/tags", updateCustomerTags);
   const captureError: ErrorRequestHandler = (error, req, res, next) => {
     onError(error);
@@ -23,6 +25,7 @@ function createTestApp(onError = (_error: unknown) => {}) {
 describe("customer controller and service without Mongo", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    database.exists.mockResolvedValue(true);
     database.findByIdAndUpdate.mockReturnValue({ lean: database.lean });
   });
   afterEach(() => vi.restoreAllMocks());
@@ -84,6 +87,14 @@ describe("customer controller and service without Mongo", () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe("INVALID_REQUEST");
+    expect(database.findByIdAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it("does not update customer tags when the customer has no conversation in this Workspace/Page scope", async () => {
+    database.exists.mockResolvedValue(false);
+    const response = await request(createTestApp()).patch("/customers/customer-1/tags").send({ tags: ["vip"] });
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("CUSTOMER_NOT_FOUND");
     expect(database.findByIdAndUpdate).not.toHaveBeenCalled();
   });
 });

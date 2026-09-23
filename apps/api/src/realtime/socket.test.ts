@@ -20,6 +20,11 @@ vi.mock("socket.io", () => ({
 const verifyAccessToken = vi.hoisted(() => vi.fn());
 vi.mock("../services/auth.service.js", () => ({ verifyAccessToken }));
 vi.mock("../models/conversation.model.js", () => ({ ConversationModel: {} }));
+vi.mock("../models/workspace-member.model.js", () => ({ WorkspaceMemberModel: {
+  findOne: () => ({ sort: () => ({ lean: async () => null }) }),
+  find: () => ({ limit: () => ({ lean: async () => [] }) })
+} }));
+vi.mock("../models/workspace.model.js", () => ({ WorkspaceModel: {} }));
 
 import { createRealtimeServer, emitInboxEventToRecipients } from "./socket.js";
 

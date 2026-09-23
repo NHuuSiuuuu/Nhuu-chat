@@ -73,6 +73,20 @@ describe("FacebookPostService", () => {
     expect(d.postModel.create).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-1", connectionId: "connection-1", pageId: "page-1", message: "Hello", status: "draft" }));
   });
 
+  it("creates a post for the explicitly selected Page connection", async () => {
+    const d = deps();
+    d.connectionModel.findOne.mockReturnValue(connectionQuery({
+      _id: "connection-2", userId: "user-1", pageId: "page-2", status: "connected"
+    }));
+    d.postModel.create.mockResolvedValue(row({ connectionId: "connection-2", pageId: "page-2" }));
+    const service = new FacebookPostService(d);
+
+    await service.createPost("user-1", { message: "Page two", mode: "draft", pageId: "page-2" } as never);
+
+    expect(d.connectionModel.findOne).toHaveBeenCalledWith({ userId: "user-1", pageId: "page-2" });
+    expect(d.postModel.create).toHaveBeenCalledWith(expect.objectContaining({ connectionId: "connection-2", pageId: "page-2" }));
+  });
+
   it("converts a future Vietnam local schedule to UTC", async () => {
     const d = deps();
     d.connectionModel.findOne.mockReturnValue(connectionQuery({ _id: "connection-1", pageId: "page-1", status: "connected" }));

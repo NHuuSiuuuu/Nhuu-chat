@@ -76,7 +76,10 @@ vi.mock("../media/cloudinary.service.js", () => ({
 import { sendOutboundMessage } from "./message.service.js";
 
 const now = new Date("2026-09-10T04:30:00.000Z");
-const agentAuth = { id: "agent-1", email: "agent@example.com", role: "agent" } as const;
+const agentAuth = {
+  id: "agent-1", email: "agent@example.com", role: "agent",
+  workspace: { ownerUserId: "customer-1", allowedPages: [] }
+} as const;
 
 function conversation(overrides: Record<string, unknown> = {}) {
   return {

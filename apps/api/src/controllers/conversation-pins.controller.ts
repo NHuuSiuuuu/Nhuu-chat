@@ -18,7 +18,7 @@ function authenticatedUser(request: Request) {
   if (!auth) {
     throw new AppError(401, "AUTHENTICATION_REQUIRED", "Authentication is required");
   }
-  return auth;
+  return { ...auth, workspace: (request as AuthenticatedRequest).workspace };
 }
 
 function parsedConversationId(request: Request): string {

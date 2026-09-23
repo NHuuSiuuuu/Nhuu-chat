@@ -4,6 +4,7 @@ import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
 import { AppError } from "../common/errors.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { emitChatEvent, emitInboxEventToRecipients } from "../realtime/socket.js";
+import { conversationAccessFilter } from "../realtime/access.js";
 import {
   conversationAssignmentSchema,
   conversationBotSchema,
@@ -28,7 +29,7 @@ function authenticatedRequest(request: Request) {
   if (!auth) {
     throw new AppError(401, "AUTHENTICATION_REQUIRED", "Authentication is required");
   }
-  return auth;
+  return { ...auth, workspace: (request as AuthenticatedRequest).workspace };
 }
 
 function conversationId(params: unknown): string {
@@ -37,6 +38,12 @@ function conversationId(params: unknown): string {
     throw new AppError(400, "INVALID_REQUEST", "Conversation id is required");
   }
   return result.data.id;
+}
+
+async function assertConversationAccess(id: string, auth: ReturnType<typeof authenticatedRequest>) {
+  if (!(await ConversationModel.exists({ _id: id, ...conversationAccessFilter(auth) }))) {
+    throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
+  }
 }
 
 export const listConversations: RequestHandler = async (request, response, next) => {
@@ -74,12 +81,14 @@ export const markConversationRead: RequestHandler = async (request, response, ne
 
 export const updateAssignment: RequestHandler = async (request, response, next) => {
   try {
+    const auth = authenticatedRequest(request);
     const id = conversationId(request.params);
+    await assertConversationAccess(id, auth);
     const body = conversationAssignmentSchema.safeParse(request.body);
     if (!body.success) {
       throw new AppError(400, "INVALID_REQUEST", "assignedAgentId is invalid");
     }
-    const result = await updateConversationAssignment(id, body.data.assignedAgentId);
+    const result = await updateConversationAssignment(id, body.data.assignedAgentId, auth.workspace?.id);
     emitChatEvent("chat:conversation_updated", id, result);
     response.json(result);
   } catch (error) {
@@ -89,7 +98,9 @@ export const updateAssignment: RequestHandler = async (request, response, next) 
 
 export const updateBotEnabled: RequestHandler = async (request, response, next) => {
   try {
+    const auth = authenticatedRequest(request);
     const id = conversationIdSchema.parse({ id: request.params.id }).id;
+    await assertConversationAccess(id, auth);
     const body = conversationBotSchema.parse(request.body);
     const result = await updateConversationBotEnabled(id, body.botEnabled);
     emitChatEvent("chat:conversation_updated", id, result);
@@ -101,7 +112,9 @@ export const updateBotEnabled: RequestHandler = async (request, response, next) 
 
 export const updateStatus: RequestHandler = async (request, response, next) => {
   try {
+    const auth = authenticatedRequest(request);
     const id = conversationId(request.params);
+    await assertConversationAccess(id, auth);
     const body = conversationStatusSchema.safeParse(request.body);
     if (!body.success) {
       throw new AppError(400, "INVALID_REQUEST", "status is invalid");

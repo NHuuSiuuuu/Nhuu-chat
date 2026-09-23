@@ -43,9 +43,11 @@ function pageStore(initial: Page | null) {
   let nextId = 1;
   const copy = () => structuredClone(current);
   const model = {
+    find: vi.fn(() => ({ sort: () => ({ lean: async () => current ? [copy()!] : [] }) })),
     findOne: vi.fn((filter: { userId: string }) => {
       const query = {
         select: () => query,
+        sort: () => query,
         lean: async () => current?.userId === filter.userId ? copy() : null
       };
       return query;

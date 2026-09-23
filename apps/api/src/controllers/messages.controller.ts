@@ -14,7 +14,7 @@ function authenticatedRequest(request: Request) {
   if (!auth) {
     throw new AppError(401, "AUTHENTICATION_REQUIRED", "Authentication is required");
   }
-  return auth;
+  return { ...auth, workspace: (request as AuthenticatedRequest).workspace };
 }
 
 function conversationId(params: unknown): string {
@@ -50,7 +50,8 @@ export const sendMessage: RequestHandler = async (request, response, next) => {
       throw new AppError(400, "INVALID_REQUEST", "conversationId and type are required");
     }
     const { conversationId, content, clientMessageId } = body.data;
-    const auth = (request as AuthenticatedRequest).auth;
+    const requestAuth = request as AuthenticatedRequest;
+    const auth = requestAuth.auth ? { ...requestAuth.auth, workspace: requestAuth.workspace } : undefined;
     const file = request.file;
     const attachment: UploadedOutboundFile | undefined = file ? {
       buffer: file.buffer,

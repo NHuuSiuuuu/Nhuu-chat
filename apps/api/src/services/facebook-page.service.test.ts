@@ -55,8 +55,9 @@ function record(overrides: Record<string, unknown> = {}) {
 }
 
 function connectionQuery(value: unknown) {
-  const query = { select: vi.fn(), lean: vi.fn().mockResolvedValue(value) };
+  const query = { select: vi.fn(), sort: vi.fn(), lean: vi.fn().mockResolvedValue(value) };
   query.select.mockReturnValue(query);
+  query.sort.mockReturnValue(query);
   return query;
 }
 
@@ -67,11 +68,13 @@ function dependencies(fetchResponse: unknown = {
 }) {
   const model = {
     findOne: vi.fn(),
+    find: vi.fn(),
     findOneAndUpdate: vi.fn(),
     create: vi.fn(),
     findOneAndDelete: vi.fn()
   };
   model.findOne.mockReturnValue(connectionQuery(null));
+  model.find.mockReturnValue({ sort: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([]) }) });
   let savedRecord: ReturnType<typeof record> | null = null;
   model.create.mockImplementation(async (input: Record<string, unknown>) => {
     savedRecord = record(input);
@@ -183,16 +186,16 @@ describe("FacebookPageService", () => {
     expect(model.findOneAndDelete).not.toHaveBeenCalled();
   });
 
-  it("unsubscribes the previous Page after replacing it with a different Page", async () => {
+  it("adds a second Page without replacing or unsubscribing the first Page", async () => {
     const { deps, model, messengerClient } = dependencies({ id: "page-456" });
-    model.findOne.mockImplementation((filter: { userId?: string | { $ne: string } }) =>
-      connectionQuery(typeof filter.userId === "object" ? null : record({ encryptedPageAccessToken: "ciphertext:old-token" })));
-    model.findOneAndUpdate.mockResolvedValue(record({ pageId: "page-456" }));
+    model.findOne.mockReturnValue(connectionQuery(null));
+    model.create.mockResolvedValue(record({ _id: "connection-2", pageId: "page-456" }));
 
     await new FacebookPageService(deps).connect("user-1", { pageId: "page-456", pageAccessToken: "new-token" });
 
-    expect(messengerClient.unsubscribePage).toHaveBeenCalledWith({ pageId: "page-123", pageAccessToken: "old-token" });
-    expect(messengerClient.unsubscribePage.mock.invocationCallOrder[0]).toBeGreaterThan(model.findOneAndUpdate.mock.invocationCallOrder[0]!);
+    expect(model.create).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-1", pageId: "page-456" }));
+    expect(messengerClient.subscribePage).toHaveBeenCalledWith({ pageId: "page-456", pageAccessToken: "new-token" });
+    expect(messengerClient.unsubscribePage).not.toHaveBeenCalled();
   });
 
   it("keeps the Page reserved when Meta unsubscribe fails without exposing its error", async () => {
@@ -221,9 +224,10 @@ describe("FacebookPageService", () => {
   it("rejects a Page claimed by another owner without replacing the caller's connection", async () => {
     const { deps, model } = dependencies({ id: "page-456", name: "Other Page" });
     const original = record({ pageId: "page-123", encryptedPageAccessToken: "ciphertext:original" });
-    model.findOne.mockImplementation((filter: { userId?: string | { $ne: string } }) => connectionQuery(typeof filter.userId === "object"
-        ? record({ userId: "user-2", pageId: "page-456" })
-        : original));
+    model.findOne.mockImplementation((filter: { userId?: string | { $ne: string }; pageId?: string }) => connectionQuery(
+      typeof filter.userId === "object" ? record({ userId: "user-2", pageId: "page-456" })
+        : filter.pageId === "page-456" ? null : original
+    ));
     model.findOneAndUpdate.mockRejectedValue(new Error("unexpected connection replacement"));
     const service = new FacebookPageService(deps);
 
@@ -236,8 +240,8 @@ describe("FacebookPageService", () => {
 
   it("allows the same owner to reconnect the same Page", async () => {
     const { deps, model } = dependencies();
-    model.findOne.mockImplementation((filter: { userId?: string | { $ne: string } }) =>
-      connectionQuery(typeof filter.userId === "object" ? null : record()));
+    model.findOne.mockImplementation((filter: { userId?: string | { $ne: string }; pageId?: string }) =>
+      connectionQuery(typeof filter.userId === "object" || filter.pageId !== "page-123" ? null : record()));
     model.findOneAndUpdate.mockResolvedValue(record({ encryptedPageAccessToken: "ciphertext:replacement" }));
 
     await expect(new FacebookPageService(deps).connect("user-1", {
@@ -322,6 +326,22 @@ describe("FacebookPageService", () => {
     expect((await service.get("user-1"))).not.toHaveProperty("encryptedPageAccessToken");
   });
 
+  it("lists all Page connections without exposing token fields", async () => {
+    const { deps, model } = dependencies();
+    const listQuery = { sort: vi.fn(), lean: vi.fn().mockResolvedValue([
+      record(), record({ _id: "connection-2", pageId: "page-456", pageName: "Second Page" })
+    ]) };
+    listQuery.sort.mockReturnValue(listQuery);
+    model.find.mockReturnValue(listQuery);
+
+    const pages = await new FacebookPageService(deps).list("user-1");
+
+    expect(model.find).toHaveBeenCalledWith({ userId: "user-1" });
+    expect(pages).toHaveLength(2);
+    expect(pages[1]).toMatchObject({ pageId: "page-456", pageName: "Second Page" });
+    expect(JSON.stringify(pages)).not.toMatch(/ciphertext|encryptedPageAccessToken/);
+  });
+
   it("removes only the authenticated user's connection", async () => {
     const { deps, model } = dependencies();
     model.findOne.mockReturnValue(connectionQuery(record()));
@@ -335,18 +355,29 @@ describe("FacebookPageService", () => {
     }));
   });
 
+  it("removes only the requested Page connection", async () => {
+    const { deps, model } = dependencies();
+    model.findOne.mockReturnValue(connectionQuery(record({ pageId: "page-456" })));
+    model.findOneAndUpdate.mockResolvedValue(record({ pageId: "page-456" }));
+    model.findOneAndDelete.mockResolvedValue(record({ pageId: "page-456" }));
+
+    await new FacebookPageService(deps).remove("user-1", "page-456");
+
+    expect(model.findOne).toHaveBeenCalledWith({ userId: "user-1", pageId: "page-456" });
+    expect(model.findOneAndDelete).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-1", pageId: "page-456" }));
+  });
+
   it("records a connect action with previous and saved safe Page metadata only", async () => {
     const { deps, model } = dependencies({ id: "page-456", name: "Nhuu New" });
-    model.findOne.mockReturnValue(connectionQuery(record({
-        pageId: "page-123",
-        pageName: "Nhuu Old",
-        status: "invalid",
-        encryptedPageAccessToken: "ciphertext:old-token"
-      })));
-    model.findOneAndUpdate.mockResolvedValue(record({
+    model.findOne.mockReturnValue(connectionQuery(null));
+    model.create.mockResolvedValue(record({
+      _id: "connection-2",
       pageId: "page-456",
       pageName: "Nhuu New",
       encryptedPageAccessToken: "ciphertext:new-token"
+    }));
+    model.findOneAndUpdate.mockResolvedValue(record({
+      _id: "connection-2", pageId: "page-456", pageName: "Nhuu New", encryptedPageAccessToken: "ciphertext:new-token"
     }));
     const service = new FacebookPageService(deps);
 
@@ -356,7 +387,7 @@ describe("FacebookPageService", () => {
       userId: "user-1",
       actionType: "CONNECT_FACEBOOK_PAGE",
       actionTitle: "Kết nối Facebook Page",
-      oldValue: { pageId: "page-123", pageName: "Nhuu Old", status: "invalid" },
+      oldValue: {},
       newValue: { pageId: "page-456", pageName: "Nhuu New", status: "connected" }
     });
     expect(JSON.stringify(settingHistoryServiceMocks.recordSettingHistory.mock.calls[0]?.[0]))
@@ -364,9 +395,9 @@ describe("FacebookPageService", () => {
     await vi.waitFor(() => expect(settingHistoryModelMocks.create).toHaveBeenCalledWith(expect.objectContaining({
       actionType: "CONNECT_FACEBOOK_PAGE",
       changes: [
-        { fieldName: "pageId", oldValue: "page-123", newValue: "page-456" },
-        { fieldName: "pageName", oldValue: "Nhuu Old", newValue: "Nhuu New" },
-        { fieldName: "status", oldValue: "invalid", newValue: "connected" }
+        { fieldName: "pageId", oldValue: "(không có)", newValue: "page-456" },
+        { fieldName: "pageName", oldValue: "(không có)", newValue: "Nhuu New" },
+        { fieldName: "status", oldValue: "(không có)", newValue: "connected" }
       ]
     })));
   });

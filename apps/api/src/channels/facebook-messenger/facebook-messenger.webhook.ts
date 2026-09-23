@@ -5,6 +5,8 @@ import { ConversationModel } from "../../models/conversation.model.js";
 import { CustomerModel } from "../../models/customer.model.js";
 import { FacebookPageConnectionModel } from "../../models/facebook-page-connection.model.js";
 import { MessageModel } from "../../models/message.model.js";
+import { WorkspaceMemberModel } from "../../models/workspace-member.model.js";
+import { WorkspaceModel } from "../../models/workspace.model.js";
 import { emitChatEvent, emitInboxEventToRecipients } from "../../realtime/socket.js";
 import { toConversation } from "../../services/conversation.service.js";
 import { toMessage } from "../../services/message.service.js";
@@ -93,7 +95,10 @@ async function persistMessengerText(event: MessengerTextEvent, ownerId: mongoose
   }
   if (emitted) {
     emitChatEvent("chat:message_received", emitted.conversationId, emitted.message);
-    emitInboxEventToRecipients("chat:conversation_updated", emitted.recipients, emitted.conversation);
+    const workspace = await WorkspaceModel.findOne({ ownerUserId: new mongoose.Types.ObjectId(emitted.recipients[0]) }).select("_id").lean();
+    const members = workspace ? await WorkspaceMemberModel.find({ workspaceId: workspace._id }).select("userId allowedPages").lean() : [];
+    const visibleMembers = members.filter((member) => !member.allowedPages?.length || member.allowedPages.includes(emitted!.conversation.channelId));
+    emitInboxEventToRecipients("chat:conversation_updated", [...emitted.recipients, ...visibleMembers.map((member) => String(member.userId))], emitted.conversation);
   }
 }
 

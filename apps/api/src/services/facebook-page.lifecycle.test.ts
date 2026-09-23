@@ -38,7 +38,7 @@ function deferred<T>() {
 
 function pageRow(userId: string, pageId: string): PageRow {
   return {
-    _id: `connection-${userId}`,
+    _id: `connection-${userId}-${pageId}`,
     userId,
     pageId,
     pageName: pageId,
@@ -59,9 +59,10 @@ function hydratedPage(row: PageRow): PageRow {
   return document as PageRow;
 }
 
-// Mô phỏng index userId/pageId và CAS của Mongo qua các lời gọi bất đồng bộ.
+// Mô phỏng unique pageId và CAS theo từng kết nối của Mongo.
 function pageStore(initial: PageRow[] = []) {
-  const rows = new Map(initial.map((row) => [row.userId, structuredClone(row)]));
+  const rowKey = (row: PageRow) => `${row.userId}:${row.pageId}`;
+  const rows = new Map(initial.map((row) => [rowKey(row), structuredClone(row)]));
   let sequence = 0;
   let failConnectedUpdate = false;
   let hideTokenOnUpdate = false;
@@ -77,12 +78,11 @@ function pageStore(initial: PageRow[] = []) {
   const find = (filter: Record<string, unknown>) => [...rows.values()].find((row) => matches(row, filter));
   const model = {
     findOne: vi.fn((filter: Record<string, unknown>) => {
-      const query = { select: () => query, lean: async () => copy(find(filter)) };
+      const query = { select: () => query, sort: () => query, lean: async () => copy(find(filter)) };
       return query;
     }),
     create: vi.fn(async (input: Record<string, unknown>) => {
       const candidate = input as Omit<PageRow, "_id" | "createdAt" | "updatedAt">;
-      if (rows.has(candidate.userId)) throw { code: 11000, keyPattern: { userId: 1 } };
       if ([...rows.values()].some((row) => row.pageId === candidate.pageId)) {
         throw { code: 11000, keyPattern: { pageId: 1 } };
       }
@@ -92,7 +92,7 @@ function pageStore(initial: PageRow[] = []) {
         createdAt: new Date("2026-09-23T00:00:00Z"),
         updatedAt: new Date("2026-09-23T00:00:00Z")
       };
-      rows.set(row.userId, row);
+      rows.set(rowKey(row), row);
       return hydrateResults ? hydratedPage(row) : copy(row);
     }),
     findOneAndUpdate: vi.fn(async (filter: Record<string, unknown>, update: { $set: Partial<PageRow> }) => {
@@ -104,13 +104,13 @@ function pageStore(initial: PageRow[] = []) {
       }
       const next = { ...row, ...update.$set };
       if (dropClaimOnPageSwap && next.pageId !== row.pageId) {
-        rows.delete(row.userId);
+        rows.delete(rowKey(row));
         throw new Error("database claim disappeared during Page swap");
       }
       if ([...rows.values()].some((other) => other.userId !== row.userId && other.pageId === next.pageId)) {
         throw { code: 11000, keyPattern: { pageId: 1 } };
       }
-      rows.set(row.userId, next);
+      rows.set(rowKey(next), next);
       const result = copy(next);
       if (hideTokenOnUpdate && result) delete (result as Partial<PageRow>).encryptedPageAccessToken;
       return result && hydrateResults ? hydratedPage(result) : result;
@@ -118,18 +118,20 @@ function pageStore(initial: PageRow[] = []) {
     findOneAndDelete: vi.fn(async (filter: Record<string, unknown>) => {
       const row = find(filter);
       if (!row) return null;
-      rows.delete(row.userId);
+      rows.delete(rowKey(row));
       return copy(row);
     })
   };
   return {
     model,
-    current: (userId: string) => copy(rows.get(userId)),
+    current: (userId: string, pageId?: string) => copy(pageId
+      ? rows.get(`${userId}:${pageId}`)
+      : [...rows.values()].find((row) => row.userId === userId)),
     failNextConnectedUpdate: () => { failConnectedUpdate = true; },
     hideTokenOnUpdate: () => { hideTokenOnUpdate = true; },
     hydrateResults: () => { hydrateResults = true; },
     dropClaimOnPageSwap: () => { dropClaimOnPageSwap = true; },
-    insertExternal: (row: PageRow) => { rows.set(row.userId, structuredClone(row)); }
+    insertExternal: (row: PageRow) => { rows.set(rowKey(row), structuredClone(row)); }
   };
 }
 
@@ -173,7 +175,7 @@ describe("Facebook Page subscription ownership lifecycle", () => {
     });
   });
 
-  it("keeps exact old and new Page predicates when replacement returns hydrated documents", async () => {
+  it("adds another Page without replacing an existing connection", async () => {
     const store = pageStore([pageRow("owner-1", "page-a")]);
     store.hydrateResults();
     const messengerClient = { subscribePage: vi.fn().mockResolvedValue(undefined), unsubscribePage: vi.fn().mockResolvedValue(undefined) };
@@ -181,14 +183,9 @@ describe("Facebook Page subscription ownership lifecycle", () => {
 
     await expect(connection.connect("owner-1", { pageId: "page-b", pageAccessToken: "new-token" }))
       .resolves.toMatchObject({ pageId: "page-b", status: "connected" });
-    expect(store.model.findOneAndUpdate.mock.calls[1]?.[0]).toMatchObject({
-      _id: "connection-owner-1", userId: "owner-1", pageId: "page-a", status: "invalid",
-      lastErrorCode: "FACEBOOK_MESSENGER_REPLACE_PENDING", encryptedPageAccessToken: "ciphertext:old-owner-1"
-    });
-    expect(store.model.findOneAndUpdate.mock.calls[2]?.[0]).toMatchObject({
-      _id: "connection-owner-1", userId: "owner-1", pageId: "page-b", status: "invalid",
-      lastErrorCode: "FACEBOOK_MESSENGER_SUBSCRIBE_PENDING", encryptedPageAccessToken: "ciphertext:1:new-token"
-    });
+    expect(store.current("owner-1", "page-a")).toMatchObject({ status: "connected" });
+    expect(store.current("owner-1", "page-b")).toMatchObject({ status: "connected" });
+    expect(messengerClient.unsubscribePage).not.toHaveBeenCalled();
   });
 
   it("rejects an incomplete reservation before a Meta call or CAS query", async () => {
@@ -218,7 +215,7 @@ describe("Facebook Page subscription ownership lifecycle", () => {
     expect(store.current("owner-1")).toBeNull();
   });
 
-  it("replaces a Page when update results hide the encrypted token", async () => {
+  it("adds a Page when update results hide the encrypted token", async () => {
     const store = pageStore([pageRow("owner-1", "page-a")]);
     store.hideTokenOnUpdate();
     const messengerClient = { subscribePage: vi.fn().mockResolvedValue(undefined), unsubscribePage: vi.fn().mockResolvedValue(undefined) };
@@ -226,7 +223,7 @@ describe("Facebook Page subscription ownership lifecycle", () => {
 
     await expect(connection.connect("owner-1", { pageId: "page-b", pageAccessToken: "new-token" }))
       .resolves.toMatchObject({ pageId: "page-b", status: "connected" });
-    expect(store.current("owner-1")?.encryptedPageAccessToken).toContain("new-token");
+    expect(store.current("owner-1", "page-b")?.encryptedPageAccessToken).toContain("new-token");
   });
 
   it("keeps a Page reserved and resumable when persistence fails after Meta subscribes", async () => {
@@ -281,43 +278,6 @@ describe("Facebook Page subscription ownership lifecycle", () => {
     await expect(pending).resolves.toMatchObject({ pageId: "page-a", status: "connected" });
   });
 
-  it("restores the old subscription when another owner claims the replacement Page before CAS", async () => {
-    const store = pageStore([pageRow("owner-1", "page-a")]);
-    const messengerClient = {
-      subscribePage: vi.fn().mockResolvedValue(undefined),
-      unsubscribePage: vi.fn(async () => { store.insertExternal(pageRow("owner-2", "page-b")); })
-    };
-    const connection = service(store, messengerClient);
-
-    await expect(connection.connect("owner-1", { pageId: "page-b", pageAccessToken: "new-token" }))
-      .rejects.toMatchObject({ code: "FACEBOOK_PAGE_ALREADY_CONNECTED" });
-
-    expect(store.current("owner-1")).toMatchObject({ pageId: "page-a", status: "connected" });
-    expect(messengerClient.subscribePage).toHaveBeenCalledWith({ pageId: "page-a", pageAccessToken: "old-owner-1" });
-    expect(messengerClient.subscribePage).not.toHaveBeenCalledWith({ pageId: "page-b", pageAccessToken: "new-token" });
-  });
-
-  it("retries replacement after a definitive permission rejection while retaining the old Page claim", async () => {
-    const store = pageStore([pageRow("owner-1", "page-a")]);
-    const messengerClient = {
-      subscribePage: vi.fn().mockResolvedValue(undefined),
-      unsubscribePage: vi.fn().mockRejectedValueOnce(new AppError(403, "FACEBOOK_MESSENGER_PERMISSION_DENIED", "private-token Meta body"))
-        .mockResolvedValueOnce(undefined)
-    };
-    const connection = service(store, messengerClient);
-
-    await expect(connection.connect("owner-1", { pageId: "page-b", pageAccessToken: "new-token" }))
-      .rejects.toMatchObject({ code: "FACEBOOK_MESSENGER_PERMISSION_DENIED" });
-    expect(store.current("owner-1")).toMatchObject({
-      pageId: "page-a", status: "invalid", lastErrorCode: "FACEBOOK_MESSENGER_REPLACE_RETRYABLE"
-    });
-    await expect(connection.connect("owner-2", { pageId: "page-a", pageAccessToken: "other-token" }))
-      .rejects.toMatchObject({ code: "FACEBOOK_PAGE_ALREADY_CONNECTED" });
-    await expect(connection.connect("owner-1", { pageId: "page-b", pageAccessToken: "new-token" }))
-      .resolves.toMatchObject({ pageId: "page-b", status: "connected" });
-    expect(messengerClient.unsubscribePage).toHaveBeenCalledTimes(2);
-  });
-
   it("retries removal after a definitive token rejection while retaining the Page claim", async () => {
     const store = pageStore([pageRow("owner-1", "page-a")]);
     const messengerClient = {
@@ -369,39 +329,6 @@ describe("Facebook Page subscription ownership lifecycle", () => {
     expect(messengerClient.unsubscribePage).toHaveBeenCalledOnce();
   });
 
-  it("does not restore Meta subscription after the old DB claim disappears", async () => {
-    const store = pageStore([pageRow("owner-1", "page-a")]);
-    store.dropClaimOnPageSwap();
-    const messengerClient = { subscribePage: vi.fn().mockResolvedValue(undefined), unsubscribePage: vi.fn().mockResolvedValue(undefined) };
-    const connection = service(store, messengerClient);
-
-    await expect(connection.connect("owner-1", { pageId: "page-b", pageAccessToken: "new-token" }))
-      .rejects.toMatchObject({ code: "FACEBOOK_PAGE_CONNECTION_FAILED" });
-
-    expect(store.current("owner-1")).toBeNull();
-    expect(messengerClient.subscribePage).not.toHaveBeenCalled();
-  });
-
-  it("holds the old Page claim while replacement unsubscribe is delayed", async () => {
-    const store = pageStore([pageRow("owner-1", "page-a")]);
-    const entered = deferred<void>();
-    const release = deferred<void>();
-    const messengerClient = {
-      subscribePage: vi.fn().mockResolvedValue(undefined),
-      unsubscribePage: vi.fn(async () => { entered.resolve(); await release.promise; })
-    };
-    const connection = service(store, messengerClient);
-
-    const replacement = connection.connect("owner-1", { pageId: "page-b", pageAccessToken: "new-token" });
-    await entered.promise;
-    expect(store.current("owner-1")).toMatchObject({ pageId: "page-a", status: "invalid" });
-    await expect(connection.connect("owner-2", { pageId: "page-a", pageAccessToken: "other-token" }))
-      .rejects.toMatchObject({ code: "FACEBOOK_PAGE_ALREADY_CONNECTED" });
-    release.resolve();
-    await expect(replacement).resolves.toMatchObject({ pageId: "page-b", status: "connected" });
-    expect(messengerClient.unsubscribePage).toHaveBeenCalledWith({ pageId: "page-a", pageAccessToken: "old-owner-1" });
-  });
-
   it("does not delete a reconnect attempted while removal waits for Meta", async () => {
     const store = pageStore([pageRow("owner-1", "page-a")]);
     const entered = deferred<void>();
@@ -433,7 +360,7 @@ describe("Facebook Page subscription ownership lifecycle", () => {
     };
     const connection = service(store, messengerClient);
 
-    await expect(connection.remove("owner-1")).rejects.toMatchObject({ code: "FACEBOOK_PAGE_CONNECTION_BUSY" });
+    await expect(connection.remove("owner-1", "page-a")).resolves.toBeUndefined();
     expect(store.current("owner-1")).toMatchObject({ pageId: "page-b", status: "connected" });
   });
 });

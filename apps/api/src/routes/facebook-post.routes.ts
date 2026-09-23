@@ -2,6 +2,7 @@ import { Router, type RequestHandler } from "express";
 import multer from "multer";
 
 import { requireRole } from "../auth/auth.middleware.js";
+import { resolveWorkspaceContext } from "../auth/workspace.middleware.js";
 import { AppError } from "../common/errors.js";
 import { cancelFacebookPost, createFacebookPost, listFacebookPosts, retryFacebookPost, updateFacebookPost } from "../controllers/facebook-post.controller.js";
 
@@ -22,7 +23,7 @@ const receivePostImage: RequestHandler = (request, response, next) => {
 };
 
 export const facebookPostRouter = Router();
-facebookPostRouter.use(requireRole("admin", "agent"));
+facebookPostRouter.use(requireRole("admin", "agent", "customer"), resolveWorkspaceContext);
 facebookPostRouter.get("/", listFacebookPosts);
 facebookPostRouter.post("/", receivePostImage, createFacebookPost);
 facebookPostRouter.patch("/:id", receivePostImage, updateFacebookPost);

@@ -8,6 +8,7 @@
     "start": "tsx src/server.ts",
     "migrate:zalo-personal-conversation-index": "tsx src/db/migrate-conversation-owner-index.ts",
     "migrate:facebook-conversation-customer-index": "tsx src/db/migrate-facebook-conversation-customer-index.ts",
+    "migrate:facebook-page-multi-connection-index": "tsx src/db/migrate-facebook-page-multi-connection-index.ts",
     "migrate:workspaces": "tsx src/db/migrate-workspaces.ts",
     "test": "vitest run"
   },

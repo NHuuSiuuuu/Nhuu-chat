@@ -10,7 +10,7 @@ const serviceMocks = vi.hoisted(() => ({
 }));
 vi.mock("../services/workspace-member.service.js", () => ({ workspaceMemberService: serviceMocks }));
 
-import { workspacesRouter } from "./workspaces.routes.js";
+import { workspacesRouter } from "../routes/workspaces.routes.js";
 
 process.env.JWT_SECRET ??= "workspace-route-tests-secret-with-at-least-32-characters";
 

@@ -10,6 +10,8 @@ import { apiRequest } from "../lib/api.js";
 import { resolveApiBaseUrl } from "../lib/api-url.js";
 import { toast } from "sonner";
 import type { AutomationTemplateImportRow } from "../lib/automation-template-import.js";
+import { getActiveWorkspaceId } from "../lib/api.js";
+import type { FacebookPageConnectionResponse } from "@nhuu-chat/contracts";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 const TAGS_API_PATH = "/api/v1/conversation-tags";
@@ -28,6 +30,7 @@ const pickerColors = ["#9ca3af", "#ef4444", "#f97316", "#eab308", "#22c55e", "#1
 const settingsMenuItems = [
   { item: "Giới thiệu", isComingSoon: false },
   { item: "Cài đặt chung", isComingSoon: false },
+  { item: "Thành viên", isComingSoon: false },
   { item: "Thẻ hội thoại", isComingSoon: false },
   { item: "Trợ lý AI", isComingSoon: false },
   { item: "Hỗ trợ trả lời", isComingSoon: true },
@@ -36,9 +39,10 @@ const settingsMenuItems = [
   { item: "Lịch sử", isComingSoon: false }
 ] as const;
 const settingsItems = settingsMenuItems.map(({ item }) => item);
-export const mobileSettingsItems = ["Giới thiệu", "Cài đặt chung", "Trợ lý AI", "Giao diện"] as const;
+export const mobileSettingsItems = ["Giới thiệu", "Cài đặt chung", "Thành viên", "Trợ lý AI", "Giao diện"] as const;
 const settingsIconByItem = {
   "Cài đặt chung": "settings",
+  "Thành viên": "users",
   "Thẻ hội thoại": "tag",
   "Trợ lý AI": "sparkles",
   "Hỗ trợ trả lời": "chat",
@@ -68,6 +72,7 @@ export function isSettingsPlaceholderTab(item: SettingsItem): boolean {
 
 const settingsSlugByItem: Record<SettingsItem, string> = {
   "Cài đặt chung": "general",
+  "Thành viên": "members",
   "Thẻ hội thoại": "conversation-tags",
   "Trợ lý AI": "ai-assistant",
   "Hỗ trợ trả lời": "quick-replies",
@@ -1005,6 +1010,30 @@ function SettingsDevelopmentPlaceholder({ title }: { title: string }) {
   return <div className="grid min-h-[520px] place-items-center p-6 text-center"><div><div className="mx-auto grid size-16 place-items-center rounded-full text-gray-900  text-3xl text-sky-500">⋯</div><h2 className="mt-5 text-2xl font-bold text-gray-900">{title}</h2><p className="mt-2 text-sm text-gray-500">Chức năng đang được phát triển</p></div></div>;
 }
 
+type WorkspaceMemberView = { userId: string; email: string; name: string; role: "owner" | "admin" | "staff"; allowedPages: string[] };
+
+function WorkspaceMembersPanel({ token, refresh }: { token: string; refresh?: () => Promise<string | null> }) {
+  const [workspaceId, setWorkspaceId] = useState(() => getActiveWorkspaceId() ?? "");
+  const [canManage, setCanManage] = useState(false);
+  const [members, setMembers] = useState<WorkspaceMemberView[]>([]);
+  const [pages, setPages] = useState<FacebookPageConnectionResponse[]>([]);
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<"admin" | "staff">("staff");
+  const [allowedPages, setAllowedPages] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const load = async (id: string) => {
+    const [memberResult, pageResult] = await Promise.all([
+      apiRequest<{ members: WorkspaceMemberView[] }>(API_URL, `/api/v1/workspaces/${id}/members`, token, {}, refresh),
+      apiRequest<{ connections: FacebookPageConnectionResponse[] }>(API_URL, "/api/v1/facebook-page/connections", token, {}, refresh).catch(() => ({ connections: [] }))
+    ]);
+    setMembers(memberResult.members); setPages(pageResult.connections);
+  };
+  useEffect(() => { let live = true; void apiRequest<{ workspaces: Array<{ id: string; role: string }> }>(API_URL, "/api/v1/workspaces", token, {}, refresh).then(async ({ workspaces }) => { const id = workspaceId || workspaces.find((item) => item.role === "owner")?.id || workspaces[0]?.id || ""; if (!live || !id) return; setWorkspaceId(id); setCanManage(workspaces.some((item) => item.id === id && item.role === "owner")); await load(id); }).catch(() => { if (live) setError("Không thể tải thành viên Workspace."); }); return () => { live = false; }; }, [token, refresh]);
+  const submit = async (event: React.FormEvent) => { event.preventDefault(); if (!workspaceId) return; setBusy(true); setError(""); try { await apiRequest(API_URL, `/api/v1/workspaces/${workspaceId}/members`, token, { method: "POST", body: JSON.stringify({ email, role, allowedPages: role === "staff" ? allowedPages : [] }) }, refresh); setEmail(""); setAllowedPages([]); await load(workspaceId); } catch (failure) { setError(failure instanceof Error ? failure.message : "Không thể thêm thành viên."); } finally { setBusy(false); } };
+  return <div className="p-6"><h2 className="mb-2 text-2xl font-bold text-gray-900">Thành viên Workspace</h2><p className="mb-5 text-sm text-gray-600">Chỉ tài khoản đã đăng ký mới được thêm. Chủ sở hữu không thể sửa hoặc xóa.</p>{error && <p className="mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</p>}<div className="rounded-2xl bg-white p-5 shadow-sm"><div className="grid gap-3">{members.map((member) => <div key={member.userId} className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 py-3"><div><p className="font-semibold text-slate-800">{member.name || member.email}</p><p className="text-sm text-slate-500">{member.email}{member.allowedPages.length ? ` · ${member.allowedPages.join(", ")}` : " · Tất cả Page"}</p></div><div className="flex items-center gap-2"><select aria-label={`Vai trò của ${member.email}`} disabled={!canManage || member.role === "owner" || busy} value={member.role} className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50" onChange={async (event) => { const nextRole = event.target.value as "admin" | "staff"; await apiRequest(API_URL, `/api/v1/workspaces/${workspaceId}/members/${member.userId}`, token, { method: "PATCH", body: JSON.stringify({ role: nextRole, allowedPages: nextRole === "staff" ? member.allowedPages : [] }) }, refresh); await load(workspaceId); }}><option value="owner">Chủ sở hữu</option><option value="admin">Quản trị viên</option><option value="staff">Nhân viên</option></select>{canManage && member.role !== "owner" && <button type="button" disabled={busy} className="rounded-lg px-3 py-2 text-sm text-rose-600 hover:bg-rose-50 cursor-pointer disabled:cursor-not-allowed" onClick={async () => { if (window.confirm(`Xóa ${member.email} khỏi Workspace?`)) { await apiRequest(API_URL, `/api/v1/workspaces/${workspaceId}/members/${member.userId}`, token, { method: "DELETE" }, refresh); await load(workspaceId); } }}>Xóa</button>}</div>{canManage && member.role === "staff" && pages.length > 0 && <fieldset className="grid gap-2 sm:col-span-2"><legend className="text-xs font-medium text-slate-600">Page được phép truy cập (để trống: tất cả)</legend>{pages.map((page) => <label key={page.pageId} className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={member.allowedPages.includes(page.pageId)} onChange={async (event) => { const nextPages = event.target.checked ? [...member.allowedPages, page.pageId] : member.allowedPages.filter((id) => id !== page.pageId); await apiRequest(API_URL, `/api/v1/workspaces/${workspaceId}/members/${member.userId}`, token, { method: "PATCH", body: JSON.stringify({ allowedPages: nextPages }) }, refresh); await load(workspaceId); }} />{page.pageName ?? page.pageId}</label>)}</fieldset>}</div>)}</div></div>{canManage && <form className="mt-5 grid gap-4 rounded-2xl bg-white p-5 shadow-sm" onSubmit={(event) => void submit(event)}><h3 className="font-semibold text-slate-800">Thêm thành viên</h3><label className="grid gap-1 text-sm font-medium">Email<input className="rounded-lg border border-slate-200 px-3 py-2.5" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label><label className="grid gap-1 text-sm font-medium">Vai trò<select className="rounded-lg border border-slate-200 px-3 py-2.5" value={role} onChange={(event) => setRole(event.target.value as "admin" | "staff")}><option value="admin">Quản trị viên</option><option value="staff">Nhân viên</option></select></label>{role === "staff" && <fieldset className="grid gap-2"><legend className="text-sm font-medium">Page được phép truy cập (để trống: tất cả)</legend>{pages.map((page) => <label key={page.pageId} className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={allowedPages.includes(page.pageId)} onChange={(event) => setAllowedPages((current) => event.target.checked ? [...current, page.pageId] : current.filter((id) => id !== page.pageId))} />{page.pageName ?? page.pageId}</label>)}</fieldset>}<button disabled={busy} className="w-fit rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-60">{busy ? "Đang lưu..." : "Thêm nhân viên"}</button></form>}</div>;
+}
+
 export function SettingsPage({ token, refresh, onLogoClick, onNavigate, user, onLogout, onProfile }: SettingsPageProps) {
   const [activeTab, setActiveTabState] = useState<SettingsItem>(() => settingsItemFromPath(window.location.pathname));
   const [activeAboutSection, setActiveAboutSectionState] = useState<AboutSection>(() => aboutSectionFromPath(window.location.pathname));
@@ -1112,6 +1141,7 @@ export function SettingsPage({ token, refresh, onLogoClick, onNavigate, user, on
   }
 
   if (activeTab === "Giới thiệu") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><AboutSectionContext.Provider value={{ activeSection: activeAboutSection, onSectionChange: setActiveAboutSection }}><AboutSettings /></AboutSectionContext.Provider></SettingsLayout>;
+  if (activeTab === "Thành viên") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><WorkspaceMembersPanel token={token} refresh={refresh} /></SettingsLayout>;
   if (activeTab === "Cài đặt chung") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><GeneralSettingsPanel apiUrl={API_URL} token={token} refresh={refresh} /></SettingsLayout>;
   if (activeTab === "Trợ lý AI") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><AiAssistantSettings token={token} refresh={refresh} ownerKey={user?.email} /></SettingsLayout>;
   if (activeTab === "Lịch sử") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><SettingHistoryTimeline token={token} refresh={refresh} apiUrl={API_URL} /></SettingsLayout>;

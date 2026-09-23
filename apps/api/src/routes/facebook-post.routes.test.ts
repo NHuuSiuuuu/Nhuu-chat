@@ -8,6 +8,13 @@ const service = vi.hoisted(() => ({
 
 vi.mock("../services/facebook-post.service.js", () => ({ facebookPostService: service }));
 vi.mock("../services/auth.service.js", () => ({ verifyAccessToken: async () => ({ id: "user-1", role: "agent" }) }));
+vi.mock("../models/workspace-member.model.js", () => ({ WorkspaceMemberModel: {
+  findOne: () => ({ sort: () => ({ lean: async () => ({ workspaceId: "507f1f77bcf86cd799439022", userId: "user-1", role: "owner", allowedPages: [] }) }) }),
+  find: () => ({ limit: () => ({ lean: async () => [] }) })
+} }));
+vi.mock("../models/workspace.model.js", () => ({ WorkspaceModel: {
+  findById: () => ({ select: () => ({ lean: async () => ({ ownerUserId: "user-1" }) }) })
+} }));
 
 import { errorHandler } from "../common/errors.js";
 import { facebookPostRouter } from "./facebook-post.routes.js";

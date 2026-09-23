@@ -10,8 +10,6 @@ import { recordSettingHistory } from "./setting-history.service.js";
 const FACEBOOK_GRAPH_REQUEST_TIMEOUT_MS = 10_000;
 const SUBSCRIBE_PENDING = "FACEBOOK_MESSENGER_SUBSCRIBE_PENDING";
 const SUBSCRIBE_CONFIRM_FAILED = "FACEBOOK_MESSENGER_SUBSCRIBE_CONFIRM_FAILED";
-const REPLACE_PENDING = "FACEBOOK_MESSENGER_REPLACE_PENDING";
-const REPLACE_RETRYABLE = "FACEBOOK_MESSENGER_REPLACE_RETRYABLE";
 const REMOVE_PENDING = "FACEBOOK_MESSENGER_REMOVE_PENDING";
 const REMOVE_RETRYABLE = "FACEBOOK_MESSENGER_REMOVE_RETRYABLE";
 
@@ -40,7 +38,12 @@ interface ValidatedPageValues {
 }
 
 interface ConnectionModel {
-  findOne(filter: Record<string, unknown>): { select(selection: string): { lean(): Promise<FacebookPageConnectionRecord | null> }; lean(): Promise<FacebookPageConnectionRecord | null> };
+  findOne(filter: Record<string, unknown>): {
+    select(selection: string): { sort(sort: Record<string, number>): { lean(): Promise<FacebookPageConnectionRecord | null> }; lean(): Promise<FacebookPageConnectionRecord | null> };
+    sort(sort: Record<string, number>): { lean(): Promise<FacebookPageConnectionRecord | null> };
+    lean(): Promise<FacebookPageConnectionRecord | null>;
+  };
+  find(filter: Record<string, unknown>): { sort(sort: Record<string, number>): { lean(): Promise<FacebookPageConnectionRecord[]> } };
   findOneAndUpdate(filter: Record<string, unknown>, update: Record<string, unknown>, options: Record<string, unknown>): Promise<FacebookPageConnectionRecord | null>;
   create(input: Record<string, unknown>): Promise<FacebookPageConnectionRecord>;
   findOneAndDelete(filter: Record<string, unknown>): Promise<FacebookPageConnectionRecord | null>;
@@ -145,12 +148,17 @@ function claimFilter(userId: string, record: FacebookPageConnectionRecord): Reco
 }
 
 function isTransition(record: FacebookPageConnectionRecord): boolean {
-  return [SUBSCRIBE_PENDING, REPLACE_PENDING, REMOVE_PENDING].includes(record.lastErrorCode ?? "");
+  return [SUBSCRIBE_PENDING, REMOVE_PENDING].includes(record.lastErrorCode ?? "");
 }
 
 function isPageDuplicate(error: unknown): boolean {
   const conflict = error as { code?: number; keyPattern?: { pageId?: number } } | null;
   return conflict?.code === 11000 && conflict.keyPattern?.pageId === 1;
+}
+
+function isLegacyUserIndexConflict(error: unknown): boolean {
+  const conflict = error as { code?: number; keyPattern?: { userId?: number } } | null;
+  return conflict?.code === 11000 && conflict.keyPattern?.userId === 1;
 }
 
 function recordSettingHistorySafely(input: Parameters<typeof recordSettingHistory>[0]): void {
@@ -215,7 +223,7 @@ export class FacebookPageService {
   private readonly graphRequestTimeoutMs: number;
 
   constructor(dependencies: FacebookPageServiceDependencies = {}) {
-    this.model = dependencies.model ?? FacebookPageConnectionModel;
+    this.model = dependencies.model ?? FacebookPageConnectionModel as unknown as ConnectionModel;
     this.fetchGraph = dependencies.fetchGraph ?? fetch;
     this.encrypt = dependencies.encryptSecret ?? encryptSecret;
     this.decrypt = dependencies.decryptSecret ?? decryptSecret;
@@ -257,19 +265,13 @@ export class FacebookPageService {
     let reserved: FacebookPageConnectionRecord;
     // Mongo giữ Page claim trước mọi tác động Meta; unique index phân xử kết nối cạnh tranh.
     for (;;) {
-      existing = await this.model.findOne({ userId }).select("+encryptedPageAccessToken").lean();
+      existing = await this.model.findOne({ userId, pageId: input.pageId }).select("+encryptedPageAccessToken").lean();
       const otherOwner = await this.model.findOne({ pageId: input.pageId, userId: { $ne: userId } }).lean();
       if (otherOwner && (otherOwner.userId === undefined || stringId(otherOwner.userId) !== userId)) {
         throw pageOwnershipError();
       }
       if (existing) {
         if (isTransition(existing)) throw connectionStateError();
-        if (existing.pageId !== input.pageId) {
-          const replacement = await this.reserveReplacement(userId, existing, values);
-          if (!replacement) continue;
-          reserved = replacement;
-          break;
-        }
         try {
           const updated = await this.model.findOneAndUpdate(
             claimFilter(userId, existing),
@@ -292,8 +294,10 @@ export class FacebookPageService {
         break;
       } catch (error) {
         if (isPageDuplicate(error)) throw pageOwnershipError();
-        const conflict = error as { code?: number; keyPattern?: { userId?: number } } | null;
-        if (conflict?.code !== 11000 || conflict.keyPattern?.userId !== 1) throw error;
+        if (isLegacyUserIndexConflict(error)) {
+          throw new AppError(503, "FACEBOOK_PAGE_MULTI_CONNECTION_MIGRATION_REQUIRED", "Facebook Page storage requires migration");
+        }
+        throw error;
       }
     }
     try {
@@ -336,86 +340,19 @@ export class FacebookPageService {
     return result;
   }
 
-  // Giữ reservation Page cũ cho đến khi Meta xác nhận đã ngắt, rồi mới CAS sang Page mới.
-  private async reserveReplacement(
-    userId: string,
-    oldPage: FacebookPageConnectionRecord,
-    values: ValidatedPageValues
-  ): Promise<FacebookPageConnectionRecord | null> {
-    const replacing = await this.model.findOneAndUpdate(
-      claimFilter(userId, oldPage),
-      { $set: { status: "invalid", lastErrorCode: REPLACE_PENDING } },
-      { returnDocument: "after" }
-    );
-    if (!replacing) return null;
-    const oldReservation = connectionSnapshot(replacing, oldPage.encryptedPageAccessToken);
-    if (!oldPage.encryptedPageAccessToken) throw connectionPersistenceError();
-    try {
-      await this.messengerClient.unsubscribePage({
-        pageId: oldPage.pageId,
-        pageAccessToken: this.decrypt(oldPage.encryptedPageAccessToken)
-      });
-    } catch (error) {
-      const safeError = safeMessengerError(error, "UNSUBSCRIBE");
-      if (isDefinitiveMetaRejection(safeError.code)) {
-        await this.model.findOneAndUpdate(
-          { ...claimFilter(userId, oldReservation), lastErrorCode: REPLACE_PENDING },
-          { $set: { lastErrorCode: REPLACE_RETRYABLE } },
-          { returnDocument: "after" }
-        ).catch(() => undefined);
-      }
-      throw safeError;
-    }
-
-    let reserved: FacebookPageConnectionRecord | null;
-    try {
-      reserved = await this.model.findOneAndUpdate(
-        { ...claimFilter(userId, oldReservation), lastErrorCode: REPLACE_PENDING },
-        { $set: { ...values, status: "invalid", lastErrorCode: SUBSCRIBE_PENDING } },
-        { returnDocument: "after" }
-      );
-    } catch (error) {
-      await this.restoreOldPage(userId, oldReservation);
-      if (isPageDuplicate(error)) throw pageOwnershipError();
-      throw connectionPersistenceError();
-    }
-    if (!reserved) {
-      await this.restoreOldPage(userId, oldReservation);
-      throw connectionStateError();
-    }
-    return connectionSnapshot(reserved, values.encryptedPageAccessToken);
-  }
-
-  // Khôi phục subscription cũ khi Page mới không thể giành ownership trong Mongo.
-  private async restoreOldPage(userId: string, oldPage: FacebookPageConnectionRecord): Promise<void> {
-    if (!oldPage.encryptedPageAccessToken) return;
-    try {
-      // Không gửi Meta khi CAS thất bại vì reservation đã mất.
-      const stillOwned = await this.model.findOne({
-        ...claimFilter(userId, oldPage), lastErrorCode: REPLACE_PENDING
-      }).lean();
-      if (!stillOwned) return;
-      await this.messengerClient.subscribePage({
-        pageId: oldPage.pageId,
-        pageAccessToken: this.decrypt(oldPage.encryptedPageAccessToken)
-      });
-      await this.model.findOneAndUpdate(
-        { ...claimFilter(userId, oldPage), lastErrorCode: REPLACE_PENDING },
-        { $set: { status: "connected", lastErrorCode: null } },
-        { returnDocument: "after" }
-      );
-    } catch {
-      // Row invalid vẫn giữ Page claim để lần xử lý sau có thể khôi phục.
-    }
-  }
-
   async get(userId: string): Promise<FacebookPageConnectionResponse | null> {
-    const connection = await this.model.findOne({ userId }).lean();
+    const connection = await this.model.findOne({ userId }).sort({ createdAt: 1, _id: 1 }).lean();
     return connection ? toResponse(connection) : null;
   }
 
-  async remove(userId: string): Promise<void> {
-    const existing = await this.model.findOne({ userId }).select("+encryptedPageAccessToken").lean();
+  async list(userId: string): Promise<FacebookPageConnectionResponse[]> {
+    const connections = await this.model.find({ userId }).sort({ createdAt: 1, _id: 1 }).lean();
+    return connections.map(toResponse);
+  }
+
+  async remove(userId: string, pageId?: string): Promise<void> {
+    const existing = await this.model.findOne({ userId, ...(pageId ? { pageId } : {}) })
+      .select("+encryptedPageAccessToken").lean();
     if (!existing) return;
     if (isTransition(existing) || existing.lastErrorCode === SUBSCRIBE_PENDING) throw connectionStateError();
     const removing = await this.model.findOneAndUpdate(

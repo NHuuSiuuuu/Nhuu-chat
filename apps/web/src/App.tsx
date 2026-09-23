@@ -19,6 +19,7 @@ import { FacebookPublishingPage } from "./pages/FacebookPublishingPage.js";
 import { LandingPage } from "./components/landing/LandingPage.js";
 import { AuthRoutePage } from "./components/auth/AuthRoutePage.js";
 import { authRouteFromPath, authenticatedAuthRedirect, type AuthRoute } from "./components/auth/auth-route.js";
+import { getActiveWorkspaceIdForUser, setActiveWorkspaceSelection, setActiveWorkspaceUser } from "./lib/api.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 
@@ -30,6 +31,7 @@ type AppPage = "landing" | "dashboard" | "telegram" | "inbox" | "settings" | "pr
 type RoutePage = AppPage | "posts" | AuthRoute;
 type InboxPlatform = "telegram_personal" | "zalo_personal" | `facebook:${string}` | undefined;
 type HeaderNavItem = "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt";
+type WorkspaceOption = { id: string; name: string; role: "owner" | "admin" | "staff" };
 const INBOX_PLATFORM_STORAGE_KEY = "nhuu-chat.inbox-platform";
 
 export function pageFromPath(pathname: string): RoutePage {
@@ -126,6 +128,8 @@ function PageSkeleton() {
 export function App() {
   const [auth, setAuth] = useState<AuthState | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState("");
   const [page, setPage] = useState<RoutePage>(() => pageFromPath(window.location.pathname));
   const [inboxPlatform, setInboxPlatform] = useState<InboxPlatform>(() => inboxPlatformFromLocation());
   const [requestedConversation, setRequestedConversation] = useState<{ id: string; request: number } | null>(() => {
@@ -238,11 +242,27 @@ export function App() {
     return () => { cancelled = true; };
   }, [loadSession]);
   useEffect(() => {
+    if (!authReady || !auth) { setWorkspaces([]); return; }
+    let cancelled = false;
+    setActiveWorkspaceUser(auth.user.id);
+    const savedWorkspaceId = getActiveWorkspaceIdForUser(auth.user.id);
+    void fetch(`${API_URL}/api/v1/workspaces`, { credentials: "include", cache: "no-store" })
+      .then((response) => response.ok ? response.json() as Promise<{ workspaces: WorkspaceOption[] }> : Promise.reject())
+      .then(({ workspaces: items }) => {
+        if (cancelled) return;
+        setWorkspaces(items);
+        const current = items.some((item) => item.id === savedWorkspaceId) ? savedWorkspaceId! : items.find((item) => item.role === "owner")?.id ?? items[0]?.id ?? "";
+        setActiveWorkspaceId(current);
+        if (current) setActiveWorkspaceSelection(auth.user.id, current);
+      }).catch(() => setWorkspaces([]));
+    return () => { cancelled = true; };
+  }, [authReady, auth, activeWorkspaceId]);
+  useEffect(() => {
     if (!authReady || !auth || !canAccessInbox(auth.user.role)) return;
     let settingsLoaded = false;
     let notificationsEnabled = false;
     const seenMessageIds = new Set<string>();
-    const socket = createChatSocket(API_URL);
+    const socket = createChatSocket(API_URL, undefined, activeWorkspaceId || undefined);
     const handleIncomingMessage = (message: ChatMessageContract) => {
       if (message.senderType !== "customer" || !settingsLoaded || !notificationsEnabled || seenMessageIds.has(message.id)) return;
       seenMessageIds.add(message.id);
@@ -265,7 +285,7 @@ export function App() {
       socket.off(chatEvents.incomingMessage, handleIncomingMessage);
       socket.disconnect();
     };
-  }, [auth, authReady, navigateToIncomingConversation, refresh]);
+  }, [auth, authReady, activeWorkspaceId, navigateToIncomingConversation, refresh]);
   const logout = useCallback(() => {
     persistInboxPlatform(undefined);
     void fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).finally(() => {
@@ -314,6 +334,7 @@ export function App() {
     appContent = <ProtectedRoute token="cookie-session">{page === "dashboard" ? <DashboardPage {...topbarProps} token="" refresh={refresh} onOpenInbox={(platform) => navigate("inbox", platform)} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} settingsSubmenuItems={mobileSettingsItems} nestedSettingsSubmenuItems={{ "Giới thiệu": mobileAboutSections }} onSettingsSubmenuNavigate={navigateFromMobileSettings} onNestedSettingsSubmenuNavigate={navigateFromMobileAbout} /> : page === "telegram" ? <TelegramPersonalPage token="" refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage {...topbarProps} token="" refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "profile" ? <ProfilePage {...topbarProps} token="" onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "posts" ? <FacebookPublishingPage {...topbarProps} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "development" ? <DevelopmentPage {...topbarProps} section={developmentSection} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : <InboxPage {...topbarProps} token="" platform={inboxConversationPlatform} channelId={inboxChannelId} selectedConversationId={requestedConversation?.id} selectedConversationRequest={requestedConversation?.request} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} />}</ProtectedRoute>;
   }
   return <>
+    {authReady && auth && workspaces.length > 1 && <div className="flex justify-end border-b border-slate-100 bg-white px-4 py-2"><label className="flex items-center gap-2 text-xs text-slate-600">Workspace<select aria-label="Workspace đang dùng" className="max-w-44 rounded-lg border border-slate-200 bg-white px-2 py-1.5 font-semibold text-slate-800 outline-none cursor-pointer" value={activeWorkspaceId} onChange={(event) => { const next = event.target.value; setActiveWorkspaceSelection(auth.user.id, next); setActiveWorkspaceId(next); window.location.reload(); }}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name} · {workspace.role}</option>)}</select></label></div>}
     <Suspense fallback={<PageSkeleton />}>{appContent}</Suspense>
     <Toaster
       position="top-right"

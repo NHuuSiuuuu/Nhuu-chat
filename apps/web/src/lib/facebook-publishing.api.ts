@@ -1,5 +1,6 @@
 import type { FacebookPageConnectionResponse, FacebookPostResponse } from "@nhuu-chat/contracts";
 import { resolveApiBaseUrl } from "./api-url.js";
+import { getActiveWorkspaceId } from "./api.js";
 
 const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 
@@ -55,12 +56,13 @@ function endpoint(baseUrl: string, path: string): string {
 }
 
 async function request<T>(path: string, init: RequestInit = {}, options: RequestOptions = {}, retryOnUnauthorized = true): Promise<T> {
+  const workspaceId = getActiveWorkspaceId();
   const response = await fetch(endpoint(options.baseUrl ?? API_BASE_URL, path), {
     ...init,
     cache: init.cache ?? "no-store",
     credentials: "include",
     signal: options.signal,
-    headers: { ...(init.body instanceof FormData ? {} : { "content-type": "application/json" }), ...init.headers }
+    headers: { ...(init.body instanceof FormData ? {} : { "content-type": "application/json" }), ...(workspaceId ? { "x-workspace-id": workspaceId } : {}), ...init.headers }
   });
   if (response.status === 401 && retryOnUnauthorized) {
     const refreshResponse = await fetch(endpoint(options.baseUrl ?? API_BASE_URL, "/api/v1/auth/refresh"), {
@@ -88,6 +90,10 @@ export function getFacebookPageConnection(baseUrl?: string, signal?: AbortSignal
   return request<FacebookPageConnectionResponse>("/api/v1/facebook-page/connection", { method: "GET" }, { baseUrl, signal });
 }
 
+export function getFacebookPageConnections(baseUrl?: string, signal?: AbortSignal): Promise<FacebookPageConnectionResponse[]> {
+  return request<{ connections: FacebookPageConnectionResponse[] }>("/api/v1/facebook-page/connections", { method: "GET" }, { baseUrl, signal }).then((result) => result.connections);
+}
+
 export function connectFacebookPage(input: { pageId: string; pageAccessToken: string }, baseUrl?: string): Promise<FacebookPageConnectionResponse> {
   return request<FacebookPageConnectionResponse>("/api/v1/facebook-page/connection", {
     method: "POST",
@@ -95,8 +101,8 @@ export function connectFacebookPage(input: { pageId: string; pageAccessToken: st
   }, { baseUrl });
 }
 
-export function removeFacebookPage(baseUrl?: string): Promise<void> {
-  return request<void>("/api/v1/facebook-page/connection", { method: "DELETE" }, { baseUrl });
+export function removeFacebookPage(baseUrl?: string, pageId?: string): Promise<void> {
+  return request<void>(pageId ? `/api/v1/facebook-page/connections/${encodeURIComponent(pageId)}` : "/api/v1/facebook-page/connection", { method: "DELETE" }, { baseUrl });
 }
 
 export function startFacebookOAuth(baseUrl?: string): Promise<{ authorizationUrl: string }> {
@@ -121,21 +127,25 @@ export function selectFacebookOAuthPage(selectionToken: string, pageId: string, 
   }, { baseUrl });
 }
 
-export function listFacebookPosts(status?: FacebookPostResponse["status"], baseUrl?: string): Promise<FacebookPostResponse[]> {
-  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+export function listFacebookPosts(status?: FacebookPostResponse["status"], baseUrl?: string, pageId?: string): Promise<FacebookPostResponse[]> {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (pageId) params.set("pageId", pageId);
+  const query = params.size ? `?${params.toString()}` : "";
   return request<FacebookPostResponse[]>(`/api/v1/facebook-page/posts${query}`, { method: "GET" }, { baseUrl });
 }
 
-function postFormData(input: { message?: string; mode?: "draft" | "now" | "scheduled"; scheduledAt?: string | null; image?: File | null }): FormData {
+function postFormData(input: { message?: string; mode?: "draft" | "now" | "scheduled"; scheduledAt?: string | null; pageId?: string; image?: File | null }): FormData {
   const formData = new FormData();
   if (input.message !== undefined) formData.set("message", input.message);
   if (input.mode !== undefined) formData.set("mode", input.mode);
   if (input.scheduledAt !== undefined && input.scheduledAt !== null) formData.set("scheduledAt", input.scheduledAt);
+  if (input.pageId) formData.set("pageId", input.pageId);
   if (input.image) formData.set("image", input.image);
   return formData;
 }
 
-export function createFacebookPost(input: { message: string; mode: "draft" | "now" | "scheduled"; scheduledAt?: string; image?: File | null }, baseUrl?: string): Promise<FacebookPostResponse> {
+export function createFacebookPost(input: { message: string; mode: "draft" | "now" | "scheduled"; scheduledAt?: string; pageId?: string; image?: File | null }, baseUrl?: string): Promise<FacebookPostResponse> {
   return request<FacebookPostResponse>("/api/v1/facebook-page/posts", { method: "POST", body: postFormData(input) }, { baseUrl });
 }
 

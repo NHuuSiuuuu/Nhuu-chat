@@ -7,7 +7,7 @@ import { createConversationNote as createNote, deleteConversationNote as deleteN
 function auth(request: Request) {
   const value = (request as AuthenticatedRequest).auth;
   if (!value) throw new AppError(401, "AUTHENTICATION_REQUIRED", "Authentication is required");
-  return value;
+  return { ...value, workspace: (request as AuthenticatedRequest).workspace };
 }
 
 function noteParams(request: Request) {
