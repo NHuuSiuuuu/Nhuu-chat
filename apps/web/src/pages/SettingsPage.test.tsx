@@ -3,6 +3,13 @@ import { describe, expect, it } from "vitest";
 import * as settingsModule from "./SettingsPage";
 
 describe("Settings page", () => {
+  it("colors AI settings switches blue when enabled and gray when disabled", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const toggle = source.split("function AiToggle(")[1]?.split("function AiSelect(")[0] ?? "";
+
+    expect(toggle).toContain('checked ? "bg-blue-600" : "bg-gray-300"');
+  });
+
   it("restores a persisted assistant before falling back to the default assistant", () => {
     const assistants = [
       { id: "default", isDefault: true },

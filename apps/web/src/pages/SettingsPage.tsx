@@ -255,7 +255,7 @@ function SettingsDashboardTopbar({ onAboutSectionNavigate, ...props }: SettingsD
 }
 
 function AiToggle({ checked, label, onChange }: { checked: boolean; label: string; onChange: (value: boolean) => void }) {
-  return <button className={`relative inline-flex h-6 w-11 shrink-0 items-center justify-start border-0 p-0 rounded-full transition-colors ${checked ? "text-gray-900 0" : "bg-gray-300"} cursor-pointer transition-opacity hover:opacity-80`} type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)}><span className={`absolute left-1 top-1 size-4 rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : "translate-x-0"}`} /></button>;
+  return <button className={`relative inline-flex h-6 w-11 shrink-0 items-center justify-start border-0 p-0 rounded-full transition-colors ${checked ? "bg-blue-600" : "bg-gray-300"} cursor-pointer transition-opacity hover:opacity-80`} type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)}><span className={`absolute left-1 top-1 size-4 rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : "translate-x-0"}`} /></button>;
 }
 
 function AiSelect({ value, options, label, onChange }: { value: string; options: string[]; label: string; onChange: (value: string) => void }) {
