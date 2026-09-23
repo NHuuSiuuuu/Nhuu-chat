@@ -42,9 +42,13 @@ function pageStore(initial: Page | null) {
   let nextId = 1;
   const copy = () => structuredClone(current);
   const model = {
-    findOne: vi.fn((filter: { userId: string }) => ({
-      lean: async () => current?.userId === filter.userId ? copy() : null
-    })),
+    findOne: vi.fn((filter: { userId: string }) => {
+      const query = {
+        select: () => query,
+        lean: async () => current?.userId === filter.userId ? copy() : null
+      };
+      return query;
+    }),
     findOneAndUpdate: vi.fn(async (
       filter: Record<string, unknown>,
       update: { $set: Partial<Page>; $setOnInsert?: Record<string, unknown> },
@@ -90,6 +94,8 @@ function pageService(model: FacebookPageServiceDependencies["model"], fetchGraph
     model,
     fetchGraph: fetchGraph ?? (async (url) => graphResponse(new URL(url).pathname.split("/").at(-1)!)),
     encryptSecret: (value) => `ciphertext:${value}`,
+    decryptSecret: (value) => value.replace(/^ciphertext:/, ""),
+    messengerClient: { subscribePage: async () => undefined, unsubscribePage: async () => undefined },
     graphApiVersion: "v26.0"
   });
 }

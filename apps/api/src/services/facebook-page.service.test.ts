@@ -54,6 +54,12 @@ function record(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function connectionQuery(value: unknown) {
+  const query = { select: vi.fn(), lean: vi.fn().mockResolvedValue(value) };
+  query.select.mockReturnValue(query);
+  return query;
+}
+
 function dependencies(fetchResponse: unknown = {
   id: "page-123",
   name: "Nhuu Store",
@@ -65,15 +71,21 @@ function dependencies(fetchResponse: unknown = {
     create: vi.fn(),
     findOneAndDelete: vi.fn()
   };
-  model.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(null) });
+  model.findOne.mockReturnValue(connectionQuery(null));
   const fetchGraph = vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue(fetchResponse) });
+  const messengerClient = {
+    subscribePage: vi.fn().mockResolvedValue(undefined),
+    unsubscribePage: vi.fn().mockResolvedValue(undefined)
+  };
   const deps: FacebookPageServiceDependencies = {
     model: model as never,
     fetchGraph,
     encryptSecret: vi.fn((value: string) => `ciphertext:${value}`),
+    decryptSecret: vi.fn((value: string) => value.replace(/^ciphertext:/, "")),
+    messengerClient,
     graphApiVersion: "v26.0"
   };
-  return { deps, model, fetchGraph };
+  return { deps, model, fetchGraph, messengerClient };
 }
 
 function retentionQuery(rows: Array<{ _id: string }> = []) {
@@ -129,6 +141,62 @@ describe("FacebookPageService", () => {
     });
   });
 
+  it("subscribes only after the Page identity and owner are validated and before persistence", async () => {
+    const { deps, model, messengerClient } = dependencies();
+    model.create.mockResolvedValue(record());
+
+    await new FacebookPageService(deps).connect("user-1", { pageId: "page-123", pageAccessToken: "private-token" });
+
+    expect(messengerClient.subscribePage).toHaveBeenCalledWith({ pageId: "page-123", pageAccessToken: "private-token" });
+    expect(messengerClient.subscribePage.mock.invocationCallOrder[0]).toBeGreaterThan(model.findOne.mock.invocationCallOrder[0]!);
+    expect(messengerClient.subscribePage.mock.invocationCallOrder[0]).toBeLessThan(model.create.mock.invocationCallOrder[0]!);
+  });
+
+  it("does not subscribe or persist when Page identity is invalid", async () => {
+    const { deps, model, messengerClient } = dependencies({ id: "different-page" });
+
+    await expect(new FacebookPageService(deps).connect("user-1", { pageId: "page-123", pageAccessToken: "private-token" }))
+      .rejects.toMatchObject({ code: "FACEBOOK_PAGE_ID_MISMATCH" });
+
+    expect(messengerClient.subscribePage).not.toHaveBeenCalled();
+    expect(model.create).not.toHaveBeenCalled();
+  });
+
+  it("does not persist when Meta denies webhook subscription", async () => {
+    const { deps, model, messengerClient } = dependencies();
+    messengerClient.subscribePage.mockRejectedValue(new AppError(403, "FACEBOOK_MESSENGER_PERMISSION_DENIED", "Permission denied"));
+
+    await expect(new FacebookPageService(deps).connect("user-1", { pageId: "page-123", pageAccessToken: "private-token" }))
+      .rejects.toMatchObject({ code: "FACEBOOK_MESSENGER_PERMISSION_DENIED" });
+
+    expect(model.create).not.toHaveBeenCalled();
+    expect(model.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it("unsubscribes the previous Page after replacing it with a different Page", async () => {
+    const { deps, model, messengerClient } = dependencies({ id: "page-456" });
+    model.findOne.mockImplementation((filter: { userId?: string | { $ne: string } }) =>
+      connectionQuery(typeof filter.userId === "object" ? null : record({ encryptedPageAccessToken: "ciphertext:old-token" })));
+    model.findOneAndUpdate.mockResolvedValue(record({ pageId: "page-456" }));
+
+    await new FacebookPageService(deps).connect("user-1", { pageId: "page-456", pageAccessToken: "new-token" });
+
+    expect(messengerClient.unsubscribePage).toHaveBeenCalledWith({ pageId: "page-123", pageAccessToken: "old-token" });
+    expect(messengerClient.unsubscribePage.mock.invocationCallOrder[0]).toBeGreaterThan(model.findOneAndUpdate.mock.invocationCallOrder[0]!);
+  });
+
+  it("removes a Page even if Meta unsubscribe fails without exposing its error", async () => {
+    const { deps, model, messengerClient } = dependencies();
+    model.findOne.mockReturnValue(connectionQuery(record()));
+    model.findOneAndDelete.mockResolvedValue(record());
+    messengerClient.unsubscribePage.mockRejectedValue(new Error("private-token raw Meta error"));
+
+    await expect(new FacebookPageService(deps).remove("user-1")).resolves.toBeUndefined();
+
+    expect(model.findOneAndDelete).toHaveBeenCalledWith({ userId: "user-1" });
+    expect(messengerClient.unsubscribePage).toHaveBeenCalledWith({ pageId: "page-123", pageAccessToken: "token" });
+  });
+
   it("safely persists a null avatar when Graph returns an incomplete picture payload", async () => {
     const { deps, model } = dependencies({ id: "page-123", name: "Nhuu Store", picture: { data: {} } });
     model.create.mockResolvedValue(record({ avatarUrl: null }));
@@ -143,11 +211,9 @@ describe("FacebookPageService", () => {
   it("rejects a Page claimed by another owner without replacing the caller's connection", async () => {
     const { deps, model } = dependencies({ id: "page-456", name: "Other Page" });
     const original = record({ pageId: "page-123", encryptedPageAccessToken: "ciphertext:original" });
-    model.findOne.mockImplementation((filter: { userId?: string | { $ne: string } }) => ({
-      lean: vi.fn().mockResolvedValue(typeof filter.userId === "object"
+    model.findOne.mockImplementation((filter: { userId?: string | { $ne: string } }) => connectionQuery(typeof filter.userId === "object"
         ? record({ userId: "user-2", pageId: "page-456" })
-        : original)
-    }));
+        : original));
     model.findOneAndUpdate.mockRejectedValue(new Error("unexpected connection replacement"));
     const service = new FacebookPageService(deps);
 
@@ -160,9 +226,8 @@ describe("FacebookPageService", () => {
 
   it("allows the same owner to reconnect the same Page", async () => {
     const { deps, model } = dependencies();
-    model.findOne.mockImplementation((filter: { userId?: string | { $ne: string } }) => ({
-      lean: vi.fn().mockResolvedValue(typeof filter.userId === "object" ? null : record())
-    }));
+    model.findOne.mockImplementation((filter: { userId?: string | { $ne: string } }) =>
+      connectionQuery(typeof filter.userId === "object" ? null : record()));
     model.findOneAndUpdate.mockResolvedValue(record({ encryptedPageAccessToken: "ciphertext:replacement" }));
 
     await expect(new FacebookPageService(deps).connect("user-1", {
@@ -239,7 +304,7 @@ describe("FacebookPageService", () => {
 
   it("returns one user's connection without exposing encrypted storage", async () => {
     const { deps, model } = dependencies();
-    model.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(record()) });
+    model.findOne.mockReturnValue(connectionQuery(record()));
     const service = new FacebookPageService(deps);
 
     await expect(service.get("user-1")).resolves.toEqual(expect.objectContaining({ id: "connection-1", pageId: "page-123" }));
@@ -249,7 +314,7 @@ describe("FacebookPageService", () => {
 
   it("removes only the authenticated user's connection", async () => {
     const { deps, model } = dependencies();
-    model.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(record()) });
+    model.findOne.mockReturnValue(connectionQuery(record()));
     model.findOneAndDelete.mockResolvedValue(record());
     const service = new FacebookPageService(deps);
 
@@ -260,14 +325,12 @@ describe("FacebookPageService", () => {
 
   it("records a connect action with previous and saved safe Page metadata only", async () => {
     const { deps, model } = dependencies({ id: "page-456", name: "Nhuu New" });
-    model.findOne.mockReturnValue({
-      lean: vi.fn().mockResolvedValue(record({
+    model.findOne.mockReturnValue(connectionQuery(record({
         pageId: "page-123",
         pageName: "Nhuu Old",
         status: "invalid",
         encryptedPageAccessToken: "ciphertext:old-token"
-      }))
-    });
+      })));
     model.findOneAndUpdate.mockResolvedValue(record({
       pageId: "page-456",
       pageName: "Nhuu New",
@@ -298,7 +361,7 @@ describe("FacebookPageService", () => {
 
   it("records the removed Page identity without its encrypted token", async () => {
     const { deps, model } = dependencies();
-    model.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(record()) });
+    model.findOne.mockReturnValue(connectionQuery(record()));
     model.findOneAndDelete.mockResolvedValue(record());
     const service = new FacebookPageService(deps);
 

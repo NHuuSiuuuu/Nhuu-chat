@@ -1,8 +1,9 @@
 import type { FacebookPageConnectionResponse } from "@nhuu-chat/contracts";
 import { env } from "@nhuu-chat/config";
 
-import { encryptSecret } from "../common/crypto.js";
+import { decryptSecret, encryptSecret } from "../common/crypto.js";
 import { AppError } from "../common/errors.js";
+import { facebookMessengerClient, type FacebookMessengerPageInput } from "../channels/facebook-messenger/facebook-messenger.client.js";
 import { FacebookPageConnectionModel } from "../models/facebook-page-connection.model.js";
 import { recordSettingHistory } from "./setting-history.service.js";
 
@@ -14,6 +15,7 @@ interface FacebookPageConnectionRecord {
   _id: unknown;
   userId?: unknown;
   pageId: string;
+  encryptedPageAccessToken?: string;
   pageName?: string | null;
   avatarUrl?: string | null;
   status: "connected" | "invalid";
@@ -24,16 +26,20 @@ interface FacebookPageConnectionRecord {
 }
 
 interface ConnectionModel {
-  findOne(filter: Record<string, unknown>): { lean(): Promise<FacebookPageConnectionRecord | null> };
+  findOne(filter: Record<string, unknown>): { select(selection: string): { lean(): Promise<FacebookPageConnectionRecord | null> }; lean(): Promise<FacebookPageConnectionRecord | null> };
   findOneAndUpdate(filter: Record<string, unknown>, update: Record<string, unknown>, options: Record<string, unknown>): Promise<FacebookPageConnectionRecord | null>;
   create(input: Record<string, unknown>): Promise<FacebookPageConnectionRecord>;
   findOneAndDelete(filter: { userId: string }): Promise<FacebookPageConnectionRecord | null>;
 }
 
+type MessengerSubscriptionClient = Pick<typeof facebookMessengerClient, "subscribePage" | "unsubscribePage">;
+
 export interface FacebookPageServiceDependencies {
   model?: ConnectionModel;
   fetchGraph?: GraphFetch;
   encryptSecret?: (value: string) => string;
+  decryptSecret?: (value: string) => string;
+  messengerClient?: MessengerSubscriptionClient;
   graphApiVersion?: string;
   graphRequestTimeoutMs?: number;
 }
@@ -130,6 +136,8 @@ export class FacebookPageService {
   private readonly model: ConnectionModel;
   private readonly fetchGraph: GraphFetch;
   private readonly encrypt: (value: string) => string;
+  private readonly decrypt: (value: string) => string;
+  private readonly messengerClient: MessengerSubscriptionClient;
   private readonly graphApiVersion: string;
   private readonly graphRequestTimeoutMs: number;
 
@@ -137,6 +145,8 @@ export class FacebookPageService {
     this.model = dependencies.model ?? FacebookPageConnectionModel;
     this.fetchGraph = dependencies.fetchGraph ?? fetch;
     this.encrypt = dependencies.encryptSecret ?? encryptSecret;
+    this.decrypt = dependencies.decryptSecret ?? decryptSecret;
+    this.messengerClient = dependencies.messengerClient ?? facebookMessengerClient;
     this.graphApiVersion = dependencies.graphApiVersion ?? env.META_GRAPH_API_VERSION;
     this.graphRequestTimeoutMs = dependencies.graphRequestTimeoutMs ?? FACEBOOK_GRAPH_REQUEST_TIMEOUT_MS;
   }
@@ -174,13 +184,19 @@ export class FacebookPageService {
     };
     let existing: FacebookPageConnectionRecord | null;
     let saved: FacebookPageConnectionRecord;
+    let subscribed = false;
     // Chỉ ghi khi toàn bộ metadata audit còn khớp; đọc lại nếu kết nối bị thay hoặc xóa.
     for (;;) {
-      existing = await this.model.findOne({ userId }).lean();
+      existing = await this.model.findOne({ userId }).select("+encryptedPageAccessToken").lean();
       // Từ chối Page đã thuộc owner khác trước khi ghi để bảo vệ dữ liệu khi index đang được triển khai.
       const otherOwner = await this.model.findOne({ pageId: input.pageId, userId: { $ne: userId } }).lean();
       if (otherOwner && (otherOwner.userId === undefined || stringId(otherOwner.userId) !== userId)) {
         throw pageOwnershipError();
+      }
+      // Chỉ đăng ký webhook sau khi credential và quyền sở hữu Page đã được xác nhận.
+      if (!subscribed) {
+        await this.messengerClient.subscribePage({ pageId: input.pageId, pageAccessToken: input.pageAccessToken });
+        subscribed = true;
       }
       if (existing) {
         let updated: FacebookPageConnectionRecord | null;
@@ -208,6 +224,9 @@ export class FacebookPageService {
         if (conflict?.code !== 11000 || conflict.keyPattern?.userId !== 1) throw error;
       }
     }
+    if (existing && existing.pageId !== input.pageId) {
+      await this.unsubscribeSafely(existing);
+    }
     const result = toResponse(saved);
     recordSettingHistorySafely({
       userId,
@@ -225,8 +244,12 @@ export class FacebookPageService {
   }
 
   async remove(userId: string): Promise<void> {
+    const candidate = await this.model.findOne({ userId }).select("+encryptedPageAccessToken").lean();
     const existing = await this.model.findOneAndDelete({ userId });
     if (!existing) return;
+    if (candidate && stringId(candidate._id) === stringId(existing._id) && candidate.pageId === existing.pageId) {
+      await this.unsubscribeSafely(candidate);
+    }
     recordSettingHistorySafely({
       userId,
       actionType: "DISCONNECT_FACEBOOK_PAGE",
@@ -234,6 +257,20 @@ export class FacebookPageService {
       oldValue: toHistoryMetadata(existing),
       newValue: {}
     });
+  }
+
+  // Ngắt webhook ở Meta là best-effort vì kết nối đã bị xóa hoặc thay thế trong DB.
+  private async unsubscribeSafely(connection: FacebookPageConnectionRecord): Promise<void> {
+    if (!connection.encryptedPageAccessToken) return;
+    try {
+      const input: FacebookMessengerPageInput = {
+        pageId: connection.pageId,
+        pageAccessToken: this.decrypt(connection.encryptedPageAccessToken)
+      };
+      await this.messengerClient.unsubscribePage(input);
+    } catch {
+      // Không trả hoặc ghi raw lỗi Meta và token sau khi DB đã thay đổi.
+    }
   }
 }
 
