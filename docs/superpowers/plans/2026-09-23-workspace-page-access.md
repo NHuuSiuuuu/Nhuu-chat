@@ -166,6 +166,6 @@
 - Focused API run: 204 passed; one pre-existing Telegram deep-equality assertion failed because the response includes `botEnabled`.
 - Full API run: 821 passed, 127 skipped; two unrelated assertions failed and 12 Mongo integration suites could not start because this environment lacks `libcrypto.so.1.1` for MongoMemoryServer 4.4.29.
 - Focused web run: 74/74 passed. Full web run: 381 passed, 7 existing source/assertion tests failed outside this feature.
-- Web production build passed with existing Rollup directive and large-chunk warnings. API TypeScript scan reported seven diagnostics in unrelated files; changed feature files have no diagnostics. No lint script is configured. `git diff --check` passed.
+- Web production build passed with existing Rollup directive and large-chunk warnings. API TypeScript scan reported six diagnostics in unrelated files; changed feature files have no diagnostics. No lint script is configured. `git diff --check` passed.
 - Both database migrations default to dry-run. No production migration or live Meta acceptance was performed.
 - Code commit: `16cbca1`; documentation commit: `0283adf`. Both were pushed to `origin/feature/facebook-messenger-inbox`; no merge was performed.
