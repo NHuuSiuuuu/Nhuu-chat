@@ -8,10 +8,14 @@ const services = vi.hoisted(() => ({
   rotateRefreshToken: vi.fn(),
   revokeRefreshToken: vi.fn()
 }));
+const passwordReset = vi.hoisted(() => ({ resetPassword: vi.fn() }));
+const sockets = vi.hoisted(() => ({ disconnectAuthSession: vi.fn(), disconnectAuthUser: vi.fn() }));
 vi.mock("../services/auth.service.js", () => services);
+vi.mock("../services/password-reset.service.js", () => passwordReset);
+vi.mock("../realtime/socket.js", () => sockets);
 
 import { errorHandler } from "../common/errors.js";
-import { login, logout, refresh, register, session } from "./auth.controller.js";
+import { login, logout, refresh, register, resetPasswordController, session } from "./auth.controller.js";
 
 function createTestApp() {
   const app = express();
@@ -21,6 +25,7 @@ function createTestApp() {
   app.post("/refresh", refresh);
   app.post("/session", session);
   app.post("/logout", logout);
+  app.post("/reset-password", resetPasswordController);
   app.use(errorHandler);
   return app;
 }
@@ -57,7 +62,7 @@ describe("auth controller baseline contracts", () => {
     for (const service of Object.values(services)) expect(service).not.toHaveBeenCalled();
   });
 
-  it.each(endpoints.filter(([path]) => path !== "refresh"))("preserves the pre-validation %s failure when no body was parsed", async (path) => {
+  it.each(endpoints)("preserves the pre-validation %s failure when no body was parsed", async (path) => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const response = await request(createTestApp()).post(`/${path}`);
 
@@ -112,15 +117,14 @@ describe("auth controller baseline contracts", () => {
   it("returns the session user without token material", async () => {
     const app = express();
     app.use((request, _response, next) => {
-      (request as { auth?: unknown }).auth = { id: "user-1", email: "a@example.com", role: "customer" };
+      (request as { auth?: unknown }).auth = { id: "user-1", email: "a@example.com", role: "customer", sessionId: "private-session" };
       next();
     });
     app.post("/session", session);
 
-    await expect(request(app).post("/session")).resolves.toMatchObject({
-      status: 200,
-      body: { user: { id: "user-1", email: "a@example.com", role: "customer" } }
-    });
+    const response = await request(app).post("/session");
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ user: { id: "user-1", email: "a@example.com", role: "customer" } });
   });
 
   it("always clears auth cookies during logout", async () => {
@@ -132,5 +136,60 @@ describe("auth controller baseline contracts", () => {
       expect.stringContaining("nhuu_access_token=;"),
       expect.stringContaining("nhuu_refresh_token=;")
     ]);
+  });
+
+  it("disconnects only a newly revoked session after logout", async () => {
+    services.revokeRefreshToken.mockResolvedValue("session-a");
+    const response = await request(createTestApp()).post("/logout")
+      .set("Cookie", "nhuu_refresh_token=refresh-a");
+
+    expect(response.status).toBe(204);
+    expect(services.revokeRefreshToken).toHaveBeenCalledWith("refresh-a");
+    expect(sockets.disconnectAuthSession).toHaveBeenCalledExactlyOnceWith("session-a");
+    expect(sockets.disconnectAuthUser).not.toHaveBeenCalled();
+  });
+
+  it("clears cookies without disconnecting for a legacy or missing refresh token", async () => {
+    services.revokeRefreshToken.mockResolvedValue(undefined);
+    const app = createTestApp();
+    const legacy = await request(app).post("/logout").set("Cookie", "nhuu_refresh_token=legacy-refresh");
+    const missing = await request(app).post("/logout");
+
+    expect(legacy.status).toBe(204);
+    expect(missing.status).toBe(204);
+    expect(services.revokeRefreshToken).toHaveBeenCalledTimes(1);
+    expect(sockets.disconnectAuthSession).not.toHaveBeenCalled();
+    expect(sockets.disconnectAuthUser).not.toHaveBeenCalled();
+    for (const response of [legacy, missing]) {
+      expect(response.headers["set-cookie"]).toEqual([
+        expect.stringContaining("nhuu_access_token=;"),
+        expect.stringContaining("nhuu_refresh_token=;")
+      ]);
+    }
+  });
+
+  it("disconnects all user sockets only after a successful password reset", async () => {
+    passwordReset.resetPassword.mockResolvedValue("user-1");
+    const response = await request(createTestApp()).post("/reset-password")
+      .send({ token: "reset-token", password: "new-password-123" });
+
+    expect(response.status).toBe(204);
+    expect(passwordReset.resetPassword).toHaveBeenCalledWith("reset-token", "new-password-123");
+    expect(sockets.disconnectAuthUser).toHaveBeenCalledExactlyOnceWith("user-1");
+    expect(response.headers["set-cookie"]).toEqual([
+      expect.stringContaining("nhuu_access_token=;"),
+      expect.stringContaining("nhuu_refresh_token=;")
+    ]);
+  });
+
+  it("does not disconnect users when password reset fails", async () => {
+    passwordReset.resetPassword.mockRejectedValue(new Error("transaction failed"));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const response = await request(createTestApp()).post("/reset-password")
+      .send({ token: "reset-token", password: "new-password-123" });
+
+    expect(response.status).toBe(500);
+    expect(sockets.disconnectAuthUser).not.toHaveBeenCalled();
   });
 });

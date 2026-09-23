@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import mongoose from "mongoose";
 
 import { AppError } from "../common/errors.js";
+import { AuthSessionModel } from "../models/auth-session.model.js";
 import { PasswordResetTokenModel } from "../models/password-reset-token.model.js";
 import { UserModel } from "../models/user.model.js";
 import { sendPasswordResetEmail } from "./password-reset-email.service.js";
@@ -49,11 +50,12 @@ export async function requestPasswordReset(email: string): Promise<void> {
   }
 }
 
-// Cập nhật mật khẩu và tiêu thụ token trong cùng transaction để token chỉ được dùng thành công một lần.
-export async function resetPassword(token: string, password: string): Promise<void> {
+// Cập nhật mật khẩu, khóa ghi tạo phiên và tiêu thụ token trong cùng transaction.
+export async function resetPassword(token: string, password: string): Promise<string> {
   const tokenHash = digestToken(token);
   const passwordHash = await hashPassword(password);
   const session = await mongoose.startSession();
+  let userId: string | undefined;
 
   try {
     await session.withTransaction(async () => {
@@ -67,13 +69,20 @@ export async function resetPassword(token: string, password: string): Promise<vo
 
       const result = await UserModel.updateOne(
         { _id: resetToken.userId } as never,
-        { $set: { passwordHash, refreshTokenHash: null } },
+        {
+          $set: { passwordHash, refreshTokenHash: null },
+          $inc: { authSessionRevision: 1 }
+        },
         { session }
       );
       if (result.matchedCount !== 1) {
         throw new AppError(400, "INVALID_RESET_TOKEN", "Reset link is invalid or expired");
       }
+      await AuthSessionModel.deleteMany({ userId: resetToken.userId }, { session });
+      userId = String(resetToken.userId);
     });
+    if (!userId) throw new Error("Password reset transaction did not complete");
+    return userId;
   } finally {
     await session.endSession();
   }

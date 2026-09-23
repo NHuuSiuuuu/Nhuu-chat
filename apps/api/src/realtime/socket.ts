@@ -2,7 +2,7 @@ import type { Server as HttpServer } from "node:http";
 import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { createClient, type RedisClientType } from "redis";
-import { verifyAccessToken } from "../services/auth.service.js";
+import { isAuthSessionActive, verifyAccessToken, type AuthPrincipal } from "../services/auth.service.js";
 import { ACCESS_COOKIE_NAME, readCookieHeader } from "../auth/auth.cookies.js";
 import { chatEvents } from "@nhuu-chat/contracts";
 import { ConversationModel } from "../models/conversation.model.js";
@@ -30,14 +30,38 @@ export function createRealtimeServer(httpServer: HttpServer, redisUrl = process.
     } catch { next(new Error("unauthorized")); }
   });
   io.on("connection", (socket) => {
-    const auth = socket.data.auth as { id: string; role: string };
-    void socket.join(`inbox:${auth.id}`);
-    if (auth.role === "admin") void socket.join("inbox:admins");
+    const auth = socket.data.auth as AuthPrincipal;
+    const ready = (async (): Promise<boolean> => {
+      try {
+        if (auth.sessionId) {
+          await socket.join(`auth-session:${auth.sessionId}`);
+        }
+        await socket.join(`auth-user:${auth.id}`);
+        if (auth.sessionId) {
+          // Phiên có thể bị thu hồi sau handshake nhưng trước khi socket tham gia room.
+          const active = await isAuthSessionActive(auth.id, auth.sessionId);
+          if (!active || socket.disconnected) {
+            socket.disconnect(true);
+            return false;
+          }
+        }
+        if (socket.disconnected) return false;
+        await Promise.all([
+          socket.join(`inbox:${auth.id}`),
+          ...(auth.role === "admin" ? [socket.join("inbox:admins")] : [])
+        ]);
+        return !socket.disconnected;
+      } catch {
+        socket.disconnect(true);
+        return false;
+      }
+    })();
     socket.on(chatEvents.joinRoom, async (conversationId: unknown, callback?: (result: { ok: boolean }) => void) => {
+      if (!(await ready) || socket.disconnected) return callback?.({ ok: false });
       if (typeof conversationId !== "string" || !conversationId) return callback?.({ ok: false });
       const conversation = await ConversationModel.findById(conversationId).lean().catch(() => null);
       const allowed = Boolean(conversation && canJoinConversation(auth, conversation));
-      if (!allowed) return callback?.({ ok: false });
+      if (!allowed || socket.disconnected) return callback?.({ ok: false });
       await socket.join(`conversation:${conversationId}`);
       callback?.({ ok: true });
     });
@@ -48,10 +72,19 @@ export function createRealtimeServer(httpServer: HttpServer, redisUrl = process.
         conversationId: payload.conversationId, isTyping: payload.isTyping === true
       });
     });
+    return ready;
   });
   activeServer = io;
   if (redisUrl) void attachRedisAdapter(io, redisUrl).catch((error) => console.error("Redis adapter unavailable", error));
   return io;
+}
+
+export function disconnectAuthSession(sessionId: string): void {
+  activeServer?.in(`auth-session:${sessionId}`).disconnectSockets(true);
+}
+
+export function disconnectAuthUser(userId: string): void {
+  activeServer?.in(`auth-user:${userId}`).disconnectSockets(true);
 }
 
 export function emitChatEvent(event: string, conversationId: string, payload: unknown): void {

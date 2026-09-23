@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Hỗ trợ đăng nhập nhiều thiết bị với refresh/logout theo từng phiên và thu hồi kết nối Socket.IO tương ứng; đặt lại mật khẩu thu hồi mọi phiên.
 - Tránh treo màn hình khởi tạo vô hạn khi API xác thực không phản hồi; thêm timeout và thao tác thử lại.
 - Đặc tả phiên đăng nhập độc lập theo thiết bị, refresh/logout theo từng phiên và thu hồi socket tương ứng.
 - Lập kế hoạch triển khai phiên đăng nhập nhiều thiết bị theo task backend có review và verification riêng.

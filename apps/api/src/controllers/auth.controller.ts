@@ -11,6 +11,7 @@ import { requestPasswordReset, resetPassword } from "../services/password-reset.
 import { forgotPasswordSchema, loginSchema, registerSchema, resetPasswordSchema } from "../schemas/auth.schemas.js";
 import { clearAuthCookies, REFRESH_COOKIE_NAME, readCookie, setAuthCookies } from "../auth/auth.cookies.js";
 import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
+import { disconnectAuthSession, disconnectAuthUser } from "../realtime/socket.js";
 
 export const register: RequestHandler = async (request, response, next) => {
   try {
@@ -65,13 +66,17 @@ export const refresh: RequestHandler = async (request, response, next) => {
 };
 
 export const session: RequestHandler = (request, response) => {
-  response.status(200).json({ user: (request as AuthenticatedRequest).auth });
+  const { id, email, role } = (request as AuthenticatedRequest).auth!;
+  response.status(200).json({ user: { id, email, role } });
 };
 
 export const logout: RequestHandler = async (request, response, next) => {
   try {
     const refreshToken = readCookie(request, REFRESH_COOKIE_NAME);
-    if (refreshToken) await revokeRefreshToken(refreshToken);
+    if (refreshToken) {
+      const sessionId = await revokeRefreshToken(refreshToken);
+      if (sessionId) disconnectAuthSession(sessionId);
+    }
     clearAuthCookies(response);
     response.status(204).send();
   } catch (error) {
@@ -103,7 +108,8 @@ export const resetPasswordController: RequestHandler = async (request, response,
       throw new AppError(400, "INVALID_REQUEST", "Token and a password of at least 8 characters are required");
     }
 
-    await resetPassword(result.data.token, result.data.password);
+    const userId = await resetPassword(result.data.token, result.data.password);
+    disconnectAuthUser(userId);
     clearAuthCookies(response);
     response.status(204).send();
   } catch (error) {

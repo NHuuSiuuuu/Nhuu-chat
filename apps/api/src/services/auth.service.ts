@@ -2,17 +2,24 @@ import { createHash, randomUUID } from "node:crypto";
 
 import bcrypt from "bcryptjs";
 import { jwtVerify, SignJWT } from "jose";
+import mongoose from "mongoose";
 
 import { AppError } from "../common/errors.js";
+import { AuthSessionModel } from "../models/auth-session.model.js";
 import { UserModel, type Role } from "../models/user.model.js";
 
 const ACCESS_TOKEN_TTL = "15m";
 const REFRESH_TOKEN_TTL = "7d";
+const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface AuthUser {
   id: string;
   email: string;
   role: Role;
+}
+
+export interface AuthPrincipal extends AuthUser {
+  sessionId?: string;
 }
 
 export interface TokenPair {
@@ -22,6 +29,7 @@ export interface TokenPair {
 
 interface VerifiedToken extends AuthUser {
   tokenUse: "access" | "refresh";
+  sessionId?: string;
 }
 
 function jwtKey(): Uint8Array {
@@ -37,8 +45,15 @@ function refreshDigest(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-async function signToken(user: AuthUser, tokenUse: "access" | "refresh"): Promise<string> {
-  return new SignJWT({ email: user.email, role: user.role, tokenUse })
+async function signToken(
+  user: AuthUser,
+  tokenUse: "access" | "refresh",
+  sessionId?: string
+): Promise<string> {
+  const claims: Record<string, string> = { email: user.email, role: user.role, tokenUse };
+  if (sessionId) claims.sessionId = sessionId;
+
+  return new SignJWT(claims)
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.id)
     .setJti(randomUUID())
@@ -49,12 +64,16 @@ async function signToken(user: AuthUser, tokenUse: "access" | "refresh"): Promis
 
 async function verifyToken(token: string, expectedUse: "access" | "refresh"): Promise<VerifiedToken> {
   try {
-    const { payload } = await jwtVerify(token, jwtKey(), { algorithms: ["HS256"] });
+    const { payload } = await jwtVerify(token, jwtKey(), {
+      algorithms: ["HS256"],
+      ...(expectedUse === "access" ? { maxTokenAge: ACCESS_TOKEN_TTL } : {})
+    });
     if (
       !payload.sub ||
       typeof payload.email !== "string" ||
       !["admin", "agent", "customer"].includes(String(payload.role)) ||
-      payload.tokenUse !== expectedUse
+      payload.tokenUse !== expectedUse ||
+      ("sessionId" in payload && (typeof payload.sessionId !== "string" || !payload.sessionId.trim()))
     ) {
       throw new Error("Invalid token claims");
     }
@@ -63,7 +82,8 @@ async function verifyToken(token: string, expectedUse: "access" | "refresh"): Pr
       id: payload.sub,
       email: payload.email,
       role: payload.role as Role,
-      tokenUse: expectedUse
+      tokenUse: expectedUse,
+      ...(typeof payload.sessionId === "string" ? { sessionId: payload.sessionId } : {})
     };
   } catch {
     throw new AppError(401, "INVALID_TOKEN", "Token is invalid or expired");
@@ -87,8 +107,76 @@ export async function issueTokens(user: AuthUser): Promise<TokenPair> {
   return { accessToken, refreshToken };
 }
 
-export async function verifyAccessToken(token: string): Promise<AuthUser> {
+async function issueSessionTokens(user: AuthUser, sessionId: string): Promise<TokenPair> {
+  const [accessToken, refreshToken] = await Promise.all([
+    signToken(user, "access", sessionId),
+    signToken(user, "refresh", sessionId)
+  ]);
+
+  return { accessToken, refreshToken };
+}
+
+// Ghi vào user và phiên trong cùng transaction để đồng bộ với thao tác đặt lại mật khẩu.
+async function createAuthSession(
+  user: AuthUser,
+  expectedPasswordHash: string
+): Promise<{ tokens: TokenPair; sessionId: string }> {
+  const sessionId = randomUUID();
+  const tokens = await issueSessionTokens(user, sessionId);
+  const now = new Date();
+  await ensureAuthSessionsCollection();
+  const mongoSession = await mongoose.startSession();
+  try {
+    await mongoSession.withTransaction(async () => {
+      const result = await UserModel.updateOne(
+        { _id: user.id, passwordHash: expectedPasswordHash },
+        { $inc: { authSessionRevision: 1 } },
+        { session: mongoSession }
+      );
+      if (result.matchedCount !== 1) {
+        throw new AppError(401, "INVALID_CREDENTIALS", "Email or password is incorrect");
+      }
+
+      await AuthSessionModel.create([{
+        sessionId,
+        userId: user.id,
+        refreshTokenHash: refreshDigest(tokens.refreshToken),
+        lastUsedAt: now,
+        expiresAt: new Date(now.getTime() + REFRESH_TOKEN_TTL_MS)
+      }], { session: mongoSession });
+    });
+  } finally {
+    await mongoSession.endSession();
+  }
+
+  return { tokens, sessionId };
+}
+
+// Tạo collection trước transaction để các lượt nâng cấp legacy đầu tiên không tranh chấp tạo collection.
+async function ensureAuthSessionsCollection(): Promise<void> {
+  try {
+    await AuthSessionModel.createCollection();
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === 48) {
+      return;
+    }
+    throw error;
+  }
+}
+
+export async function isAuthSessionActive(userId: string, sessionId: string): Promise<boolean> {
+  return Boolean(await AuthSessionModel.exists({
+    sessionId,
+    userId,
+    expiresAt: { $gt: new Date() }
+  }));
+}
+
+export async function verifyAccessToken(token: string): Promise<AuthPrincipal> {
   const { tokenUse: _tokenUse, ...user } = await verifyToken(token, "access");
+  if (user.sessionId && !(await isAuthSessionActive(user.id, user.sessionId))) {
+    throw new AppError(401, "INVALID_TOKEN", "Token is invalid or expired");
+  }
   return user;
 }
 
@@ -109,11 +197,7 @@ export async function register(
     email: document.email,
     role: document.role
   };
-  const tokens = await issueTokens(user);
-  await UserModel.updateOne(
-    { _id: document._id },
-    { $set: { refreshTokenHash: refreshDigest(tokens.refreshToken) } }
-  );
+  const { tokens } = await createAuthSession(user, document.passwordHash);
 
   return { user, tokens };
 }
@@ -134,11 +218,7 @@ export async function login(email: string, password: string): Promise<{
     email: document.email,
     role: document.role
   };
-  const tokens = await issueTokens(user);
-  await UserModel.updateOne(
-    { _id: document._id },
-    { $set: { refreshTokenHash: refreshDigest(tokens.refreshToken) } }
-  );
+  const { tokens } = await createAuthSession(user, document.passwordHash);
 
   return { user, tokens };
 }
@@ -146,37 +226,131 @@ export async function login(email: string, password: string): Promise<{
 export async function rotateRefreshToken(refreshToken: string): Promise<{ user: AuthUser; tokens: TokenPair }> {
   const tokenUser = await verifyToken(refreshToken, "refresh");
   const currentDigest = refreshDigest(refreshToken);
-  const document = await UserModel.findById(tokenUser.id).select("+refreshTokenHash");
-  if (!document || document.refreshTokenHash !== currentDigest) {
-    throw new AppError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid or revoked");
+
+  // Refresh token mới chỉ được xoay khi digest khớp phiên và cập nhật CAS thành công.
+  if (tokenUser.sessionId) {
+    const now = new Date();
+    const authSession = await AuthSessionModel.findOne({
+      sessionId: tokenUser.sessionId,
+      userId: tokenUser.id,
+      expiresAt: { $gt: now }
+    }).select("+refreshTokenHash");
+    if (!authSession || authSession.refreshTokenHash !== currentDigest) {
+      throw new AppError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid or revoked");
+    }
+
+    const document = await UserModel.findById(tokenUser.id);
+    if (!document) {
+      throw new AppError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid or revoked");
+    }
+    const currentUser: AuthUser = {
+      id: document.id,
+      email: document.email,
+      role: document.role
+    };
+    const tokens = await issueSessionTokens(currentUser, tokenUser.sessionId);
+    const result = await AuthSessionModel.updateOne(
+      {
+        sessionId: tokenUser.sessionId,
+        userId: tokenUser.id,
+        refreshTokenHash: currentDigest,
+        expiresAt: { $gt: now }
+      },
+      {
+        $set: {
+          refreshTokenHash: refreshDigest(tokens.refreshToken),
+          lastUsedAt: now,
+          expiresAt: new Date(now.getTime() + REFRESH_TOKEN_TTL_MS)
+        }
+      }
+    );
+
+    if (result.modifiedCount !== 1) {
+      throw new AppError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid or revoked");
+    }
+
+    return { user: currentUser, tokens };
   }
 
-  const currentUser: AuthUser = {
-    id: document.id,
-    email: document.email,
-    role: document.role
-  };
-  const tokens = await issueTokens(currentUser);
-  const result = await UserModel.updateOne(
-    { _id: document._id, refreshTokenHash: currentDigest },
-    { $set: { refreshTokenHash: refreshDigest(tokens.refreshToken) } }
-  );
+  await ensureAuthSessionsCollection();
+  const mongoSession = await mongoose.startSession();
+  try {
+    let upgraded: { user: AuthUser; tokens: TokenPair } | undefined;
+    await mongoSession.withTransaction(async () => {
+      const legacyUser = await UserModel.findOne({
+        _id: tokenUser.id,
+        refreshTokenHash: currentDigest
+      }).select("+refreshTokenHash").session(mongoSession);
+      if (!legacyUser) {
+        throw new AppError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid or revoked");
+      }
 
-  if (result.modifiedCount !== 1) {
-    throw new AppError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid or revoked");
+      const user: AuthUser = {
+        id: legacyUser.id,
+        email: legacyUser.email,
+        role: legacyUser.role
+      };
+      const sessionId = randomUUID();
+      const tokens = await issueSessionTokens(user, sessionId);
+      const now = new Date();
+      const result = await UserModel.updateOne(
+        { _id: legacyUser._id, refreshTokenHash: currentDigest },
+        { $set: { refreshTokenHash: null } },
+        { session: mongoSession }
+      );
+      if (result.modifiedCount !== 1) {
+        throw new AppError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid or revoked");
+      }
+
+      await AuthSessionModel.create([{
+        sessionId,
+        userId: legacyUser._id,
+        refreshTokenHash: refreshDigest(tokens.refreshToken),
+        lastUsedAt: now,
+        expiresAt: new Date(now.getTime() + REFRESH_TOKEN_TTL_MS)
+      }], { session: mongoSession });
+      upgraded = { user, tokens };
+    });
+
+    if (!upgraded) throw new Error("Legacy refresh transaction did not complete");
+    return upgraded;
+  } finally {
+    await mongoSession.endSession();
   }
-
-  return { user: currentUser, tokens };
 }
 
-export async function revokeRefreshToken(refreshToken: string): Promise<void> {
+// Thu hồi đúng phiên sở hữu refresh token hiện tại; token cũ không được xóa phiên đã xoay.
+export async function revokeRefreshToken(refreshToken: string): Promise<string | undefined> {
+  let tokenUser: VerifiedToken;
   try {
-    const tokenUser = await verifyToken(refreshToken, "refresh");
-    await UserModel.updateOne(
-      { _id: tokenUser.id, refreshTokenHash: refreshDigest(refreshToken) },
-      { $set: { refreshTokenHash: null } }
-    );
+    tokenUser = await verifyToken(refreshToken, "refresh");
   } catch {
-    // Logout phải luôn hoàn tất ở phía client, kể cả khi cookie đã hết hạn.
+    // Cookie sai hoặc hết hạn vẫn được controller xóa khi logout.
+    return undefined;
   }
+
+  const currentDigest = refreshDigest(refreshToken);
+  if (tokenUser.sessionId) {
+    const now = new Date();
+    const authSession = await AuthSessionModel.findOne({
+      sessionId: tokenUser.sessionId,
+      userId: tokenUser.id,
+      expiresAt: { $gt: now }
+    }).select("+refreshTokenHash");
+    if (!authSession || authSession.refreshTokenHash !== currentDigest) return undefined;
+
+    const result = await AuthSessionModel.deleteOne({
+      sessionId: tokenUser.sessionId,
+      userId: tokenUser.id,
+      refreshTokenHash: currentDigest,
+      expiresAt: { $gt: now }
+    });
+    return result.deletedCount === 1 ? tokenUser.sessionId : undefined;
+  }
+
+  await UserModel.updateOne(
+    { _id: tokenUser.id, refreshTokenHash: currentDigest },
+    { $set: { refreshTokenHash: null } }
+  );
+  return undefined;
 }
