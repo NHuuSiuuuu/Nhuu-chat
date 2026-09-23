@@ -182,7 +182,7 @@ export async function sendOutboundMessage(
     const latestInboundAt = latestInbound?.createdAt instanceof Date
       ? latestInbound.createdAt.getTime()
       : new Date(latestInbound?.createdAt ?? Number.NaN).getTime();
-    if (!Number.isFinite(latestInboundAt) || Date.now() - latestInboundAt > 24 * 60 * 60 * 1000) {
+    if (!Number.isFinite(latestInboundAt) || Date.now() - latestInboundAt >= 24 * 60 * 60 * 1000) {
       throw new AppError(422, "FACEBOOK_MESSENGER_POLICY_WINDOW_CLOSED", "The Messenger reply window is closed");
     }
     const pageConnection = await FacebookPageConnectionModel.findOne({

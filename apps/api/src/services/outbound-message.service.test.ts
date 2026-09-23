@@ -691,13 +691,13 @@ describe("sendOutboundMessage", () => {
     expect(dependencyMocks.createMessage).not.toHaveBeenCalled();
   });
 
-  it("allows a Messenger reply exactly at 24 hours and rejects after the window", async () => {
+  it("rejects at exactly 24 hours and allows a reply just inside the window", async () => {
     arrangeConversation(conversation({ platform: "facebook", channelId: "page-1", customerId: { _id: "customer-1", name: "Customer One", platformId: "facebook:page-1:psid-42" } }));
-    const messageTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const messageTime = new Date(now.getTime() - 24 * 60 * 60 * 1000 + 1);
     dependencyMocks.findMessage.mockReturnValue({ sort: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ createdAt: messageTime }) }) }) });
     dependencyMocks.facebookSendText.mockResolvedValue({ externalMessageId: "mid-9001" });
     arrangeStoredMessage();
-    await sendOutboundMessage({ conversationId: "conversation-1", content: "At limit" }, agentAuth);
+    await sendOutboundMessage({ conversationId: "conversation-1", content: "Just inside" }, agentAuth);
     expect(dependencyMocks.facebookSendText).toHaveBeenCalledOnce();
 
     vi.resetAllMocks();
@@ -705,10 +705,12 @@ describe("sendOutboundMessage", () => {
     vi.setSystemTime(now);
     dependencyMocks.acquireSendLease.mockReturnValue({ lean: async () => ({ _id: "conversation-1" }) });
     dependencyMocks.releaseSendLease.mockResolvedValue({ matchedCount: 1 });
+    dependencyMocks.facebookSendText.mockResolvedValue({ externalMessageId: "mid-at-limit" });
+    arrangeStoredMessage();
     arrangeConversation(conversation({ platform: "facebook", channelId: "page-1", customerId: { _id: "customer-1", name: "Customer One", platformId: "facebook:page-1:psid-42" } }));
     dependencyMocks.findMessage.mockReturnValue({ sort: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ createdAt: new Date(messageTime.getTime() - 1) }) }) }) });
     dependencyMocks.findPageConnection.mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ userId: "customer-1", pageId: "page-1", encryptedPageAccessToken: "ciphertext", status: "connected" }) }) });
-    await expect(sendOutboundMessage({ conversationId: "conversation-1", content: "Too late" }, agentAuth))
+    await expect(sendOutboundMessage({ conversationId: "conversation-1", content: "At limit" }, agentAuth))
       .rejects.toMatchObject({ code: "FACEBOOK_MESSENGER_POLICY_WINDOW_CLOSED", statusCode: 422 });
     expect(dependencyMocks.facebookSendText).not.toHaveBeenCalled();
   });
