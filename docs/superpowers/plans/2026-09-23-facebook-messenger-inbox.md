@@ -83,17 +83,19 @@
 **Files:**
 - Create: `apps/api/src/channels/facebook-messenger/facebook-messenger.client.ts`.
 - Create: `apps/api/src/channels/facebook-messenger/facebook-messenger.client.test.ts`.
-- Modify: `apps/api/src/services/facebook-page.service.ts` and its tests to subscribe/unsubscribe after validated connect/remove.
+- Modify: `apps/api/src/services/facebook-page.service.ts` and its tests to reserve Page ownership before subscribe, CAS-finalize connection state, and retain the reservation until unsubscribe completes.
 - Modify: environment schema and tests only if `META_WEBHOOK_VERIFY_TOKEN` is not already represented by deployment environment parsing.
 
 **Interfaces:**
 - `FacebookMessengerClient.sendText({ pageId, pageAccessToken, psid, text }): Promise<{ externalMessageId: string }>`.
 - `FacebookMessengerClient.subscribePage({ pageId, pageAccessToken }): Promise<void>` subscribes only to `messages` and `message_echoes`.
 - Client maps permission, token, policy-window, rate-limit, and timeout failures to safe stable codes; raw Meta bodies and tokens never escape.
+- Connection reserves the new Page in Mongo before subscribing. A replacement keeps the old Page claim until its unsubscribe completes; removal releases a Page claim only after unsubscribe succeeds.
+- Definitive provider failures remain retryable by the same owner while retaining the Page claim. Ambiguous timeouts remain fail-closed and require reconciliation before another owner can claim that Page.
 
 - [ ] Write failing client tests for the exact Send API URL/body, Page subscription fields, success ID parsing, missing permission, timeout, malformed response, and token redaction.
 - [ ] Implement the client with injected fetch, bounded request timeout, and `META_GRAPH_API_VERSION`.
-- [ ] Add connection lifecycle tests proving webhook subscription happens only after valid credentials and removal unsubscribes best-effort without leaking secrets.
+- [ ] Add connection lifecycle tests proving valid Page ownership is reserved before subscription, replacement/removal use CAS while retaining Page claims through unsubscribe, definitive failures are retryable by that owner, ambiguous outcomes cannot release the claim, and secrets remain hidden.
 - [ ] Run the focused client/connection tests and commit the Graph integration boundary.
 
 ### Task 4: Implement verified, idempotent inbound webhook

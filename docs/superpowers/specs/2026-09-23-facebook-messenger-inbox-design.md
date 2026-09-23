@@ -41,6 +41,8 @@ Cho phép nhân viên nhận tin nhắn văn bản mới từ một Facebook Pag
 - Tin trả lời chuẩn chỉ được gửi trong cửa sổ 24 giờ kể từ tin nhắn gần nhất do khách gửi. MVP không dùng message tag hoặc luồng gửi ngoài cửa sổ này.
 - Meta App Development Mode chỉ dùng để test với người/Page có vai trò được cấp. Dùng với Page của khách hàng bên ngoài phụ thuộc Advanced Access/App Review của Meta.
 - Page ID trong webhook phải ánh xạ chính xác tới một tài khoản NhuuChat. Không fan-out một sự kiện sang nhiều owner. Kết nối phải từ chối Page đã gắn với owner khác; trước khi thêm unique index cần kiểm tra dữ liệu kết nối hiện có và xử lý duplicate có kiểm soát.
+- Vòng đời subscription phải giữ unique Page ownership reservation trong suốt các lời gọi Meta: tạo reservation trước khi subscribe, chỉ đánh dấu kết nối hoạt động sau khi subscribe thành công, giữ Page cũ tới khi unsubscribe hoàn tất và chỉ xóa reservation sau khi gỡ subscription thành công. Webhook chỉ xử lý connection hoạt động.
+- Lỗi token/quyền xác định khi unsubscribe cho phép owner thử lại mà vẫn giữ reservation. Timeout/lỗi mơ hồ giữ reservation ở trạng thái lỗi để tránh chuyển Page khi Meta có thể vẫn hoàn tất lời gọi; cần reconciliation thủ công trước khi chuyển owner.
 
 ## Luồng nhận tin
 
