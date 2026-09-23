@@ -125,6 +125,46 @@ describe("FacebookPageService", () => {
     expect(result.avatarUrl).toBeNull();
   });
 
+  it("rejects a Page claimed by another owner without replacing the caller's connection", async () => {
+    const { deps, model } = dependencies({ id: "page-456", name: "Other Page" });
+    const original = record({ pageId: "page-123", encryptedPageAccessToken: "ciphertext:original" });
+    model.findOne.mockImplementation((filter: { userId?: string | { $ne: string } }) => ({
+      lean: vi.fn().mockResolvedValue(typeof filter.userId === "object"
+        ? record({ userId: "user-2", pageId: "page-456" })
+        : original)
+    }));
+    model.findOneAndUpdate.mockRejectedValue(new Error("unexpected connection replacement"));
+    const service = new FacebookPageService(deps);
+
+    await expect(service.connect("user-1", { pageId: "page-456", pageAccessToken: "replacement" }))
+      .rejects.toMatchObject({ statusCode: 409, code: "FACEBOOK_PAGE_ALREADY_CONNECTED" });
+    expect(model.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(model.create).not.toHaveBeenCalled();
+    expect(original).toMatchObject({ pageId: "page-123", encryptedPageAccessToken: "ciphertext:original" });
+  });
+
+  it("allows the same owner to reconnect the same Page", async () => {
+    const { deps, model } = dependencies();
+    model.findOne.mockImplementation((filter: { userId?: string | { $ne: string } }) => ({
+      lean: vi.fn().mockResolvedValue(typeof filter.userId === "object" ? null : record())
+    }));
+    model.findOneAndUpdate.mockResolvedValue(record({ encryptedPageAccessToken: "ciphertext:replacement" }));
+
+    await expect(new FacebookPageService(deps).connect("user-1", {
+      pageId: "page-123", pageAccessToken: "replacement"
+    })).resolves.toMatchObject({ pageId: "page-123" });
+  });
+
+  it("maps a concurrent Page uniqueness conflict to a safe error", async () => {
+    const { deps, model } = dependencies();
+    model.create.mockRejectedValueOnce({ code: 11000, keyPattern: { pageId: 1 }, message: "secret-token" })
+      .mockRejectedValueOnce(new Error("unexpected retry"));
+
+    await expect(new FacebookPageService(deps).connect("user-1", {
+      pageId: "page-123", pageAccessToken: "secret-token"
+    })).rejects.toEqual(new AppError(409, "FACEBOOK_PAGE_ALREADY_CONNECTED", "Facebook Page is already connected"));
+  });
+
   it("uses the configured Graph API version when no service override is supplied", async () => {
     const { deps, model, fetchGraph } = dependencies();
     model.create.mockResolvedValue(record());

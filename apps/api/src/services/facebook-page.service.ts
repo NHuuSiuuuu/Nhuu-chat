@@ -12,6 +12,7 @@ type GraphFetch = (input: string, init?: RequestInit) => Promise<Response>;
 
 interface FacebookPageConnectionRecord {
   _id: unknown;
+  userId?: unknown;
   pageId: string;
   pageName?: string | null;
   avatarUrl?: string | null;
@@ -23,7 +24,7 @@ interface FacebookPageConnectionRecord {
 }
 
 interface ConnectionModel {
-  findOne(filter: { userId: string }): { lean(): Promise<FacebookPageConnectionRecord | null> };
+  findOne(filter: Record<string, unknown>): { lean(): Promise<FacebookPageConnectionRecord | null> };
   findOneAndUpdate(filter: Record<string, unknown>, update: Record<string, unknown>, options: Record<string, unknown>): Promise<FacebookPageConnectionRecord | null>;
   create(input: Record<string, unknown>): Promise<FacebookPageConnectionRecord>;
   findOneAndDelete(filter: { userId: string }): Promise<FacebookPageConnectionRecord | null>;
@@ -62,6 +63,15 @@ function toHistoryMetadata(record: FacebookPageConnectionRecord | null) {
     pageName: record.pageName ?? null,
     status: record.status
   };
+}
+
+function pageOwnershipError(): AppError {
+  return new AppError(409, "FACEBOOK_PAGE_ALREADY_CONNECTED", "Facebook Page is already connected");
+}
+
+function isPageDuplicate(error: unknown): boolean {
+  const conflict = error as { code?: number; keyPattern?: { pageId?: number } } | null;
+  return conflict?.code === 11000 && conflict.keyPattern?.pageId === 1;
 }
 
 function recordSettingHistorySafely(input: Parameters<typeof recordSettingHistory>[0]): void {
@@ -165,12 +175,23 @@ export class FacebookPageService {
     // Chỉ ghi khi toàn bộ metadata audit còn khớp; đọc lại nếu kết nối bị thay hoặc xóa.
     for (;;) {
       existing = await this.model.findOne({ userId }).lean();
+      // Từ chối Page đã thuộc owner khác trước khi ghi để bảo vệ dữ liệu khi index đang được triển khai.
+      const otherOwner = await this.model.findOne({ pageId: input.pageId, userId: { $ne: userId } }).lean();
+      if (otherOwner && (otherOwner.userId === undefined || stringId(otherOwner.userId) !== userId)) {
+        throw pageOwnershipError();
+      }
       if (existing) {
-        const updated = await this.model.findOneAndUpdate(
-          { userId, _id: existing._id, ...toHistoryMetadata(existing) },
-          { $set: values },
-          { returnDocument: "after" }
-        );
+        let updated: FacebookPageConnectionRecord | null;
+        try {
+          updated = await this.model.findOneAndUpdate(
+            { userId, _id: existing._id, ...toHistoryMetadata(existing) },
+            { $set: values },
+            { returnDocument: "after" }
+          );
+        } catch (error) {
+          if (isPageDuplicate(error)) throw pageOwnershipError();
+          throw error;
+        }
         if (!updated) continue;
         saved = updated;
         break;
@@ -179,6 +200,7 @@ export class FacebookPageService {
         saved = await this.model.create({ userId, platform: "facebook", ...values });
         break;
       } catch (error) {
+        if (isPageDuplicate(error)) throw pageOwnershipError();
         // Index userId duy nhất phân xử hai lần kết nối đầu tiên; lỗi khác vẫn được trả về.
         const conflict = error as { code?: number; keyPattern?: { userId?: number } } | null;
         if (conflict?.code !== 11000 || conflict.keyPattern?.userId !== 1) throw error;

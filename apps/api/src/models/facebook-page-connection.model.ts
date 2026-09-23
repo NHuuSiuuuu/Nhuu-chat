@@ -16,6 +16,7 @@ const facebookPageConnectionSchema = new Schema(
 );
 
 facebookPageConnectionSchema.index({ userId: 1 }, { unique: true });
+facebookPageConnectionSchema.index({ pageId: 1 }, { unique: true });
 
 export type FacebookPageConnection = InferSchemaType<typeof facebookPageConnectionSchema>;
 export const FacebookPageConnectionModel =

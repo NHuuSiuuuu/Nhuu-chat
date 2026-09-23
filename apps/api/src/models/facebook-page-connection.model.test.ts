@@ -26,6 +26,13 @@ describe("Facebook page connection model", () => {
     expect(uniqueUserIndex).toBeDefined();
   });
 
+  it("declares a unique Page ID so concurrent owners cannot claim the same Page", () => {
+    expect(FacebookPageConnectionModel.schema.indexes()).toContainEqual([
+      { pageId: 1 },
+      expect.objectContaining({ unique: true })
+    ]);
+  });
+
   it("uses the Facebook platform and connected status by default", () => {
     const connection = new FacebookPageConnectionModel({
       userId: new mongoose.Types.ObjectId(),
