@@ -6,6 +6,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 ## [Unreleased]
 
 - Đặc tả MVP Inbox Facebook Messenger thủ công qua webhook và Send API, tách khỏi giai đoạn AI tự trả lời.
+- Lập kế hoạch triển khai Inbox Facebook Messenger theo từng lát kết nối, webhook, gửi tin và Inbox.
 - Đánh dấu các mục Cài đặt chưa hoàn thiện bằng nhãn “Sắp có”, làm mờ và vô hiệu hóa thao tác.
 - Thêm các trang `/login`, `/register`, `/forgot-password` và `/reset-password` có Landing Header, liên kết SPA, xác nhận mật khẩu và luồng đặt lại mật khẩu qua Nodemailer/SMTP với token một lần; API luôn trả xác nhận chung, kể cả khi gửi email lỗi.
 - Bổ sung kiểm tra dữ liệu phía trình duyệt cho trang đăng nhập/đăng ký và hiển thị lỗi bằng Sonner.
