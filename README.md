@@ -14,6 +14,7 @@ MVP quản lý inbox chăm sóc khách hàng Facebook Messenger và Telegram cù
 - Chatbot tự động dùng chung orchestration/delivery cho Telegram Bot và Telegram cá nhân, có template, RAG đúng owner, fallback và bàn giao.
 - REST conversation/message API và Socket.IO room authentication.
 - Inbox Facebook Messenger thủ công cho tin nhắn văn bản mới: webhook xác minh chữ ký, lưu riêng conversation theo PSID, cập nhật realtime và gửi trả lời qua Messenger Send API.
+- Workspace có vai trò owner/admin/staff; owner quản lý thành viên đã đăng ký, cấp quyền theo Facebook Page và có thể kết nối nhiều Page trong một Workspace.
 - CRUD danh mục thẻ hội thoại dùng chung cho admin/agent tại `/api/v1/conversation-tags`.
 - CRUD mẫu trả lời nhanh dùng chung cho admin/agent tại `/api/v1/quick-replies`, hỗ trợ lưu một ảnh đính kèm qua Cloudinary.
 - Knowledge chunking, TXT/Markdown/PDF/DOCX parser, provider-independent RAG.
@@ -127,7 +128,9 @@ Các route `/api/v1/quick-replies` chỉ cho `admin` và `agent`, đồng thời
 
 ### Đăng bài Facebook Page V1
 
-V1 cho phép mỗi user kết nối đúng một Facebook Page và đăng bài gồm text bắt buộc cùng tối đa một ảnh. Có thể kết nối bằng OAuth từ Dashboard hoặc tiếp tục nhập thủ công `Page ID` và `Page access token` tại màn hình Đăng bài; backend gọi Graph API để kiểm tra Page trước khi mã hóa token và lưu vào MongoDB. Không đặt Page ID/token trong `.env`, frontend storage, log hoặc response. Token chỉ được giải mã trong memory ngay trước khi gọi Meta. Cần dùng HTTPS và giữ Page access token như credential có quyền đăng bài; khi nghi ngờ lộ token, thu hồi/cấp token mới tại Meta rồi kết nối lại.
+Workspace và quyền Facebook Page được mô tả tại [docs/wiki/workspace-page-access.md](docs/wiki/workspace-page-access.md). Database hiện hữu cần backup và chạy lần lượt `migrate:workspaces` cùng `migrate:facebook-page-multi-connection-index`; cả hai lệnh mặc định dry-run và chỉ ghi khi có `--apply`. Không áp dụng migration production trước khi operator duyệt báo cáo.
+
+Workspace owner có thể kết nối nhiều Facebook Page và chọn Page cho từng bài viết gồm text bắt buộc cùng tối đa một ảnh. Có thể kết nối bằng OAuth từ Dashboard hoặc nhập thủ công `Page ID` và `Page access token`; backend gọi Graph API để kiểm tra Page trước khi mã hóa token và lưu từng connection vào MongoDB. Không đặt Page ID/token trong `.env`, frontend storage, log hoặc response. Token chỉ được giải mã trong memory ngay trước khi gọi Meta. Cần dùng HTTPS và giữ Page access token như credential có quyền đăng bài; khi nghi ngờ lộ token, thu hồi/cấp token mới tại Meta rồi kết nối lại.
 
 Trước khi dùng, cấu hình Cloudinary đủ `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` và `CLOUDINARY_API_SECRET`. Ảnh được upload qua Cloudinary trước khi đăng; chỉ nhận `image/jpeg`, `image/png` hoặc `image/webp`, tối đa 5 MiB (5 × 1024 × 1024 byte), một ảnh cho mỗi bài. Text là bắt buộc. V1 dùng Meta Graph API `v26.0` mặc định (`META_GRAPH_API_VERSION` có thể đổi theo cấu hình). Có thể kết nối bằng OAuth qua Dashboard với `META_APP_ID`, `META_APP_SECRET`, `META_OAUTH_REDIRECT_URI` và `WEB_APP_URL`; luồng nhập thủ công Page ID/Page Access Token vẫn được giữ nguyên. Khi app còn ở Development Mode, chỉ người dùng, Page và vai trò được cấp trong app mới có thể dùng, nên chưa phải luồng production/public.
 

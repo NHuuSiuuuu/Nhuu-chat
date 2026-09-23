@@ -13,6 +13,7 @@ Nhuu-chat hiện là MVP tập trung vào:
 - Kết nối Telegram cá nhân bằng QR MTProto.
 - Nhận và gửi tin nhắn Telegram trong Inbox realtime.
 - Nhận tin Messenger mới qua webhook đã xác minh chữ ký, lưu hội thoại riêng theo PSID, cập nhật Inbox realtime và trả lời văn bản qua Send API.
+- Workspace hỗ trợ owner/admin/staff, thành viên nhiều Workspace, quyền Inbox theo Facebook Page và nhiều Page trên một Workspace; xem [hướng dẫn Workspace/Page](workspace-page-access.md).
 - Quản lý hội thoại, unread count, avatar, tên khách hàng, nhóm và nền tảng gửi.
 - Trợ lý RAG với dữ liệu knowledge dạng tài liệu/chính sách.
 - Trợ lý AI có cấu hình model Gemini, gợi ý trả lời và phát hiện cảm xúc.
