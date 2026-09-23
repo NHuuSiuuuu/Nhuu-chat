@@ -37,7 +37,7 @@ Cho phép nhân viên nhận tin nhắn văn bản mới từ một Facebook Pag
 
 - Send API dùng Page Access Token được cấp bởi người có tác vụ nhắn tin (`MESSAGE`) trên Page cùng quyền `pages_messaging`.
 - OAuth phải bổ sung quyền Messenger cần thiết, bao gồm `pages_messaging` và quyền quản lý metadata/subscription cần cho webhook; giữ các quyền đang dùng cho đăng bài.
-- Kết nối thủ công dùng cùng credential đã mã hóa. API xác thực phải báo thiếu quyền bằng mã lỗi an toàn, không lưu raw response hoặc token vào log.
+- Kết nối thủ công dùng cùng credential đã mã hóa và xác thực Page ID trước khi lưu. Không dùng Conversations API làm preflight quyền Messenger vì task cần cho đọc lịch sử khác với task Send API chấp nhận; webhook subscription và Send API phải trả mã lỗi quyền an toàn khi Meta từ chối thao tác. Không lưu raw response hoặc token vào log.
 - Tin trả lời chuẩn chỉ được gửi trong cửa sổ 24 giờ kể từ tin nhắn gần nhất do khách gửi. MVP không dùng message tag hoặc luồng gửi ngoài cửa sổ này.
 - Meta App Development Mode chỉ dùng để test với người/Page có vai trò được cấp. Dùng với Page của khách hàng bên ngoài phụ thuộc Advanced Access/App Review của Meta.
 - Page ID trong webhook phải ánh xạ chính xác tới một tài khoản NhuuChat. Không fan-out một sự kiện sang nhiều owner. Kết nối phải từ chối Page đã gắn với owner khác; trước khi thêm unique index cần kiểm tra dữ liệu kết nối hiện có và xử lý duplicate có kiểm soát.
@@ -89,7 +89,7 @@ Customer identity dùng khóa nội bộ `facebook:<pageId>:<PSID>` trong `Custo
 ## Kiểm thử và nghiệm thu
 
 - OAuth: URL chứa quyền Messenger cần thiết; selection flow vẫn giữ token kín và Page đúng.
-- Connection: token sai Page, thiếu quyền, Page đã gắn owner khác và token bị thu hồi đều trả lỗi an toàn.
+- Connection: token sai Page, Page đã gắn owner khác và token bị thu hồi đều trả lỗi an toàn; lỗi thiếu quyền webhook/send cũng được chuẩn hóa an toàn tại thao tác tương ứng.
 - Webhook: GET challenge, chữ ký đúng/sai, Page chưa kết nối, customer message, echo, unsupported event, retry trùng và payload lỗi.
 - Persistence: customer identity theo Page, conversation upsert theo Page + owner, message unique, unread tăng đúng một lần.
 - Sender: request đúng Page/PSID, token không rò, success, lỗi quyền, hết 24 giờ, timeout và rate limit.
