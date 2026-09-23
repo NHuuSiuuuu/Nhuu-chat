@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { CustomerModel } from "./customer.model.js";
+import { ConversationModel } from "./conversation.model.js";
 import { FacebookPageConnectionModel } from "./facebook-page-connection.model.js";
 import { MessageModel } from "./message.model.js";
 import { startTestDatabase, stopTestDatabase } from "../test/mongo-repl-set.js";
@@ -9,11 +10,11 @@ import { startTestDatabase, stopTestDatabase } from "../test/mongo-repl-set.js";
 describe("domain idempotency indexes", () => {
   beforeAll(async () => {
     await startTestDatabase();
-    await Promise.all([CustomerModel.syncIndexes(), MessageModel.syncIndexes(), FacebookPageConnectionModel.syncIndexes()]);
+    await Promise.all([CustomerModel.syncIndexes(), ConversationModel.syncIndexes(), MessageModel.syncIndexes(), FacebookPageConnectionModel.syncIndexes()]);
   }, 120_000);
 
   beforeEach(async () => {
-    await Promise.all([CustomerModel.deleteMany({}), MessageModel.deleteMany({}), FacebookPageConnectionModel.deleteMany({})]);
+    await Promise.all([CustomerModel.deleteMany({}), ConversationModel.deleteMany({}), MessageModel.deleteMany({}), FacebookPageConnectionModel.deleteMany({})]);
   });
 
   afterAll(async () => {
@@ -47,6 +48,24 @@ describe("domain idempotency indexes", () => {
     await expect(CustomerModel.create({
       name: "Duplicate", platform: "facebook", platformId: "facebook:page-1:psid-42"
     })).rejects.toMatchObject({ code: 11000 });
+  });
+
+  it("allows distinct Facebook customers on one Page but still rejects duplicate threads", async () => {
+    const ownerId = new mongoose.Types.ObjectId();
+    const firstCustomer = new mongoose.Types.ObjectId();
+    const secondCustomer = new mongoose.Types.ObjectId();
+    const first = { platform: "facebook", channelId: "page-1", ownerId, customerId: firstCustomer };
+    await ConversationModel.create(first);
+    await ConversationModel.create({ ...first, customerId: secondCustomer });
+    await expect(ConversationModel.create(first)).rejects.toMatchObject({ code: 11000 });
+    expect(await ConversationModel.countDocuments({ platform: "facebook", channelId: "page-1", ownerId })).toBe(2);
+  });
+
+  it("retains non-Facebook uniqueness by platform, channel and owner", async () => {
+    const ownerId = new mongoose.Types.ObjectId();
+    const first = { platform: "telegram", channelId: "chat-1", ownerId, customerId: new mongoose.Types.ObjectId() };
+    await ConversationModel.create(first);
+    await expect(ConversationModel.create({ ...first, customerId: new mongoose.Types.ObjectId() })).rejects.toMatchObject({ code: 11000 });
   });
 
   it("deduplicates Facebook message IDs within a Page namespace", async () => {

@@ -42,7 +42,7 @@ async function persistMessengerText(event: MessengerTextEvent, ownerId: mongoose
         { upsert: true, returnDocument: "after", session }
       );
       const conversation = await ConversationModel.findOneAndUpdate(
-        { platform: "facebook", channelId: event.pageId, ownerId },
+        { platform: "facebook", channelId: event.pageId, ownerId, customerId: customer._id },
         { $setOnInsert: { platform: "facebook", channelId: event.pageId, ownerId, customerId: customer._id, botEnabled: false, lastMessageAt: event.sentAt, lastMessageSnippet: event.content } },
         { upsert: true, returnDocument: "after", session }
       );
@@ -52,13 +52,15 @@ async function persistMessengerText(event: MessengerTextEvent, ownerId: mongoose
           conversationId: conversation._id,
           platform: "facebook",
           externalMessageId: event.externalMessageId,
+          createdAt: event.sentAt,
+          updatedAt: new Date(),
           senderType: event.echo ? "agent" : "customer",
           senderId: event.senderId,
           type: "text",
           content: event.content,
           deliveryStatus: event.echo ? "sent" : "delivered"
         } },
-        { upsert: true, session }
+        { upsert: true, session, timestamps: false }
       );
       if (result.upsertedCount !== 1) return;
 

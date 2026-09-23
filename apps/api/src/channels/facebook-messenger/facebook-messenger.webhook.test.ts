@@ -13,6 +13,7 @@ import { ConversationModel } from "../../models/conversation.model.js";
 import { MessageModel } from "../../models/message.model.js";
 import { processMessengerWebhook } from "./facebook-messenger.webhook.js";
 import { createApp } from "../../app.js";
+import { listMessages } from "../../services/message.service.js";
 
 const ownerId = new mongoose.Types.ObjectId();
 
@@ -56,12 +57,35 @@ describe("processMessengerWebhook persistence", () => {
     expect(socket.emitInboxEventToRecipients).not.toHaveBeenCalled();
   });
 
+  it("keeps two PSIDs on one Page in separate conversations across retries", async () => {
+    await connectPage();
+    const first = payload();
+    const second = { object: "page", entry: [{ id: "page-1", messaging: [{ sender: { id: "psid-2" }, recipient: { id: "page-1" }, timestamp: 1720000001000, message: { mid: "mid-2", text: "Second" } }] }] };
+    await processMessengerWebhook(first);
+    await processMessengerWebhook(second);
+    await processMessengerWebhook(first);
+    const customers = await CustomerModel.find({ platform: "facebook" }).lean();
+    const conversations = await ConversationModel.find({ platform: "facebook", channelId: "page-1", ownerId }).lean();
+    const messages = await MessageModel.find({ platform: "facebook" }).lean();
+    expect(customers.map((item) => item.platformId).sort()).toEqual(["facebook:page-1:psid-1", "facebook:page-1:psid-2"]);
+    expect(conversations).toHaveLength(2);
+    expect(new Set(conversations.map((item) => String(item.customerId)))).toEqual(new Set(customers.map((item) => String(item._id))));
+    expect(conversations.map((item) => item.unreadCount)).toEqual([1, 1]);
+    expect(messages).toHaveLength(2);
+    expect(new Set(messages.map((item) => String(item.conversationId)))).toEqual(new Set(conversations.map((item) => String(item._id))));
+  });
+
   it("keeps the newest conversation preview when an older message arrives later", async () => {
     await connectPage();
     await processMessengerWebhook(payload());
     await processMessengerWebhook({ object: "page", entry: [{ id: "page-1", messaging: [{ sender: { id: "psid-1" }, recipient: { id: "page-1" }, timestamp: 1710000000000, message: { mid: "older-mid", text: "Earlier" } }] }] });
     expect(await MessageModel.countDocuments({})).toBe(2);
     expect(await ConversationModel.findOne({ channelId: "page-1" }).lean()).toMatchObject({ lastMessageAt: new Date(1720000000000), lastMessageSnippet: "Hello", unreadCount: 2 });
+    const conversation = await ConversationModel.findOne({ channelId: "page-1" }).lean();
+    expect((await MessageModel.findOne({ externalMessageId: "facebook:page-1:older-mid" }).lean())?.createdAt).toEqual(new Date(1710000000000));
+    const history = await listMessages(String(conversation?._id), {});
+    expect(history.messages.map((item) => item.content)).toEqual(["Earlier", "Hello"]);
+    expect(history.messages.map((item) => item.createdAt)).toEqual(["2024-03-09T16:00:00.000Z", "2024-07-03T09:46:40.000Z"]);
   });
 
   it("ignores unknown or inactive Pages and unsupported attachments", async () => {

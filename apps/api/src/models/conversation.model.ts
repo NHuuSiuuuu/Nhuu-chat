@@ -35,6 +35,13 @@ const conversationSchema = new Schema(
 );
 
 export type Conversation = InferSchemaType<typeof conversationSchema>;
-conversationSchema.index({ platform: 1, channelId: 1, ownerId: 1 }, { unique: true });
+conversationSchema.index(
+  { platform: 1, channelId: 1, ownerId: 1, customerId: 1 },
+  { name: "platform_1_channelId_1_ownerId_1_customerId_1_facebook", unique: true, partialFilterExpression: { platform: "facebook" } }
+);
+conversationSchema.index(
+  { platform: 1, channelId: 1, ownerId: 1 },
+  { name: "platform_1_channelId_1_ownerId_1_non_facebook", unique: true, partialFilterExpression: { platform: { $in: ["instagram", "zalo", "telegram", "telegram_personal", "zalo_personal"] } } }
+);
 export const ConversationModel =
   mongoose.models.Conversation ?? model<Conversation>("Conversation", conversationSchema);
