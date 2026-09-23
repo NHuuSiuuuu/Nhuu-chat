@@ -6,6 +6,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 ## [Unreleased]
 
 - Tránh treo màn hình khởi tạo vô hạn khi API xác thực không phản hồi; thêm timeout và thao tác thử lại.
+- Đặc tả phiên đăng nhập độc lập theo thiết bị, refresh/logout theo từng phiên và thu hồi socket tương ứng.
 - Đặc tả MVP Inbox Facebook Messenger thủ công qua webhook và Send API, tách khỏi giai đoạn AI tự trả lời.
 - Lập kế hoạch triển khai Inbox Facebook Messenger theo từng lát kết nối, webhook, gửi tin và Inbox.
 - Đánh dấu các mục Cài đặt chưa hoàn thiện bằng nhãn “Sắp có”, làm mờ và vô hiệu hóa thao tác.
