@@ -8,6 +8,7 @@ const dependencyMocks = vi.hoisted(() => ({
   createMessage: vi.fn(),
   findMessage: vi.fn(),
   findConversationById: vi.fn(),
+  findPageConnection: vi.fn(),
   pauseConversation: vi.fn(),
   acquireSendLease: vi.fn(),
   releaseSendLease: vi.fn(),
@@ -17,7 +18,9 @@ const dependencyMocks = vi.hoisted(() => ({
   zaloPersonalSendMessage: vi.fn(),
   personalSendFile: vi.fn(),
   uploadFile: vi.fn(),
-  readProviderSecretByName: vi.fn()
+  readProviderSecretByName: vi.fn(),
+  decryptSecret: vi.fn(),
+  facebookSendText: vi.fn()
 }));
 
 vi.mock("../models/conversation.model.js", () => ({
@@ -26,6 +29,16 @@ vi.mock("../models/conversation.model.js", () => ({
 
 vi.mock("../models/message.model.js", () => ({
   MessageModel: { create: dependencyMocks.createMessage, findOne: dependencyMocks.findMessage }
+}));
+
+vi.mock("../models/facebook-page-connection.model.js", () => ({
+  FacebookPageConnectionModel: { findOne: dependencyMocks.findPageConnection }
+}));
+
+vi.mock("../common/crypto.js", () => ({ decryptSecret: dependencyMocks.decryptSecret }));
+
+vi.mock("../channels/facebook-messenger/facebook-messenger.client.js", () => ({
+  facebookMessengerClient: { sendText: dependencyMocks.facebookSendText }
 }));
 
 vi.mock("./telegram-personal.service.js", () => ({
@@ -112,6 +125,12 @@ describe("sendOutboundMessage", () => {
     vi.setSystemTime(now);
     dependencyMocks.acquireSendLease.mockReturnValue({ lean: async () => ({ _id: "conversation-1" }) });
     dependencyMocks.releaseSendLease.mockResolvedValue({ matchedCount: 1 });
+    dependencyMocks.findPageConnection.mockReturnValue({
+      select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({
+        userId: "customer-1", pageId: "page-1", encryptedPageAccessToken: "ciphertext", status: "connected"
+      }) })
+    });
+    dependencyMocks.decryptSecret.mockReturnValue("page-access-token-secret");
     dependencyMocks.findMessage.mockReturnValue({
       sort: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue(null) })
@@ -612,7 +631,7 @@ describe("sendOutboundMessage", () => {
   });
 
   it("persists unsupported-platform delivery as pending without an external id", async () => {
-    arrangeConversation(conversation({ platform: "facebook" }));
+    arrangeConversation(conversation({ platform: "instagram" }));
     arrangeStoredMessage();
 
     const result = await sendOutboundMessage(
@@ -625,7 +644,7 @@ describe("sendOutboundMessage", () => {
     expect(dependencyMocks.getActivePersonalClient).not.toHaveBeenCalled();
     expect(dependencyMocks.createMessage).toHaveBeenCalledWith({
       conversationId: "conversation-1",
-      platform: "facebook",
+      platform: "instagram",
       senderId: "agent",
       content: "Hello from support",
       externalMessageId: undefined,
@@ -633,6 +652,95 @@ describe("sendOutboundMessage", () => {
       senderType: "agent",
       type: "text"
     });
+  });
+
+  it("sends Facebook replies through the owning Page using only the raw PSID", async () => {
+    arrangeConversation(conversation({
+      platform: "facebook", channelId: "page-1", customerId: { _id: "customer-1", name: "Customer One", platformId: "facebook:page-1:psid-42" }
+    }));
+    dependencyMocks.findMessage.mockReturnValue({
+      sort: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ createdAt: now }) })
+      })
+    });
+    dependencyMocks.facebookSendText.mockResolvedValue({ externalMessageId: "mid-9001" });
+    arrangeStoredMessage();
+
+    const result = await sendOutboundMessage({ conversationId: "conversation-1", content: "Messenger reply" }, agentAuth);
+
+    expect(dependencyMocks.findPageConnection).toHaveBeenCalledWith({ pageId: "page-1", userId: "customer-1", status: "connected" });
+    expect(dependencyMocks.decryptSecret).toHaveBeenCalledWith("ciphertext");
+    expect(dependencyMocks.facebookSendText).toHaveBeenCalledWith({ pageId: "page-1", pageAccessToken: "page-access-token-secret", psid: "psid-42", text: "Messenger reply" });
+    expect(dependencyMocks.createMessage).toHaveBeenCalledWith(expect.objectContaining({ platform: "facebook", externalMessageId: "facebook:page-1:mid-9001", deliveryStatus: "sent" }));
+    expect(result.message.deliveryStatus).toBe("sent");
+    expect(dependencyMocks.pauseConversation).toHaveBeenCalledWith("conversation-1", {
+      $set: { lastMessageAt: now, lastMessageSnippet: "Messenger reply" }
+    });
+    expect(result.recipients).toEqual(["customer-1", "agent-1"]);
+  });
+
+  it("rejects a Facebook Page connection owned by someone else before delivery", async () => {
+    arrangeConversation(conversation({ platform: "facebook", channelId: "page-1", customerId: { _id: "customer-1", name: "Customer One", platformId: "facebook:page-1:psid-42" } }));
+    dependencyMocks.findPageConnection.mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue(null) }) });
+    dependencyMocks.findMessage.mockReturnValue({ sort: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ createdAt: now }) }) }) });
+
+    await expect(sendOutboundMessage({ conversationId: "conversation-1", content: "Reply" }, agentAuth))
+      .rejects.toMatchObject({ code: "FACEBOOK_PAGE_NOT_CONNECTED", statusCode: 409 });
+    expect(dependencyMocks.findPageConnection).toHaveBeenCalledWith({ pageId: "page-1", userId: "customer-1", status: "connected" });
+    expect(dependencyMocks.facebookSendText).not.toHaveBeenCalled();
+    expect(dependencyMocks.createMessage).not.toHaveBeenCalled();
+  });
+
+  it("allows a Messenger reply exactly at 24 hours and rejects after the window", async () => {
+    arrangeConversation(conversation({ platform: "facebook", channelId: "page-1", customerId: { _id: "customer-1", name: "Customer One", platformId: "facebook:page-1:psid-42" } }));
+    const messageTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    dependencyMocks.findMessage.mockReturnValue({ sort: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ createdAt: messageTime }) }) }) });
+    dependencyMocks.facebookSendText.mockResolvedValue({ externalMessageId: "mid-9001" });
+    arrangeStoredMessage();
+    await sendOutboundMessage({ conversationId: "conversation-1", content: "At limit" }, agentAuth);
+    expect(dependencyMocks.facebookSendText).toHaveBeenCalledOnce();
+
+    vi.resetAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    dependencyMocks.acquireSendLease.mockReturnValue({ lean: async () => ({ _id: "conversation-1" }) });
+    dependencyMocks.releaseSendLease.mockResolvedValue({ matchedCount: 1 });
+    arrangeConversation(conversation({ platform: "facebook", channelId: "page-1", customerId: { _id: "customer-1", name: "Customer One", platformId: "facebook:page-1:psid-42" } }));
+    dependencyMocks.findMessage.mockReturnValue({ sort: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ createdAt: new Date(messageTime.getTime() - 1) }) }) }) });
+    dependencyMocks.findPageConnection.mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ userId: "customer-1", pageId: "page-1", encryptedPageAccessToken: "ciphertext", status: "connected" }) }) });
+    await expect(sendOutboundMessage({ conversationId: "conversation-1", content: "Too late" }, agentAuth))
+      .rejects.toMatchObject({ code: "FACEBOOK_MESSENGER_POLICY_WINDOW_CLOSED", statusCode: 422 });
+    expect(dependencyMocks.facebookSendText).not.toHaveBeenCalled();
+  });
+
+  it("returns the webhook echo row when it wins the Send API persistence race", async () => {
+    arrangeConversation(conversation({ platform: "facebook", channelId: "page-1", customerId: { _id: "customer-1", name: "Customer One", platformId: "facebook:page-1:psid-42" } }));
+    dependencyMocks.findMessage.mockImplementation((filter: Record<string, unknown>) => {
+      if (filter.senderType === "customer") return { sort: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ createdAt: now }) }) }) };
+      return { lean: vi.fn().mockResolvedValue({ _id: "echo-message", conversationId: "conversation-1", platform: "facebook", senderType: "agent", senderId: "customer-1", type: "text", content: "Reply", deliveryStatus: "sent", externalMessageId: "facebook:page-1:mid-echo", createdAt: now }) };
+    });
+    dependencyMocks.facebookSendText.mockResolvedValue({ externalMessageId: "mid-echo" });
+    dependencyMocks.createMessage.mockRejectedValue(Object.assign(new Error("duplicate"), { code: 11000 }));
+
+    const result = await sendOutboundMessage({ conversationId: "conversation-1", content: "Reply" }, agentAuth);
+
+    expect(dependencyMocks.findMessage).toHaveBeenCalledWith({ platform: "facebook", externalMessageId: "facebook:page-1:mid-echo" });
+    expect(result.message.id).toBe("echo-message");
+    expect(dependencyMocks.createMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["FACEBOOK_MESSENGER_PERMISSION_DENIED", 403],
+    ["FACEBOOK_MESSENGER_TIMEOUT", 504]
+  ])("keeps Messenger %s failures safe and never reports sent", async (code, statusCode) => {
+    arrangeConversation(conversation({ platform: "facebook", channelId: "page-1", customerId: { _id: "customer-1", name: "Customer One", platformId: "facebook:page-1:psid-42" } }));
+    dependencyMocks.findMessage.mockReturnValue({ sort: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ createdAt: now }) }) }) });
+    dependencyMocks.facebookSendText.mockRejectedValue(new AppError(statusCode, code, "token=page-access-token-secret"));
+
+    await expect(sendOutboundMessage({ conversationId: "conversation-1", content: "Reply" }, agentAuth))
+      .rejects.toMatchObject({ code, statusCode });
+    expect(dependencyMocks.createMessage).not.toHaveBeenCalled();
+    expect(JSON.stringify(dependencyMocks.createMessage.mock.calls)).not.toContain("page-access-token-secret");
   });
 
   it("falls back to a matching Telegram dialog when the personal user entity is not cached", async () => {
@@ -743,7 +851,7 @@ describe("sendOutboundMessage", () => {
   });
 
   it("allows an admin to send to an unassigned conversation", async () => {
-    arrangeConversation(conversation({ platform: "facebook", ownerId: null, assignedAgentId: null }));
+    arrangeConversation(conversation({ platform: "instagram", ownerId: null, assignedAgentId: null }));
     arrangeStoredMessage();
 
     const result = await sendOutboundMessage(
