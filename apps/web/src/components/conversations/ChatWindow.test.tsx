@@ -103,6 +103,26 @@ describe("ChatWindow delivery indicator", () => {
   });
 });
 
+describe("ChatWindow bot toggle colors", () => {
+  it("uses the brand blue background when bot automation is enabled", () => {
+    const html = renderToStaticMarkup(<chatWindow.ChatWindow
+      conversation={{ ...conversation, botEnabled: true }}
+      messages={[]}
+      onSend={async () => true}
+      onToggleBot={async () => undefined}
+      quickReplies={[]}
+      pinnedMessages={[]}
+      isPinned={() => false}
+      onPinMessage={async () => undefined}
+      onUnpinMessage={async () => undefined}
+    />);
+
+    const switchButton = html.match(/<button class="([^"]*)"[^>]*role="switch"/)?.[1];
+
+    expect(switchButton).toContain("bg-blue-600");
+  });
+});
+
 describe("ChatWindow message avatars", () => {
   it("uses the conversation customer avatar for customer messages", () => {
     const customerAvatarUrl = "https://example.com/customer-avatar.jpg";
