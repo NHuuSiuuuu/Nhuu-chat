@@ -1,5 +1,6 @@
 import request from "supertest";
 import { decodeJwt } from "jose";
+import { createHash } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createApp } from "../app.js";
@@ -170,6 +171,8 @@ describe("authentication and roles", () => {
       password: "correct horse battery staple"
     });
     const oldRefreshToken = cookieValue(login.headers["set-cookie"], "nhuu_refresh_token");
+    const sessionId = decodeJwt(oldRefreshToken).sessionId;
+    const previousSession = await AuthSessionModel.findOne({ sessionId }).select("+refreshTokenHash");
 
     await UserModel.updateOne({ email: "agent@example.com" }, { $set: { role: "customer" } });
 
@@ -181,7 +184,9 @@ describe("authentication and roles", () => {
       .set("Cookie", `nhuu_refresh_token=${oldRefreshToken}`);
 
     expect(refreshed.status).toBe(200);
-    expect(cookieValue(refreshed.headers["set-cookie"], "nhuu_refresh_token")).not.toBe(oldRefreshToken);
+    const newRefreshToken = cookieValue(refreshed.headers["set-cookie"], "nhuu_refresh_token");
+    expect(newRefreshToken).not.toBe(oldRefreshToken);
+    expect(decodeJwt(newRefreshToken).sessionId).toBe(sessionId);
     expect(refreshed.body).toHaveProperty("user");
     const refreshedAccessToken = cookieValue(refreshed.headers["set-cookie"], "nhuu_access_token");
     await expect(verifyAccessToken(refreshedAccessToken)).resolves.toMatchObject({
@@ -189,6 +194,11 @@ describe("authentication and roles", () => {
       role: "customer"
     });
     expect(replay.status).toBe(401);
+    const storedSession = await AuthSessionModel.findOne({ sessionId }).select("+refreshTokenHash");
+    expect(storedSession?.refreshTokenHash).not.toBe(previousSession?.refreshTokenHash);
+    expect(storedSession?.refreshTokenHash).toBe(
+      createHash("sha256").update(newRefreshToken).digest("hex")
+    );
   });
 
   it("enforces the admin-only role matrix", async () => {
