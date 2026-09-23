@@ -19,4 +19,13 @@ describe("Tailwind entry", () => {
     expect(entry).toContain("::-webkit-scrollbar");
     expect(entry).toContain("display: none");
   });
+
+  it("keeps form controls at least 16px on mobile", () => {
+    const entry = readFileSync(new URL("./tailwind.css", import.meta.url), "utf8");
+    const mobileFormRule = entry.match(
+      /@media \(max-width: 767px\)\s*\{\s*input,\s*select,\s*textarea\s*\{([^}]*)\}/s
+    );
+
+    expect(mobileFormRule?.[1]).toContain("font-size: max(16px, 1rem);");
+  });
 });

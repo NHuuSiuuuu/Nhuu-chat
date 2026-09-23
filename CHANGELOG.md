@@ -20,6 +20,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 - Phát toast tin nhắn khách qua Socket.IO toàn cục đến người nhận Inbox được phân quyền và dùng giao diện sáng theo cài đặt tài khoản.
 - Cho phép click toast tin nhắn toàn cục để mở Inbox và chọn đúng hội thoại sau khi danh sách tải xong.
 - Chuẩn hóa cursor và hover của nút, liên kết tương tác xuyên frontend; bổ sung hover rõ hơn cho nút xem mật khẩu và mục hội thoại.
+- Ngăn tự động zoom trên mobile khi focus input, select hoặc textarea bằng cách giữ cỡ chữ tối thiểu 16px.
 
 ## 2026-09-23
 
