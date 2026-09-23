@@ -156,9 +156,9 @@
 - [x] Run focused API and frontend tests, full API tests, full web tests, API TypeScript check, Web production build, lint if configured, and `git diff --check`.
 - [x] Review the full diff for unrelated changes, tenant escape paths, token leaks, and index migration safety; fix any issue and rerun affected checks.
 - [x] Update README, Wiki source, and changelog with actual behavior and the requirement that production migration needs backup and operator review.
-- [ ] Commit documentation and final fixes in a focused commit using a Vietnamese Conventional Commit description.
-- [ ] Push the feature branch to its configured remote; do not merge into another branch.
-- [ ] Report commit hashes, push result, exact verification counts, failures outside scope, and production migration limitations.
+- [x] Commit documentation and final fixes in a focused commit using a Vietnamese Conventional Commit description.
+- [x] Push the feature branch to its configured remote; do not merge into another branch.
+- [x] Report commit hashes, push result, exact verification counts, failures outside scope, and production migration limitations.
 
 
 ## Delivery evidence (2026-09-23)
@@ -168,3 +168,4 @@
 - Focused web run: 74/74 passed. Full web run: 381 passed, 7 existing source/assertion tests failed outside this feature.
 - Web production build passed with existing Rollup directive and large-chunk warnings. API TypeScript scan reported seven diagnostics in unrelated files; changed feature files have no diagnostics. No lint script is configured. `git diff --check` passed.
 - Both database migrations default to dry-run. No production migration or live Meta acceptance was performed.
+- Code commit: `16cbca1`; documentation commit: `0283adf`. Both were pushed to `origin/feature/facebook-messenger-inbox`; no merge was performed.
