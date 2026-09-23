@@ -34,6 +34,10 @@ pnpm --filter web build
 
 Điền `MONGODB_URI` bằng connection string MongoDB Atlas trong `apps/api/.env` trước khi chạy API. Tạo database user, cấp quyền truy cập IP cho server chạy API và URL-encode ký tự đặc biệt trong username/password. Không commit file này.
 
+## Deploy production
+
+Frontend Vite chạy trên Vercel; API và Redis chạy trên Railway; MongoDB tiếp tục dùng Atlas. Cấu hình domain, môi trường và kiểm tra production được ghi tại [docs/deployment/vercel-railway.md](docs/deployment/vercel-railway.md).
+
 Để bật gợi ý trả lời AI, thêm cấu hình Gemini vào `apps/api/.env`:
 
 ```dotenv
