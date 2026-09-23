@@ -4,10 +4,12 @@ import bcrypt from "bcryptjs";
 import { jwtVerify, SignJWT } from "jose";
 
 import { AppError } from "../common/errors.js";
+import { AuthSessionModel } from "../models/auth-session.model.js";
 import { UserModel, type Role } from "../models/user.model.js";
 
 const ACCESS_TOKEN_TTL = "15m";
 const REFRESH_TOKEN_TTL = "7d";
+const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface AuthUser {
   id: string;
@@ -37,8 +39,15 @@ function refreshDigest(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-async function signToken(user: AuthUser, tokenUse: "access" | "refresh"): Promise<string> {
-  return new SignJWT({ email: user.email, role: user.role, tokenUse })
+async function signToken(
+  user: AuthUser,
+  tokenUse: "access" | "refresh",
+  sessionId?: string
+): Promise<string> {
+  const claims: Record<string, string> = { email: user.email, role: user.role, tokenUse };
+  if (sessionId) claims.sessionId = sessionId;
+
+  return new SignJWT(claims)
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.id)
     .setJti(randomUUID())
@@ -87,6 +96,27 @@ export async function issueTokens(user: AuthUser): Promise<TokenPair> {
   return { accessToken, refreshToken };
 }
 
+// Tạo cặp token gắn với một phiên và chỉ trả token sau khi digest đã được lưu.
+async function createAuthSession(user: AuthUser): Promise<{ tokens: TokenPair; sessionId: string }> {
+  const sessionId = randomUUID();
+  const [accessToken, refreshToken] = await Promise.all([
+    signToken(user, "access", sessionId),
+    signToken(user, "refresh", sessionId)
+  ]);
+  const tokens = { accessToken, refreshToken };
+  const now = new Date();
+
+  await AuthSessionModel.create({
+    sessionId,
+    userId: user.id,
+    refreshTokenHash: refreshDigest(refreshToken),
+    lastUsedAt: now,
+    expiresAt: new Date(now.getTime() + REFRESH_TOKEN_TTL_MS)
+  });
+
+  return { tokens, sessionId };
+}
+
 export async function verifyAccessToken(token: string): Promise<AuthUser> {
   const { tokenUse: _tokenUse, ...user } = await verifyToken(token, "access");
   return user;
@@ -109,11 +139,7 @@ export async function register(
     email: document.email,
     role: document.role
   };
-  const tokens = await issueTokens(user);
-  await UserModel.updateOne(
-    { _id: document._id },
-    { $set: { refreshTokenHash: refreshDigest(tokens.refreshToken) } }
-  );
+  const { tokens } = await createAuthSession(user);
 
   return { user, tokens };
 }
@@ -134,11 +160,7 @@ export async function login(email: string, password: string): Promise<{
     email: document.email,
     role: document.role
   };
-  const tokens = await issueTokens(user);
-  await UserModel.updateOne(
-    { _id: document._id },
-    { $set: { refreshTokenHash: refreshDigest(tokens.refreshToken) } }
-  );
+  const { tokens } = await createAuthSession(user);
 
   return { user, tokens };
 }

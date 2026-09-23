@@ -1,4 +1,5 @@
 import request from "supertest";
+import { decodeJwt } from "jose";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createApp } from "../app.js";
@@ -6,6 +7,7 @@ import { requireRole } from "./auth.middleware.js";
 import { hashPassword, issueTokens } from "../services/auth.service.js";
 import { verifyAccessToken } from "../services/auth.service.js";
 import { UserModel } from "../models/user.model.js";
+import { AuthSessionModel } from "../models/auth-session.model.js";
 import { startTestDatabase, stopTestDatabase } from "../test/mongo-repl-set.js";
 
 process.env.JWT_SECRET ??= "test-jwt-secret-that-is-at-least-32-characters";
@@ -21,10 +23,12 @@ describe("authentication and roles", () => {
   beforeAll(async () => {
     await startTestDatabase();
     await UserModel.syncIndexes();
+    await AuthSessionModel.syncIndexes();
   }, 120_000);
 
   beforeEach(async () => {
     await UserModel.deleteMany({});
+    await AuthSessionModel.deleteMany({});
   });
 
   afterAll(async () => {
@@ -56,6 +60,7 @@ describe("authentication and roles", () => {
     expect(document).not.toBeNull();
     expect(document?.role).toBe("customer");
     expect(document?.passwordHash).not.toBe("correct horse battery staple");
+    expect(await AuthSessionModel.countDocuments({ userId: document?._id })).toBe(1);
   });
 
   it("rejects invalid registration fields", async () => {
@@ -109,6 +114,47 @@ describe("authentication and roles", () => {
     expect(response.body.user).not.toHaveProperty("passwordHash");
     expect(response.body).not.toHaveProperty("accessToken");
     expect(response.body).not.toHaveProperty("refreshToken");
+  });
+
+  it("creates independent sessions for two logins", async () => {
+    const user = await UserModel.create({
+      email: "admin@example.com",
+      name: "Admin",
+      passwordHash: await hashPassword("correct horse battery staple"),
+      role: "admin"
+    });
+
+    const loginA = await request(createApp()).post("/api/v1/auth/login").send({
+      email: "admin@example.com",
+      password: "correct horse battery staple"
+    });
+    const loginB = await request(createApp()).post("/api/v1/auth/login").send({
+      email: "admin@example.com",
+      password: "correct horse battery staple"
+    });
+
+    expect(loginA.status).toBe(200);
+    expect(loginB.status).toBe(200);
+    const accessA = cookieValue(loginA.headers["set-cookie"], "nhuu_access_token");
+    const refreshA = cookieValue(loginA.headers["set-cookie"], "nhuu_refresh_token");
+    const accessB = cookieValue(loginB.headers["set-cookie"], "nhuu_access_token");
+    const refreshB = cookieValue(loginB.headers["set-cookie"], "nhuu_refresh_token");
+    const accessPayloadA = decodeJwt(accessA);
+    const refreshPayloadA = decodeJwt(refreshA);
+    const accessPayloadB = decodeJwt(accessB);
+    const refreshPayloadB = decodeJwt(refreshB);
+
+    expect([accessA, refreshA]).not.toEqual([accessB, refreshB]);
+    expect(accessPayloadA.sessionId).toEqual(refreshPayloadA.sessionId);
+    expect(accessPayloadB.sessionId).toEqual(refreshPayloadB.sessionId);
+    expect(accessPayloadA.sessionId).toBeTruthy();
+    expect(accessPayloadB.sessionId).toBeTruthy();
+    expect(accessPayloadA.sessionId).not.toBe(accessPayloadB.sessionId);
+    expect(await AuthSessionModel.countDocuments({ userId: user._id })).toBe(2);
+    const sessions = await AuthSessionModel.find({ userId: user._id }).select("+refreshTokenHash");
+    expect(sessions).toHaveLength(2);
+    expect(sessions.map((session) => session.refreshTokenHash)).not.toContain(refreshA);
+    expect(sessions.map((session) => session.refreshTokenHash)).not.toContain(refreshB);
   });
 
   it("reissues a refresh token with the user's current role and rejects replay", async () => {
