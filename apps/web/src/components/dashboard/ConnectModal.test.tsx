@@ -167,6 +167,8 @@ describe("ConnectModal Tailwind migration", () => {
 
     expect(connected).toEqual({ status: "connected" });
     expect(html).toContain("Đã kết nối Facebook Page thành công");
+    expect(html).toContain("đã sẵn sàng nhận và trả lời tin nhắn Messenger");
+    expect(html).not.toContain("quản lý và đăng bài");
     expect(html).not.toContain("Page One");
     expect(html).not.toContain("Chọn Facebook Page");
   });
