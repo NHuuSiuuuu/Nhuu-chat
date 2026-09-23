@@ -300,14 +300,38 @@ export async function rotateRefreshToken(refreshToken: string): Promise<{ user: 
   }
 }
 
-export async function revokeRefreshToken(refreshToken: string): Promise<void> {
+// Thu hồi đúng phiên sở hữu refresh token hiện tại; token cũ không được xóa phiên đã xoay.
+export async function revokeRefreshToken(refreshToken: string): Promise<string | undefined> {
+  let tokenUser: VerifiedToken;
   try {
-    const tokenUser = await verifyToken(refreshToken, "refresh");
-    await UserModel.updateOne(
-      { _id: tokenUser.id, refreshTokenHash: refreshDigest(refreshToken) },
-      { $set: { refreshTokenHash: null } }
-    );
+    tokenUser = await verifyToken(refreshToken, "refresh");
   } catch {
-    // Logout phải luôn hoàn tất ở phía client, kể cả khi cookie đã hết hạn.
+    // Cookie sai hoặc hết hạn vẫn được controller xóa khi logout.
+    return undefined;
   }
+
+  const currentDigest = refreshDigest(refreshToken);
+  if (tokenUser.sessionId) {
+    const now = new Date();
+    const authSession = await AuthSessionModel.findOne({
+      sessionId: tokenUser.sessionId,
+      userId: tokenUser.id,
+      expiresAt: { $gt: now }
+    }).select("+refreshTokenHash");
+    if (!authSession || authSession.refreshTokenHash !== currentDigest) return undefined;
+
+    const result = await AuthSessionModel.deleteOne({
+      sessionId: tokenUser.sessionId,
+      userId: tokenUser.id,
+      refreshTokenHash: currentDigest,
+      expiresAt: { $gt: now }
+    });
+    return result.deletedCount === 1 ? tokenUser.sessionId : undefined;
+  }
+
+  await UserModel.updateOne(
+    { _id: tokenUser.id, refreshTokenHash: currentDigest },
+    { $set: { refreshTokenHash: null } }
+  );
+  return undefined;
 }

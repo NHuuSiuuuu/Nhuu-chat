@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   updateUser: vi.fn(),
   saveToken: vi.fn(),
   consumeToken: vi.fn(),
+  deleteSessions: vi.fn(),
   removeToken: vi.fn(),
   sendEmail: vi.fn()
 }));
@@ -22,6 +23,9 @@ vi.mock("../models/password-reset-token.model.js", () => ({
     findOneAndDelete: mocks.consumeToken,
     deleteOne: mocks.removeToken
   }
+}));
+vi.mock("../models/auth-session.model.js", () => ({
+  AuthSessionModel: { deleteMany: mocks.deleteSessions }
 }));
 vi.mock("./password-reset-email.service.js", () => ({ sendPasswordResetEmail: mocks.sendEmail }));
 
@@ -102,21 +106,36 @@ describe("password reset service", () => {
   });
 
   it("changes the password and consumes a valid token once", async () => {
-    const startSession = vi.spyOn(mongoose, "startSession").mockResolvedValue({
+    const mongoSession = {
       withTransaction: async (operation: () => Promise<void>) => operation(),
       endSession: vi.fn()
+    };
+    const startSession = vi.spyOn(mongoose, "startSession").mockResolvedValue({
+      ...mongoSession
     } as never);
     const tokenHash = "49e2e40e591e61357758299c8cee170fb9fa7da160ec8acf110a4a409d905aaf";
     mocks.consumeToken.mockResolvedValue({ userId: "user-1" });
     mocks.updateUser.mockResolvedValue({ matchedCount: 1 });
+    mocks.deleteSessions.mockResolvedValue({ deletedCount: 2 });
 
-    await resetPassword("known-token", "new-password-123");
+    await expect(resetPassword("known-token", "new-password-123")).resolves.toBe("user-1");
 
     expect(startSession).toHaveBeenCalledOnce();
-    expect(mocks.consumeToken).toHaveBeenCalledWith({ tokenHash, expiresAt: { $gt: expect.any(Date) } }, expect.any(Object));
+    expect(mocks.consumeToken).toHaveBeenCalledWith(
+      { tokenHash, expiresAt: { $gt: expect.any(Date) } },
+      { session: expect.any(Object), includeResultMetadata: false }
+    );
     const [, update] = mocks.updateUser.mock.calls[0] as [unknown, { $set: { passwordHash: string; refreshTokenHash: null } }];
     expect(await verifyPassword(update.$set.passwordHash, "new-password-123")).toBe(true);
     expect(update.$set.refreshTokenHash).toBeNull();
+    expect(mocks.updateUser.mock.calls[0]?.[2]).toEqual({ session: expect.any(Object) });
+    expect(mocks.deleteSessions).toHaveBeenCalledExactlyOnceWith(
+      { userId: "user-1" }, { session: expect.any(Object) }
+    );
+    const consumedSession = mocks.consumeToken.mock.calls[0]?.[1].session;
+    expect(mocks.updateUser.mock.calls[0]?.[2].session).toBe(consumedSession);
+    expect(mocks.deleteSessions.mock.calls[0]?.[1].session).toBe(consumedSession);
+    expect(mongoSession.endSession).toHaveBeenCalledOnce();
   });
 
   it("returns the same invalid-token error when a token is missing or already consumed", async () => {

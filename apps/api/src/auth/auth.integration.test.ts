@@ -9,6 +9,7 @@ import { hashPassword, issueTokens, rotateRefreshToken } from "../services/auth.
 import { verifyAccessToken } from "../services/auth.service.js";
 import { UserModel } from "../models/user.model.js";
 import { AuthSessionModel } from "../models/auth-session.model.js";
+import { PasswordResetTokenModel } from "../models/password-reset-token.model.js";
 import { startTestDatabase, stopTestDatabase } from "../test/mongo-repl-set.js";
 
 process.env.JWT_SECRET ??= "test-jwt-secret-that-is-at-least-32-characters";
@@ -25,11 +26,13 @@ describe("authentication and roles", () => {
     await startTestDatabase();
     await UserModel.syncIndexes();
     await AuthSessionModel.syncIndexes();
+    await PasswordResetTokenModel.syncIndexes();
   }, 120_000);
 
   beforeEach(async () => {
     await UserModel.deleteMany({});
     await AuthSessionModel.deleteMany({});
+    await PasswordResetTokenModel.deleteMany({});
   });
 
   afterAll(async () => {
@@ -156,6 +159,144 @@ describe("authentication and roles", () => {
     expect(sessions).toHaveLength(2);
     expect(sessions.map((session) => session.refreshTokenHash)).not.toContain(refreshA);
     expect(sessions.map((session) => session.refreshTokenHash)).not.toContain(refreshB);
+  });
+
+  it("logs out one session without revoking another", async () => {
+    const user = await UserModel.create({
+      email: "logout@example.com",
+      name: "Logout User",
+      passwordHash: await hashPassword("correct horse battery staple"),
+      role: "admin"
+    });
+    const app = createApp();
+    app.get("/admin-only", requireRole("admin"), (_request, response) => response.sendStatus(200));
+    const credentials = { email: user.email, password: "correct horse battery staple" };
+    const loginA = await request(app).post("/api/v1/auth/login").send(credentials);
+    const loginB = await request(app).post("/api/v1/auth/login").send(credentials);
+    const accessA = cookieValue(loginA.headers["set-cookie"], "nhuu_access_token");
+    const refreshA = cookieValue(loginA.headers["set-cookie"], "nhuu_refresh_token");
+    const accessB = cookieValue(loginB.headers["set-cookie"], "nhuu_access_token");
+    const refreshB = cookieValue(loginB.headers["set-cookie"], "nhuu_refresh_token");
+    const sessionA = decodeJwt(refreshA).sessionId;
+    const sessionB = decodeJwt(refreshB).sessionId;
+
+    const logout = await request(app).post("/api/v1/auth/logout")
+      .set("Cookie", `nhuu_refresh_token=${refreshA}`);
+
+    expect(logout.status).toBe(204);
+    expect(logout.headers["set-cookie"]).toEqual([
+      expect.stringContaining("nhuu_access_token=;"),
+      expect.stringContaining("nhuu_refresh_token=;")
+    ]);
+    expect(await AuthSessionModel.exists({ sessionId: sessionA })).toBeNull();
+    expect(await AuthSessionModel.exists({ sessionId: sessionB })).not.toBeNull();
+    expect((await request(app).get("/admin-only").set("Cookie", `nhuu_access_token=${accessA}`)).status).toBe(401);
+    expect((await request(app).get("/admin-only").set("Cookie", `nhuu_access_token=${accessB}`)).status).toBe(200);
+    const refreshedB = await request(app).post("/api/v1/auth/refresh")
+      .set("Cookie", `nhuu_refresh_token=${refreshB}`);
+    expect(refreshedB.status).toBe(200);
+    expect(decodeJwt(cookieValue(refreshedB.headers["set-cookie"], "nhuu_refresh_token")).sessionId).toBe(sessionB);
+  });
+
+  it("resets a password and revokes every session and legacy refresh hash", async () => {
+    const user = await UserModel.create({
+      email: "reset@example.com",
+      name: "Reset User",
+      passwordHash: await hashPassword("correct horse battery staple"),
+      role: "admin"
+    });
+    const app = createApp();
+    app.get("/admin-only", requireRole("admin"), (_request, response) => response.sendStatus(200));
+    const credentials = { email: user.email, password: "correct horse battery staple" };
+    const loginA = await request(app).post("/api/v1/auth/login").send(credentials);
+    const loginB = await request(app).post("/api/v1/auth/login").send(credentials);
+    const accessA = cookieValue(loginA.headers["set-cookie"], "nhuu_access_token");
+    const accessB = cookieValue(loginB.headers["set-cookie"], "nhuu_access_token");
+    expect(await AuthSessionModel.countDocuments({ userId: user._id })).toBe(2);
+
+    const legacy = await issueTokens({ id: user.id, email: user.email, role: user.role });
+    await UserModel.updateOne({ _id: user._id }, {
+      $set: { refreshTokenHash: createHash("sha256").update(legacy.refreshToken).digest("hex") }
+    });
+    const rawResetToken = "reset-token-for-all-sessions";
+    await PasswordResetTokenModel.create({
+      userId: user._id,
+      tokenHash: createHash("sha256").update(rawResetToken).digest("hex"),
+      expiresAt: new Date(Date.now() + 60_000)
+    });
+
+    const reset = await request(app).post("/api/v1/auth/reset-password").send({
+      token: rawResetToken,
+      password: "replacement-password-123"
+    });
+
+    expect(reset.status).toBe(204);
+    expect(await AuthSessionModel.countDocuments({ userId: user._id })).toBe(0);
+    expect((await UserModel.findById(user._id).select("+refreshTokenHash"))?.refreshTokenHash).toBeNull();
+    expect(await PasswordResetTokenModel.countDocuments({ userId: user._id })).toBe(0);
+    for (const accessToken of [accessA, accessB]) {
+      expect((await request(app).get("/admin-only").set("Cookie", `nhuu_access_token=${accessToken}`)).status).toBe(401);
+    }
+    expect((await request(app).post("/api/v1/auth/refresh")
+      .set("Cookie", `nhuu_refresh_token=${legacy.refreshToken}`)).status).toBe(401);
+  });
+
+  it("logs out a legacy refresh token without revoking newer sessions", async () => {
+    const user = await UserModel.create({
+      email: "legacy-logout@example.com",
+      name: "Legacy Logout User",
+      passwordHash: await hashPassword("correct horse battery staple"),
+      role: "admin"
+    });
+    const legacy = await issueTokens({ id: user.id, email: user.email, role: user.role });
+    await UserModel.updateOne({ _id: user._id }, {
+      $set: { refreshTokenHash: createHash("sha256").update(legacy.refreshToken).digest("hex") }
+    });
+    const app = createApp();
+    app.get("/admin-only", requireRole("admin"), (_request, response) => response.sendStatus(200));
+    const login = await request(app).post("/api/v1/auth/login").send({
+      email: user.email, password: "correct horse battery staple"
+    });
+    const access = cookieValue(login.headers["set-cookie"], "nhuu_access_token");
+    const refresh = cookieValue(login.headers["set-cookie"], "nhuu_refresh_token");
+
+    const logout = await request(app).post("/api/v1/auth/logout")
+      .set("Cookie", `nhuu_refresh_token=${legacy.refreshToken}`);
+
+    expect(logout.status).toBe(204);
+    expect(logout.headers["set-cookie"]).toEqual([
+      expect.stringContaining("nhuu_access_token=;"),
+      expect.stringContaining("nhuu_refresh_token=;")
+    ]);
+    expect((await UserModel.findById(user._id).select("+refreshTokenHash"))?.refreshTokenHash).toBeNull();
+    expect(await AuthSessionModel.countDocuments({ userId: user._id })).toBe(1);
+    expect((await request(app).get("/admin-only").set("Cookie", `nhuu_access_token=${access}`)).status).toBe(200);
+    expect((await request(app).post("/api/v1/auth/refresh")
+      .set("Cookie", `nhuu_refresh_token=${refresh}`)).status).toBe(200);
+  });
+
+  it("does not revoke a session when logout uses an already rotated refresh token", async () => {
+    const user = await UserModel.create({
+      email: "stale-logout@example.com",
+      name: "Stale Logout User",
+      passwordHash: await hashPassword("correct horse battery staple"),
+      role: "admin"
+    });
+    const app = createApp();
+    const login = await request(app).post("/api/v1/auth/login").send({
+      email: user.email, password: "correct horse battery staple"
+    });
+    const staleRefresh = cookieValue(login.headers["set-cookie"], "nhuu_refresh_token");
+    const refreshed = await request(app).post("/api/v1/auth/refresh")
+      .set("Cookie", `nhuu_refresh_token=${staleRefresh}`);
+    const currentRefresh = cookieValue(refreshed.headers["set-cookie"], "nhuu_refresh_token");
+    const logout = await request(app).post("/api/v1/auth/logout")
+      .set("Cookie", `nhuu_refresh_token=${staleRefresh}`);
+
+    expect(logout.status).toBe(204);
+    expect(await AuthSessionModel.countDocuments({ userId: user._id })).toBe(1);
+    expect((await request(app).post("/api/v1/auth/refresh")
+      .set("Cookie", `nhuu_refresh_token=${currentRefresh}`)).status).toBe(200);
   });
 
   it("rejects access tokens from revoked sessions while accepting a valid legacy bearer", async () => {
