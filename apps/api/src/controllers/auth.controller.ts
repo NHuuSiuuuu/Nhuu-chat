@@ -65,7 +65,8 @@ export const refresh: RequestHandler = async (request, response, next) => {
 };
 
 export const session: RequestHandler = (request, response) => {
-  response.status(200).json({ user: (request as AuthenticatedRequest).auth });
+  const { id, email, role } = (request as AuthenticatedRequest).auth!;
+  response.status(200).json({ user: { id, email, role } });
 };
 
 export const logout: RequestHandler = async (request, response, next) => {

@@ -1,5 +1,5 @@
 import request from "supertest";
-import { decodeJwt } from "jose";
+import { decodeJwt, SignJWT } from "jose";
 import { createHash } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -156,6 +156,82 @@ describe("authentication and roles", () => {
     expect(sessions).toHaveLength(2);
     expect(sessions.map((session) => session.refreshTokenHash)).not.toContain(refreshA);
     expect(sessions.map((session) => session.refreshTokenHash)).not.toContain(refreshB);
+  });
+
+  it("rejects access tokens from revoked sessions while accepting a valid legacy bearer", async () => {
+    const user = await UserModel.create({
+      email: "revoke@example.com",
+      name: "Revoked User",
+      passwordHash: await hashPassword("correct horse battery staple"),
+      role: "admin"
+    });
+    const app = createApp();
+    app.get("/admin-only", requireRole("admin"), (_request, response) => response.sendStatus(200));
+    const login = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: "correct horse battery staple"
+    });
+    const accessToken = cookieValue(login.headers["set-cookie"], "nhuu_access_token");
+    const sessionId = decodeJwt(accessToken).sessionId;
+
+    expect((await request(app).get("/admin-only").set("Cookie", `nhuu_access_token=${accessToken}`)).status).toBe(200);
+    await AuthSessionModel.deleteOne({ sessionId });
+    expect((await request(app).get("/admin-only").set("Cookie", `nhuu_access_token=${accessToken}`)).status).toBe(401);
+
+    const legacy = await issueTokens({ id: user.id, email: user.email, role: user.role });
+    expect((await request(app).get("/admin-only").set("Authorization", `Bearer ${legacy.accessToken}`)).status).toBe(200);
+  });
+
+  it("rejects session access tokens when the session has expired", async () => {
+    const user = await UserModel.create({
+      email: "expired@example.com",
+      name: "Expired User",
+      passwordHash: await hashPassword("correct horse battery staple"),
+      role: "admin"
+    });
+    const app = createApp();
+    app.get("/admin-only", requireRole("admin"), (_request, response) => response.sendStatus(200));
+    const login = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: "correct horse battery staple"
+    });
+    const accessToken = cookieValue(login.headers["set-cookie"], "nhuu_access_token");
+    await AuthSessionModel.updateOne(
+      { sessionId: decodeJwt(accessToken).sessionId },
+      { $set: { expiresAt: new Date(Date.now() - 1_000) } }
+    );
+
+    expect((await request(app).get("/admin-only").set("Cookie", `nhuu_access_token=${accessToken}`)).status).toBe(401);
+  });
+
+  it("rejects malformed session claims instead of treating them as legacy", async () => {
+    const app = createApp();
+    app.get("/admin-only", requireRole("admin"), (_request, response) => response.sendStatus(200));
+    for (const sessionId of [null, 42, "", " "]) {
+      const token = await new SignJWT({
+        email: "admin@example.com", role: "admin", tokenUse: "access", sessionId
+      })
+        .setProtectedHeader({ alg: "HS256" })
+        .setSubject("legacy-id")
+        .setIssuedAt()
+        .setExpirationTime("15m")
+        .sign(new TextEncoder().encode(process.env.JWT_SECRET));
+      expect((await request(app).get("/admin-only").set("Authorization", `Bearer ${token}`)).status).toBe(401);
+    }
+  });
+
+  it("rejects legacy access tokens older than fifteen minutes even with a future expiry", async () => {
+    const issuedAt = Math.floor(Date.now() / 1000) - 16 * 60;
+    const token = await new SignJWT({ email: "admin@example.com", role: "admin", tokenUse: "access" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setSubject("legacy-id")
+      .setIssuedAt(issuedAt)
+      .setExpirationTime(issuedAt + 60 * 60)
+      .sign(new TextEncoder().encode(process.env.JWT_SECRET));
+    const app = createApp();
+    app.get("/admin-only", requireRole("admin"), (_request, response) => response.sendStatus(200));
+
+    expect((await request(app).get("/admin-only").set("Authorization", `Bearer ${token}`)).status).toBe(401);
   });
 
   it("reissues a refresh token with the user's current role and rejects replay", async () => {

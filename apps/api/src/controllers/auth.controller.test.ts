@@ -112,15 +112,14 @@ describe("auth controller baseline contracts", () => {
   it("returns the session user without token material", async () => {
     const app = express();
     app.use((request, _response, next) => {
-      (request as { auth?: unknown }).auth = { id: "user-1", email: "a@example.com", role: "customer" };
+      (request as { auth?: unknown }).auth = { id: "user-1", email: "a@example.com", role: "customer", sessionId: "private-session" };
       next();
     });
     app.post("/session", session);
 
-    await expect(request(app).post("/session")).resolves.toMatchObject({
-      status: 200,
-      body: { user: { id: "user-1", email: "a@example.com", role: "customer" } }
-    });
+    const response = await request(app).post("/session");
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ user: { id: "user-1", email: "a@example.com", role: "customer" } });
   });
 
   it("always clears auth cookies during logout", async () => {

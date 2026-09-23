@@ -18,6 +18,10 @@ export interface AuthUser {
   role: Role;
 }
 
+export interface AuthPrincipal extends AuthUser {
+  sessionId?: string;
+}
+
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
@@ -60,12 +64,16 @@ async function signToken(
 
 async function verifyToken(token: string, expectedUse: "access" | "refresh"): Promise<VerifiedToken> {
   try {
-    const { payload } = await jwtVerify(token, jwtKey(), { algorithms: ["HS256"] });
+    const { payload } = await jwtVerify(token, jwtKey(), {
+      algorithms: ["HS256"],
+      ...(expectedUse === "access" ? { maxTokenAge: ACCESS_TOKEN_TTL } : {})
+    });
     if (
       !payload.sub ||
       typeof payload.email !== "string" ||
       !["admin", "agent", "customer"].includes(String(payload.role)) ||
-      payload.tokenUse !== expectedUse
+      payload.tokenUse !== expectedUse ||
+      ("sessionId" in payload && (typeof payload.sessionId !== "string" || !payload.sessionId.trim()))
     ) {
       throw new Error("Invalid token claims");
     }
@@ -137,8 +145,19 @@ async function ensureAuthSessionsCollection(): Promise<void> {
   }
 }
 
-export async function verifyAccessToken(token: string): Promise<AuthUser> {
+export async function isAuthSessionActive(userId: string, sessionId: string): Promise<boolean> {
+  return Boolean(await AuthSessionModel.exists({
+    sessionId,
+    userId,
+    expiresAt: { $gt: new Date() }
+  }));
+}
+
+export async function verifyAccessToken(token: string): Promise<AuthPrincipal> {
   const { tokenUse: _tokenUse, ...user } = await verifyToken(token, "access");
+  if (user.sessionId && !(await isAuthSessionActive(user.id, user.sessionId))) {
+    throw new AppError(401, "INVALID_TOKEN", "Token is invalid or expired");
+  }
   return user;
 }
 
