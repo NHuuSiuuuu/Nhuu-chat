@@ -475,6 +475,94 @@ describe("authentication and roles", () => {
     );
   });
 
+  it("accepts exactly one concurrent refresh for a session and stores the winner digest", async () => {
+    const user = await UserModel.create({
+      email: "session-race@example.com",
+      name: "Session Race User",
+      passwordHash: await hashPassword("correct horse battery staple"),
+      role: "customer"
+    });
+    const app = createApp();
+    const login = await request(app).post("/api/v1/auth/login").send({
+      email: user.email, password: "correct horse battery staple"
+    });
+    const oldRefresh = cookieValue(login.headers["set-cookie"], "nhuu_refresh_token");
+    const sessionId = decodeJwt(oldRefresh).sessionId;
+    let releaseUpdates!: () => void;
+    const holdUpdates = new Promise<void>((resolve) => { releaseUpdates = resolve; });
+    const realUpdate = AuthSessionModel.updateOne.bind(AuthSessionModel);
+    const updateSpy = vi.spyOn(AuthSessionModel, "updateOne").mockImplementation((async (
+      ...args: Parameters<typeof AuthSessionModel.updateOne>
+    ) => {
+      await holdUpdates;
+      return realUpdate(...args);
+    }) as typeof AuthSessionModel.updateOne);
+    const refreshA = request(app).post("/api/v1/auth/refresh")
+      .set("Cookie", `nhuu_refresh_token=${oldRefresh}`).then((response) => response);
+    const refreshB = request(app).post("/api/v1/auth/refresh")
+      .set("Cookie", `nhuu_refresh_token=${oldRefresh}`).then((response) => response);
+
+    try {
+      await vi.waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(2), { timeout: 10_000 });
+    } finally {
+      releaseUpdates();
+      await Promise.allSettled([refreshA, refreshB]);
+    }
+    const responses = await Promise.all([refreshA, refreshB]);
+    const winners = responses.filter((response) => response.status === 200);
+    const losers = responses.filter((response) => response.status === 401);
+    expect(winners).toHaveLength(1);
+    expect(losers).toHaveLength(1);
+    expect(losers[0]?.body.error.code).toBe("INVALID_REFRESH_TOKEN");
+    const winner = winners[0];
+    if (!winner) throw new Error("Expected one successful refresh");
+    const newRefresh = cookieValue(winner.headers["set-cookie"], "nhuu_refresh_token");
+    expect(decodeJwt(newRefresh).sessionId).toBe(sessionId);
+    const stored = await AuthSessionModel.findOne({ sessionId }).select("+refreshTokenHash");
+    expect(stored?.refreshTokenHash).toBe(createHash("sha256").update(newRefresh).digest("hex"));
+  });
+
+  it("refreshes two live sessions independently when one token is replayed", async () => {
+    const user = await UserModel.create({
+      email: "two-live-sessions@example.com",
+      name: "Two Session User",
+      passwordHash: await hashPassword("correct horse battery staple"),
+      role: "customer"
+    });
+    const app = createApp();
+    const credentials = { email: user.email, password: "correct horse battery staple" };
+    const loginA = await request(app).post("/api/v1/auth/login").send(credentials);
+    const loginB = await request(app).post("/api/v1/auth/login").send(credentials);
+    const oldA = cookieValue(loginA.headers["set-cookie"], "nhuu_refresh_token");
+    const oldB = cookieValue(loginB.headers["set-cookie"], "nhuu_refresh_token");
+    const sidA = decodeJwt(oldA).sessionId;
+    const sidB = decodeJwt(oldB).sessionId;
+    expect(sidA).not.toBe(sidB);
+    const storedB = await AuthSessionModel.findOne({ sessionId: sidB }).select("+refreshTokenHash");
+
+    const refreshedA = await request(app).post("/api/v1/auth/refresh")
+      .set("Cookie", `nhuu_refresh_token=${oldA}`);
+    const replayA = await request(app).post("/api/v1/auth/refresh")
+      .set("Cookie", `nhuu_refresh_token=${oldA}`);
+    const refreshedB = await request(app).post("/api/v1/auth/refresh")
+      .set("Cookie", `nhuu_refresh_token=${oldB}`);
+
+    expect(refreshedA.status).toBe(200);
+    expect(replayA.status).toBe(401);
+    expect(replayA.body.error.code).toBe("INVALID_REFRESH_TOKEN");
+    expect(refreshedB.status).toBe(200);
+    const nextA = cookieValue(refreshedA.headers["set-cookie"], "nhuu_refresh_token");
+    const nextB = cookieValue(refreshedB.headers["set-cookie"], "nhuu_refresh_token");
+    expect(decodeJwt(nextA).sessionId).toBe(sidA);
+    expect(decodeJwt(nextB).sessionId).toBe(sidB);
+    expect(storedB?.refreshTokenHash).toBe(createHash("sha256").update(oldB).digest("hex"));
+    expect((await AuthSessionModel.findOne({ sessionId: sidB }).select("+refreshTokenHash"))?.refreshTokenHash)
+      .toBe(createHash("sha256").update(nextB).digest("hex"));
+    expect((await request(app).post("/api/v1/auth/refresh")
+      .set("Cookie", `nhuu_refresh_token=${nextA}`)).status).toBe(200);
+    expect(await AuthSessionModel.countDocuments({ userId: user._id })).toBe(2);
+  });
+
   it("upgrades a valid legacy refresh token into one session and rejects replay", async () => {
     const document = await UserModel.create({
       email: "legacy@example.com",
@@ -545,6 +633,9 @@ describe("authentication and roles", () => {
     const rejected = results.filter((result) => result.status === "rejected");
     expect(fulfilled).toHaveLength(1);
     expect(rejected).toHaveLength(1);
+    const loser = rejected[0];
+    if (loser?.status !== "rejected") throw new Error("Expected one rejected refresh");
+    expect(loser.reason).toMatchObject({ statusCode: 401, code: "INVALID_REFRESH_TOKEN" });
     const winner = fulfilled[0];
     if (winner?.status !== "fulfilled") throw new Error("Expected one successful refresh");
     expect(decodeJwt(winner.value.tokens.refreshToken).sessionId).toEqual(expect.any(String));

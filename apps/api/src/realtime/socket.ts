@@ -35,6 +35,9 @@ export function createRealtimeServer(httpServer: HttpServer, redisUrl = process.
       try {
         if (auth.sessionId) {
           await socket.join(`auth-session:${auth.sessionId}`);
+        }
+        await socket.join(`auth-user:${auth.id}`);
+        if (auth.sessionId) {
           // Phiên có thể bị thu hồi sau handshake nhưng trước khi socket tham gia room.
           const active = await isAuthSessionActive(auth.id, auth.sessionId);
           if (!active || socket.disconnected) {
@@ -45,7 +48,6 @@ export function createRealtimeServer(httpServer: HttpServer, redisUrl = process.
         if (socket.disconnected) return false;
         await Promise.all([
           socket.join(`inbox:${auth.id}`),
-          socket.join(`auth-user:${auth.id}`),
           ...(auth.role === "admin" ? [socket.join("inbox:admins")] : [])
         ]);
         return !socket.disconnected;
