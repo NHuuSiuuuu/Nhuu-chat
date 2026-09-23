@@ -21,6 +21,7 @@ import { facebookPageRouter } from "./routes/facebook-page.routes.js";
 import { facebookPostRouter } from "./routes/facebook-post.routes.js";
 import { facebookMessengerWebhookRouter } from "./routes/facebook-messenger-webhook.routes.js";
 import { settingHistoryRouter } from "./routes/setting-history.routes.js";
+import { workspacesRouter } from "./routes/workspaces.routes.js";
 import { corsAllowlist, originProtection, rateLimit, requestId, securityHeaders } from "./common/security.middleware.js";
 
 export function createApp(): Express {
@@ -62,6 +63,7 @@ export function createApp(): Express {
   app.use("/api/v1/facebook-page", facebookPageRouter);
   app.use("/api/v1/facebook-page/posts", facebookPostRouter);
   app.use("/api/v1/setting-histories", settingHistoryRouter);
+  app.use("/api/v1/workspaces", workspacesRouter);
   app.use(errorHandler);
 
   return app;
