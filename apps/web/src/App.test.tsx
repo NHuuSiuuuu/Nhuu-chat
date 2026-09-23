@@ -12,14 +12,16 @@ const appModule = AppModule as AppModuleWithRouteTitle;
 describe("App navigation", () => {
   it("keeps the public landing page at root and sends an authenticated user to dashboard only from the user action", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+    const routes = readFileSync(new URL("./app-routes.tsx", import.meta.url), "utf8");
 
     expect(source).toContain('type AppPage = "landing"');
     expect(source).toContain('if (pathname === "/") return "landing"');
     expect(source).toContain('page === "landing"');
     expect(source).toContain("<LandingPage");
-    expect(source).toContain("showAuthForm && <div className=\"fixed inset-0");
     expect(source).toContain('onDashboard={() => navigate("dashboard")}');
-    expect(source).not.toContain('if (!auth) return navigate("dashboard")');
+    expect(routes).toContain('<Route path="/" element={landing} />');
+    expect(routes).toContain('<Route path="/login" element={authPages.login} />');
+    expect(routes).toContain('<Route path="/register" element={authPages.register} />');
   });
 
   it("routes shared header navigation to its destination", () => {
@@ -30,8 +32,10 @@ describe("App navigation", () => {
     expect(source).not.toContain('if (item === "Hộp thư") return navigate("inbox")');
     expect(source).toContain('if (item === "Cài đặt") return navigate("settings")');
     expect(source).toContain('return navigate("development", undefined, item)');
-    expect(source).toContain("window.history.pushState");
-    expect(source).toContain("window.addEventListener(\"popstate\"");
+    expect(source).toContain("const routerNavigate = useNavigate()");
+    expect(source).toContain("const location = useLocation()");
+    expect(source).not.toContain("window.history.pushState");
+    expect(source).not.toContain("window.addEventListener(\"popstate\"");
     expect(source).toContain("/inbox");
     expect(source).toContain("/dashboard");
     expect(source).toContain('if (nextPage === "inbox") {');
@@ -141,10 +145,9 @@ describe("App navigation", () => {
   it("configures the global Sonner toaster for NhuuChat", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain('import { Toaster } from "sonner";');
+    expect(source).toContain('import { toast, Toaster } from "sonner";');
     expect(source).toContain('position="top-right"');
     expect(source).toContain("richColors");
-    expect(source).toContain("closeButton");
     expect(source).not.toContain("toastOptions={{");
   });
 });

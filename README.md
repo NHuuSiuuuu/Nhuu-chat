@@ -6,6 +6,7 @@ MVP quản lý inbox chăm sóc khách hàng Telegram và trợ lý RAG. MongoDB
 
 - Workspace React/Vite + Node/Express/TypeScript.
 - JWT auth và role admin/agent/customer.
+- React Router v6 chia route public và private; route Dashboard được mở sau khi API xác minh phiên cookie HttpOnly.
 - Quên mật khẩu qua Nodemailer/SMTP với token đặt lại một lần, hết hạn sau 30 phút.
 - Dashboard onboarding và kết nối Telegram cá nhân bằng QR MTProto; session chỉ lưu mã hóa ở backend.
 - Backend Zalo cá nhân thử nghiệm qua QR, nhận media metadata và gửi text, ảnh hoặc file; credentials chỉ lưu mã hóa ở backend.

@@ -9,6 +9,7 @@ import { SettingHistoryTimeline } from "../components/settings/SettingHistoryTim
 import { apiRequest } from "../lib/api.js";
 import { resolveApiBaseUrl } from "../lib/api-url.js";
 import { toast } from "sonner";
+import { useLocation, useNavigate } from "react-router-dom";
 import type { AutomationTemplateImportRow } from "../lib/automation-template-import.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
@@ -1006,8 +1007,10 @@ function SettingsDevelopmentPlaceholder({ title }: { title: string }) {
 }
 
 export function SettingsPage({ token, refresh, onLogoClick, onNavigate, user, onLogout, onProfile }: SettingsPageProps) {
-  const [activeTab, setActiveTabState] = useState<SettingsItem>(() => settingsItemFromPath(window.location.pathname));
-  const [activeAboutSection, setActiveAboutSectionState] = useState<AboutSection>(() => aboutSectionFromPath(window.location.pathname));
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTabState] = useState<SettingsItem>(() => settingsItemFromPath(location.pathname));
+  const [activeAboutSection, setActiveAboutSectionState] = useState<AboutSection>(() => aboutSectionFromPath(location.pathname));
   const [isAddTagModalOpen, setIsAddTagModalOpen] = useState(false);
   const [editingTag, setEditingTag] = useState<ConversationTagContract | null>(null);
   const [tagName, setTagName] = useState("");
@@ -1021,30 +1024,24 @@ export function SettingsPage({ token, refresh, onLogoClick, onNavigate, user, on
   function setActiveTab(item: SettingsItem) {
     setActiveTabState(item);
     const nextPath = item === "Giới thiệu" ? aboutPathForSection(activeAboutSection) : settingsPathForItem(item);
-    if (window.location.pathname !== nextPath) window.history.pushState({}, "", nextPath);
+    if (location.pathname !== nextPath) navigate(nextPath);
   }
 
   function setActiveAboutSection(section: AboutSection) {
     setActiveTabState("Giới thiệu");
     setActiveAboutSectionState(section);
     const nextPath = aboutPathForSection(section);
-    if (window.location.pathname !== nextPath) window.history.pushState({}, "", nextPath);
+    if (location.pathname !== nextPath) navigate(nextPath);
   }
 
   useEffect(() => {
-    const initialItem = settingsItemFromPath(window.location.pathname);
-    const initialAboutSection = aboutSectionFromPath(window.location.pathname);
+    const initialItem = settingsItemFromPath(location.pathname);
+    const initialAboutSection = aboutSectionFromPath(location.pathname);
     const initialPath = initialItem === "Giới thiệu" ? aboutPathForSection(initialAboutSection) : settingsPathForItem(initialItem);
     setActiveTabState(initialItem);
     setActiveAboutSectionState(initialAboutSection);
-    if (window.location.pathname !== initialPath) window.history.replaceState({}, "", initialPath);
-    const handlePopState = () => {
-      setActiveTabState(settingsItemFromPath(window.location.pathname));
-      setActiveAboutSectionState(aboutSectionFromPath(window.location.pathname));
-    };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+    if (location.pathname !== initialPath) navigate(initialPath, { replace: true });
+  }, [location.pathname, navigate]);
 
   useEffect(() => {
     let active = true;

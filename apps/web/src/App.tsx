@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { toast, Toaster } from "sonner";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { chatEvents, type ChatMessageContract } from "@nhuu-chat/contracts";
 import { createChatSocket } from "./lib/socket.js";
 import { loadGeneralSettings } from "./components/settings/general-settings.js";
@@ -8,7 +9,7 @@ import { InboxPage } from "./pages/InboxPage.js";
 import { conversationPathForPlatform, DashboardPage } from "./pages/DashboardPage.js";
 import { TelegramPersonalPage } from "./pages/TelegramPersonalPage.js";
 import { clearAuth, type AuthRole, type AuthState } from "./state/auth.store.js";
-import { ProtectedRoute } from "./components/common/ProtectedRoute.js";
+import { ApplicationRoutes } from "./app-routes.js";
 import { resolveApiBaseUrl } from "./lib/api-url.js";
 import { fetchJsonWithTimeout } from "./lib/fetch-with-timeout.js";
 import { canAccessInbox } from "./state/inbox-access.js";
@@ -86,8 +87,8 @@ export function getRouteTitle(route: string): string {
   return titles[route as RoutePage] ?? titles.dashboard;
 }
 
-function inboxPlatformFromLocation(): InboxPlatform {
-  const params = new URLSearchParams(window.location.search);
+function inboxPlatformFromLocation(search: string): InboxPlatform {
+  const params = new URLSearchParams(search);
   const value = params.get("platform");
   if (value === "telegram_personal" || value === "zalo_personal") return value;
   const channelId = value === "facebook" ? params.get("channelId")?.trim() : undefined;
@@ -126,67 +127,57 @@ function PageSkeleton() {
 }
 
 export function App() {
+  const location = useLocation();
+  const routerNavigate = useNavigate();
   const [auth, setAuth] = useState<AuthState | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [sessionUnavailable, setSessionUnavailable] = useState(false);
   const [sessionRetryCount, setSessionRetryCount] = useState(0);
-  const [page, setPage] = useState<RoutePage>(() => pageFromPath(window.location.pathname));
-  const [inboxPlatform, setInboxPlatform] = useState<InboxPlatform>(() => inboxPlatformFromLocation());
+  const page = pageFromPath(location.pathname);
+  const developmentSection = developmentSectionFromPath(location.pathname);
+  const [inboxPlatform, setInboxPlatform] = useState<InboxPlatform>(() => inboxPlatformFromLocation(location.search));
   const [requestedConversation, setRequestedConversation] = useState<{ id: string; request: number } | null>(() => {
-    const id = new URLSearchParams(window.location.search).get("conversationId");
+    const id = new URLSearchParams(location.search).get("conversationId");
     return id ? { id, request: 0 } : null;
   });
   const incomingNavigationRequestRef = useRef(0);
-  const [developmentSection, setDevelopmentSection] = useState<DevelopmentSection>(() => developmentSectionFromPath(window.location.pathname));
   const [showIntro, setShowIntro] = useState(true);
   const [introReady, setIntroReady] = useState(false);
   const navigate = useCallback((nextPage: RoutePage, platform?: InboxPlatform, nextDevelopmentSection?: DevelopmentSection) => {
-    setPage(nextPage);
     if (nextPage === "inbox") {
       setInboxPlatform(platform);
       persistInboxPlatform(platform);
     }
-    if (nextDevelopmentSection) setDevelopmentSection(nextDevelopmentSection);
     const nextPath = nextPage === "inbox" ? pathForInbox(platform) : pathForPage(nextPage, nextDevelopmentSection);
-    if (`${window.location.pathname}${window.location.search}` !== nextPath) window.history.pushState({}, "", nextPath);
-  }, []);
+    if (`${location.pathname}${location.search}` !== nextPath) routerNavigate(nextPath);
+  }, [location.pathname, location.search, routerNavigate]);
   const navigateAuth = useCallback((route: AuthRoute) => {
-    setPage(route);
-    if (window.location.pathname !== `/${route}`) window.history.pushState({}, "", `/${route}`);
-  }, []);
+    if (location.pathname !== `/${route}`) routerNavigate(`/${route}`);
+  }, [location.pathname, routerNavigate]);
   // Ghi yêu cầu mở chat vào state để toast luôn chọn đúng hội thoại, kể cả khi Inbox đã đang mở.
   const navigateToIncomingConversation = useCallback((message: ChatMessageContract) => {
     const platform: InboxPlatform = message.platform === "telegram_personal" || message.platform === "zalo_personal"
       ? message.platform
       : undefined;
-    setPage("inbox");
     setInboxPlatform(platform);
     setRequestedConversation({ id: message.conversationId, request: ++incomingNavigationRequestRef.current });
     persistInboxPlatform(platform);
     const params = new URLSearchParams();
     if (platform) params.set("platform", platform);
     params.set("conversationId", message.conversationId);
-    window.history.pushState({}, "", `/inbox?${params.toString()}`);
-  }, []);
+    routerNavigate(`/inbox?${params.toString()}`);
+  }, [routerNavigate]);
   const completePasswordReset = useCallback(() => {
     clearAuth();
     setAuth(null);
     navigateAuth("login");
   }, [navigateAuth]);
   useEffect(() => {
-    const handlePopState = () => {
-      const nextPage = pageFromPath(window.location.pathname);
-      setPage(nextPage);
-      if (nextPage === "inbox") {
-        setInboxPlatform(inboxPlatformFromLocation());
-        const conversationId = new URLSearchParams(window.location.search).get("conversationId");
-        setRequestedConversation(conversationId ? { id: conversationId, request: ++incomingNavigationRequestRef.current } : null);
-      }
-      setDevelopmentSection(developmentSectionFromPath(window.location.pathname));
-    };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+    if (page !== "inbox") return;
+    setInboxPlatform(inboxPlatformFromLocation(location.search));
+    const conversationId = new URLSearchParams(location.search).get("conversationId");
+    setRequestedConversation(conversationId ? { id: conversationId, request: ++incomingNavigationRequestRef.current } : null);
+  }, [location.key, location.pathname, location.search, page]);
   useEffect(() => {
     document.title = getRouteTitle(page);
   }, [page]);
@@ -194,12 +185,11 @@ export function App() {
     if (isAuthPage(page)) setShowIntro(false);
   }, [page]);
   useEffect(() => {
-    const redirectPath = authenticatedAuthRedirect(authReady && Boolean(auth), window.location.pathname);
+    const redirectPath = authenticatedAuthRedirect(authReady && Boolean(auth), location.pathname);
     if (redirectPath) {
-      window.history.replaceState({}, "", redirectPath);
-      setPage("dashboard");
+      routerNavigate(redirectPath, { replace: true });
     }
-  }, [auth, authReady, page]);
+  }, [auth, authReady, location.pathname, routerNavigate]);
   useEffect(() => {
     let cancelled = false;
     void preloadIntroDependencies().finally(() => {
@@ -259,7 +249,7 @@ export function App() {
       seenMessageIds.add(message.id);
       if (seenMessageIds.size > 100) seenMessageIds.delete(seenMessageIds.values().next().value as string);
       const activeConversationId = (globalThis as typeof globalThis & { __nhuuChatConversationContext?: { id: string | null } }).__nhuuChatConversationContext?.id;
-      if (window.location.pathname === "/inbox" && activeConversationId === message.conversationId) return;
+      if (location.pathname === "/inbox" && activeConversationId === message.conversationId) return;
       const senderName = message.senderName?.trim() || "Khách hàng";
       const preview = message.content?.trim() || "Đã gửi một tin nhắn mới";
       toast.custom((toastId) => <button type="button" onClick={() => { navigateToIncomingConversation(message); toast.dismiss(toastId); }} className="flex w-[min(380px,calc(100vw-2rem))] items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left text-slate-800 shadow-xl transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 cursor-pointer">
@@ -276,7 +266,7 @@ export function App() {
       socket.off(chatEvents.incomingMessage, handleIncomingMessage);
       socket.disconnect();
     };
-  }, [auth, authReady, navigateToIncomingConversation, refresh]);
+  }, [auth, authReady, location.pathname, navigateToIncomingConversation, refresh]);
   const logout = useCallback(() => {
     persistInboxPlatform(undefined);
     void fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).finally(() => {
@@ -285,23 +275,28 @@ export function App() {
       navigate("landing");
     });
   }, [navigate]);
-  let appContent: React.ReactNode;
-  if (sessionUnavailable) {
-    appContent = <main className="grid min-h-screen place-items-center bg-slate-100 p-6" role="alert"><section className="w-full max-w-lg rounded-2xl bg-white p-8 text-center shadow-sm"><h1 className="text-xl font-semibold text-slate-900">Không nhận được phản hồi từ API</h1><p className="mt-3 text-slate-600">Máy chủ chưa phản hồi trong thời gian cho phép. Anh có thể thử kết nối lại.</p><button className="mt-6 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700" onClick={() => { setSessionUnavailable(false); setAuthReady(false); setSessionRetryCount((count) => count + 1); }}>Thử lại</button></section></main>;
-  } else if (!authReady) {
-    appContent = <PageSkeleton />;
-  } else if (isAuthPage(page) && auth && page !== "reset-password") {
-    appContent = <PageSkeleton />;
-  } else if (isAuthPage(page)) {
-    const authRoute = page;
-    appContent = <AuthRoutePage route={authRoute} onNavigateAuth={navigateAuth} onResetSuccess={completePasswordReset} onAuthenticated={(next) => { setAuth({ user: next.user }); navigate("dashboard"); }} />;
-  } else if (page === "landing") {
-    appContent = <LandingPage user={auth?.user ?? null} onDashboard={() => navigate("dashboard")} onLogin={() => navigateAuth("login")} onRegister={() => navigateAuth("register")} onLogout={logout} />;
-  } else if (!auth) {
-    appContent = <AuthRoutePage route="login" onNavigateAuth={navigateAuth} onResetSuccess={completePasswordReset} onAuthenticated={(next) => { setAuth({ user: next.user }); navigate("dashboard"); }} />;
-  } else if (!canAccessInbox(auth.user.role)) {
-    appContent = <main><h1>Nhuu Chat</h1><p>Tài khoản của anh đã đăng nhập nhưng chưa có quyền mở inbox. Hãy nhờ admin cấp role agent.</p><button className="cursor-pointer transition-opacity hover:opacity-80" onClick={() => { void fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).finally(() => { clearAuth(); setAuth(null); }); }}>Đăng xuất</button></main>;
-  } else {
+  const handleAuthenticated = useCallback((next: AuthResponse) => {
+    setAuth({ user: next.user });
+    navigate("dashboard");
+  }, [navigate]);
+  const renderAuthPage = useCallback((route: AuthRoute): React.ReactNode => {
+    if (!authReady) return <PageSkeleton />;
+    if (auth && route !== "reset-password") return <Navigate replace to="/dashboard" />;
+    return <AuthRoutePage route={route} onNavigateAuth={navigateAuth} onResetSuccess={completePasswordReset} onAuthenticated={handleAuthenticated} />;
+  }, [auth, authReady, completePasswordReset, handleAuthenticated, navigateAuth]);
+  const authPages: Record<AuthRoute, React.ReactNode> = {
+    login: renderAuthPage("login"),
+    register: renderAuthPage("register"),
+    "forgot-password": renderAuthPage("forgot-password"),
+    "reset-password": renderAuthPage("reset-password")
+  };
+  const sessionFallback = sessionUnavailable
+    ? <main className="grid min-h-screen place-items-center bg-slate-100 p-6" role="alert"><section className="w-full max-w-lg rounded-2xl bg-white p-8 text-center shadow-sm"><h1 className="text-xl font-semibold text-slate-900">Không nhận được phản hồi từ API</h1><p className="mt-3 text-slate-600">Máy chủ chưa phản hồi trong thời gian cho phép. Anh có thể thử kết nối lại.</p><button className="mt-6 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700" onClick={() => { setSessionUnavailable(false); setAuthReady(false); setSessionRetryCount((count) => count + 1); }}>Thử lại</button></section></main>
+    : <PageSkeleton />;
+  let privatePage: React.ReactNode = null;
+  if (auth && !canAccessInbox(auth.user.role)) {
+    privatePage = <main><h1>Nhuu Chat</h1><p>Tài khoản của anh đã đăng nhập nhưng chưa có quyền mở inbox. Hãy nhờ admin cấp role agent.</p><button className="cursor-pointer transition-opacity hover:opacity-80" onClick={() => { void fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).finally(() => { clearAuth(); setAuth(null); }); }}>Đăng xuất</button></main>;
+  } else if (auth) {
     const inboxChannelId = inboxPlatform?.startsWith("facebook:")
       ? inboxPlatform.slice("facebook:".length)
       : undefined;
@@ -314,20 +309,27 @@ export function App() {
       return navigate("development", undefined, item);
     };
     const navigateFromMobileSettings = (item: string) => {
-      navigate("settings");
       const nextPath = settingsPathForItem(item as never);
-      if (window.location.pathname !== nextPath) window.history.pushState({}, "", nextPath);
+      routerNavigate(nextPath);
     };
     const navigateFromMobileAbout = (section: string) => {
-      navigate("settings");
       const nextPath = aboutPathForSection(section as never);
-      if (window.location.pathname !== nextPath) window.history.pushState({}, "", nextPath);
+      routerNavigate(nextPath);
     };
     const topbarProps = { user: auth.user, onLogout: logout, onProfile: openProfile };
-    appContent = <ProtectedRoute token="cookie-session">{page === "dashboard" ? <DashboardPage {...topbarProps} token="" refresh={refresh} onOpenInbox={(platform) => navigate("inbox", platform)} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} settingsSubmenuItems={mobileSettingsItems} nestedSettingsSubmenuItems={{ "Giới thiệu": mobileAboutSections }} onSettingsSubmenuNavigate={navigateFromMobileSettings} onNestedSettingsSubmenuNavigate={navigateFromMobileAbout} /> : page === "telegram" ? <TelegramPersonalPage token="" refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage {...topbarProps} token="" refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "profile" ? <ProfilePage {...topbarProps} token="" onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "posts" ? <FacebookPublishingPage {...topbarProps} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "development" ? <DevelopmentPage {...topbarProps} section={developmentSection} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : <InboxPage {...topbarProps} token="" platform={inboxConversationPlatform} channelId={inboxChannelId} selectedConversationId={requestedConversation?.id} selectedConversationRequest={requestedConversation?.request} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} />}</ProtectedRoute>;
+    privatePage = page === "dashboard" ? <DashboardPage {...topbarProps} token="" refresh={refresh} onOpenInbox={(platform) => navigate("inbox", platform)} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} settingsSubmenuItems={mobileSettingsItems} nestedSettingsSubmenuItems={{ "Giới thiệu": mobileAboutSections }} onSettingsSubmenuNavigate={navigateFromMobileSettings} onNestedSettingsSubmenuNavigate={navigateFromMobileAbout} /> : page === "telegram" ? <TelegramPersonalPage token="" refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage {...topbarProps} token="" refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "profile" ? <ProfilePage {...topbarProps} token="" onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "posts" ? <FacebookPublishingPage {...topbarProps} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "development" ? <DevelopmentPage {...topbarProps} section={developmentSection} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : <InboxPage {...topbarProps} token="" platform={inboxConversationPlatform} channelId={inboxChannelId} selectedConversationId={requestedConversation?.id} selectedConversationRequest={requestedConversation?.request} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} />;
   }
   return <>
-    <Suspense fallback={<PageSkeleton />}>{appContent}</Suspense>
+    <Suspense fallback={<PageSkeleton />}>
+      <ApplicationRoutes
+        isAuthenticated={Boolean(auth)}
+        isLoading={!authReady || sessionUnavailable}
+        fallback={sessionFallback}
+        landing={<LandingPage user={auth?.user ?? null} onDashboard={() => navigate("dashboard")} onLogin={() => navigateAuth("login")} onRegister={() => navigateAuth("register")} onLogout={logout} />}
+        authPages={authPages}
+        privatePage={privatePage}
+      />
+    </Suspense>
     <Toaster
       position="top-right"
       richColors

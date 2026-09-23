@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useLocation, useNavigate } from "react-router-dom";
 import { chatEvents, type AiSettingsContract, type AiSuggestionsResponse, type ChatMessageContract, type ConversationContract, type ConversationPinEventPayload, type ConversationTagContract, type GeneralSettingsContract, type QuickReplyContract } from "@nhuu-chat/contracts";
 import { apiRequest } from "../lib/api.js";
 import { createChatSocket } from "../lib/socket.js";
@@ -153,6 +154,8 @@ type InboxAccount = DashboardAccount & { id?: string };
 type RetryPayloadEntry = { conversationId: string; payload: ComposerSendPayload; previewUrl?: string };
 
 export function InboxPage({ token, refresh, platform, channelId, selectedConversationId, selectedConversationRequest, onBack, onLogoClick, onNavigate, user, onLogout, onProfile }: { token: string; refresh?: () => Promise<string | null>; platform?: string; channelId?: string; selectedConversationId?: string | null; selectedConversationRequest?: number; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void; user?: InboxAccount | null; onLogout?: () => void; onProfile?: () => void }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [conversations, setConversations] = useState<ConversationContract[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageContract[]>([]);
@@ -304,11 +307,10 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
     if (!conversations.some((conversation) => conversation.id === selectedConversationId)) return;
     handledRequestedConversationRef.current = selectedConversationRequest;
     selectConversation(selectedConversationId);
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(location.search);
     params.delete("conversationId");
-    const query = params.toString();
-    window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
-  }, [conversations, isConversationListLoading, selectedConversationId, selectedConversationRequest]);
+    navigate({ pathname: location.pathname, search: params.toString() ? `?${params.toString()}` : "" }, { replace: true });
+  }, [conversations, isConversationListLoading, location.pathname, location.search, navigate, selectedConversationId, selectedConversationRequest]);
   useEffect(() => {
     let cancelled = false;
     void apiRequest<{ tags: ConversationTagContract[] }>(API_URL, CONVERSATION_TAGS_API_URL, token, {}, refresh)

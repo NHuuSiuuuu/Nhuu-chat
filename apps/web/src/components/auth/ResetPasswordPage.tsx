@@ -1,12 +1,15 @@
 import * as React from "react";
 import { useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { resolveApiBaseUrl } from "../../lib/api-url.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 
 export function ResetPasswordPage({ onNavigateLogin, onResetSuccess }: { onNavigateLogin: () => void; onResetSuccess: () => void }) {
-  const token = new URLSearchParams(window.location.search).get("token") ?? "";
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const token = searchParams.get("token") ?? "";
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState(token ? "" : "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn");
@@ -41,7 +44,7 @@ export function ResetPasswordPage({ onNavigateLogin, onResetSuccess }: { onNavig
         return;
       }
 
-      window.history.replaceState({}, "", "/reset-password");
+      navigate("/reset-password", { replace: true });
       setResetSucceeded(true);
       window.setTimeout(onResetSuccess, 1200);
     } catch {

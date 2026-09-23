@@ -30,6 +30,7 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
   - `services`: xử lý nghiệp vụ, lưu dữ liệu và outbound delivery.
   - `schemas`: schema HTTP và domain input.
 - JWT auth với role `admin`, `agent`, `customer`.
+- React Router v6 chia route public và private; route Dashboard chờ API xác minh phiên cookie HttpOnly rồi mới render.
 - Quên mật khẩu qua Nodemailer/SMTP: token một lần hết hạn 30 phút, lưu hash trong MongoDB và thu hồi toàn bộ phiên đăng nhập sau khi đổi mật khẩu.
 - Provider secret được mã hóa trước khi lưu MongoDB bằng AES-256-GCM.
 - Telegram webhook có secret validation và idempotency.

@@ -58,7 +58,7 @@ describe("Settings page", () => {
   it("opens on the first settings item by default", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain('settingsItemFromPath(window.location.pathname)');
+    expect(source).toContain('settingsItemFromPath(location.pathname)');
     expect(source).toContain('settingsItems[0]');
   });
 

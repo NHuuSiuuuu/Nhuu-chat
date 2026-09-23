@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useEffect, useReducer, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import QRCode from "qrcode";
 
 import { apiRequest } from "../../lib/api.js";
@@ -99,6 +100,8 @@ export function facebookOAuthSelectionFailure(requestError: unknown): { restart:
 }
 
 export function ConnectModal({ token, refresh, onClose, onConnected, initialProvider }: { token: string; refresh?: () => Promise<string | null>; onClose: () => void; onConnected: () => void; initialProvider?: ConnectionProviderId }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [selected, setSelected] = useState<ConnectionProviderId>(initialProvider ?? initialConnectionProvider);
   const [qr, setQr] = useState<QrStatus | null>(null);
   const [zaloQr, setZaloQr] = useState<ZaloQrStatus | null>(null);
@@ -182,7 +185,7 @@ export function ConnectModal({ token, refresh, onClose, onConnected, initialProv
 
   useEffect(() => {
     if (selected !== "facebook") return;
-    const callbackAction = facebookOAuthCallbackAction(window.location.search);
+    const callbackAction = facebookOAuthCallbackAction(location.search);
     if (callbackAction?.type === "selection") {
       dispatchFacebookFlow({ type: "loading" });
       setLoading(true);
@@ -190,12 +193,12 @@ export function ConnectModal({ token, refresh, onClose, onConnected, initialProv
         .then((pages) => dispatchFacebookFlow({ type: "pages-loaded", selection: callbackAction.selection, pages }))
         .catch((requestError) => dispatchFacebookFlow({ type: "restart", error: requestError instanceof FacebookPublishingApiError ? requestError.message : "Không thể tải danh sách Facebook Page" }))
         .finally(() => setLoading(false));
-      window.history.replaceState({}, "", "/dashboard");
+      navigate("/dashboard", { replace: true });
     } else if (callbackAction?.type === "restart") {
       dispatchFacebookFlow({ type: "restart", error: callbackAction.error });
-      window.history.replaceState({}, "", "/dashboard");
+      navigate("/dashboard", { replace: true });
     }
-  }, [selected]);
+  }, [location.search, navigate, selected]);
 
   useEffect(() => {
     if (!qr?.qrUrl) { setImage(null); return; }

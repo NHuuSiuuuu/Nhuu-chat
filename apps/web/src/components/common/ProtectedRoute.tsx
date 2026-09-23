@@ -1,5 +1,21 @@
 import * as React from "react";
 import type { ReactNode } from "react";
-export function ProtectedRoute({ token, children }: { token: string | null; children: ReactNode }) {
-  return token ? <>{children}</> : <p role="alert">Vui lòng đăng nhập để mở inbox.</p>;
+import { Navigate, Outlet } from "react-router-dom";
+
+export function ProtectedRoute({
+  isAuthenticated,
+  isLoading,
+  fallback
+}: {
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  fallback?: ReactNode;
+}) {
+  if (isLoading) {
+    return <>{fallback ?? <p role="status">Đang xác minh phiên đăng nhập...</p>}</>;
+  }
+
+  if (!isAuthenticated) return <Navigate replace to="/login" />;
+
+  return <Outlet />;
 }

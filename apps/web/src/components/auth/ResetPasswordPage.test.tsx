@@ -1,6 +1,7 @@
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import TestRenderer, { act, type ReactTestRenderer } from "react-test-renderer";
+import { MemoryRouter, useLocation } from "react-router-dom";
 
 import { ResetPasswordPage } from "./ResetPasswordPage.js";
 
@@ -11,11 +12,12 @@ describe("ResetPasswordPage", () => {
   });
 
   function renderPage(search: string, onNavigateLogin = vi.fn(), onResetSuccess = vi.fn()) {
-    const replaceState = vi.fn();
-    vi.stubGlobal("window", { location: { search }, history: { replaceState }, setTimeout: globalThis.setTimeout });
+    vi.stubGlobal("window", { setTimeout: globalThis.setTimeout });
+    let currentPath = "";
+    function PathProbe() { currentPath = useLocation().pathname + useLocation().search; return null; }
     let renderer!: ReactTestRenderer;
-    act(() => { renderer = TestRenderer.create(<ResetPasswordPage onNavigateLogin={onNavigateLogin} onResetSuccess={onResetSuccess} />); });
-    return { renderer, onNavigateLogin, onResetSuccess, replaceState };
+    act(() => { renderer = TestRenderer.create(<MemoryRouter initialEntries={[`/reset-password${search}`]}><PathProbe /><ResetPasswordPage onNavigateLogin={onNavigateLogin} onResetSuccess={onResetSuccess} /></MemoryRouter>); });
+    return { renderer, onNavigateLogin, onResetSuccess, currentPath: () => currentPath };
   }
 
   it("does not submit when the confirmation does not match", async () => {
@@ -34,7 +36,7 @@ describe("ResetPasswordPage", () => {
 
   it("submits a valid reset, removes the token from the current history entry, then opens login", async () => {
     vi.useFakeTimers();
-    const { renderer, onResetSuccess, replaceState } = renderPage("?token=reset-token", vi.fn());
+    const { renderer, onResetSuccess, currentPath } = renderPage("?token=reset-token", vi.fn());
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
     vi.stubGlobal("fetch", fetchMock);
     const [password, confirmation] = renderer.root.findAllByType("input");
@@ -48,7 +50,7 @@ describe("ResetPasswordPage", () => {
       credentials: "include",
       body: JSON.stringify({ token: "reset-token", password: "new-password-123" })
     }));
-    expect(replaceState).toHaveBeenCalledWith({}, "", "/reset-password");
+    expect(currentPath()).toBe("/reset-password");
     expect(JSON.stringify(renderer.toJSON())).toContain("Mật khẩu đã được cập nhật. Đang chuyển tới trang đăng nhập...");
     expect(onResetSuccess).not.toHaveBeenCalled();
     await act(async () => { await vi.advanceTimersByTimeAsync(1200); });

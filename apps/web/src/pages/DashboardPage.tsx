@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import type { FacebookPageConnectionResponse } from "@nhuu-chat/contracts";
 
 import { apiRequest } from "../lib/api.js";
@@ -72,11 +73,12 @@ export function conversationPathForPlatform(platform?: DashboardConnectedAccount
 }
 
 export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavigate, user, onLogout, onProfile, settingsSubmenuItems, nestedSettingsSubmenuItems, onSettingsSubmenuNavigate, onNestedSettingsSubmenuNavigate }: { token: string; refresh?: () => Promise<string | null>; onOpenInbox: (platform?: DashboardConnectedAccount["id"]) => void; onLogoClick?: () => void; onNavigate?: (item: "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void; user?: DashboardAccount | null; onLogout?: () => void; onProfile?: () => void; settingsSubmenuItems?: readonly string[]; nestedSettingsSubmenuItems?: Readonly<Record<string, readonly string[]>>; onSettingsSubmenuNavigate?: (item: string) => void; onNestedSettingsSubmenuNavigate?: (item: string) => void }) {
+  const location = useLocation();
   const [telegramStatus, setTelegramStatus] = useState<TelegramStatus | null>(null);
   const [zaloStatus, setZaloStatus] = useState<ZaloStatus | null>(null);
   const [facebookStatus, setFacebookStatus] = useState<FacebookPageConnectionResponse | null>();
   const [facebookError, setFacebookError] = useState<string | null>(null);
-  const [showConnect, setShowConnect] = useState(() => new URLSearchParams(window.location.search).get("facebook_oauth") !== null);
+  const [showConnect, setShowConnect] = useState(() => new URLSearchParams(location.search).get("facebook_oauth") !== null);
   const [connectionProvider, setConnectionProvider] = useState<DashboardConnectedAccount["platform"] | undefined>();
   const [accountToDeactivate, setAccountToDeactivate] = useState<DashboardConnectedAccount | null>(null);
   const [isDeactivating, setIsDeactivating] = useState(false);
