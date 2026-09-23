@@ -9,7 +9,14 @@ export async function apiRequest<T>(baseUrl: string, path: string, _token: strin
     const refreshed = await refresh();
     if (refreshed) return apiRequest<T>(baseUrl, path, "", init);
   }
-  if (!response.ok) throw new Error(`API request failed: ${response.status}`);
+  if (!response.ok) {
+    let code: string | undefined;
+    try {
+      const body = await response.clone().json() as { error?: { code?: unknown } };
+      if (typeof body.error?.code === "string") code = body.error.code;
+    } catch { /* Keep the generic status error when the response is not JSON. */ }
+    throw Object.assign(new Error(`API request failed: ${response.status}`), { code, status: response.status });
+  }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }

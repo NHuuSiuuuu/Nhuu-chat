@@ -157,7 +157,7 @@ describe("ConnectModal Tailwind migration", () => {
     const selecting: connectModal.FacebookOAuthFlow = {
       status: "selecting",
       selection: "selection-token",
-      pages: [{ id: "page-1", name: "Page One", canPublish: true }],
+      pages: [{ id: "page-1", name: "Page One", canMessage: true, canPublish: true }],
       selectedPageId: "page-1",
       error: null
     };
@@ -192,7 +192,7 @@ describe("ConnectModal Tailwind migration", () => {
     const selecting: connectModal.FacebookOAuthFlow = {
       status: "selecting",
       selection: "expired-selection-token",
-      pages: [{ id: "page-1", name: "Stale Page", canPublish: true }],
+      pages: [{ id: "page-1", name: "Stale Page", canMessage: true, canPublish: true }],
       selectedPageId: "page-1",
       error: null
     };
@@ -211,7 +211,7 @@ describe("ConnectModal Tailwind migration", () => {
     const selecting: connectModal.FacebookOAuthFlow = {
       status: "selecting",
       selection: "selection-token",
-      pages: [{ id: "page-1", name: "Page One", canPublish: true }],
+      pages: [{ id: "page-1", name: "Page One", canMessage: true, canPublish: true }],
       selectedPageId: "page-1",
       error: null
     };
@@ -234,8 +234,8 @@ describe("ConnectModal Tailwind migration", () => {
       status: "selecting",
       selection: "selection-token",
       pages: [
-        { id: "page-1", name: "Page One", canPublish: true },
-        { id: "page-2", name: "Page Two", canPublish: true }
+        { id: "page-1", name: "Page One", canMessage: true, canPublish: true },
+        { id: "page-2", name: "Page Two", canMessage: true, canPublish: true }
       ],
       selectedPageId: "page-1",
       error: "Facebook tạm thời không phản hồi."
@@ -267,20 +267,36 @@ describe("ConnectModal Tailwind migration", () => {
     });
   });
 
-  it("explains when OAuth returns no publishable Pages and offers login recovery", () => {
+  it("explains when OAuth returns no messaging-capable Pages and offers login recovery", () => {
     const noPublishablePages: connectModal.FacebookOAuthFlow = {
       status: "selecting",
       selection: "selection-token",
-      pages: [{ id: "page-1", name: "Read-only Page", canPublish: false }],
+      pages: [{ id: "page-1", name: "Read-only Page", canMessage: false, canPublish: false }],
       selectedPageId: "",
       error: null
     };
 
     const html = facebookFlowSurface(noPublishablePages);
 
-    expect(html).toContain("Không tìm thấy Facebook Page có quyền đăng bài");
+    expect(html).toContain("Không tìm thấy Facebook Page có quyền nhắn tin");
     expect(html).toContain("Đăng nhập lại bằng Facebook");
     expect(html).not.toContain("Kết nối Page này");
+  });
+
+  it("selects messaging-capable Pages independently from publishing capability", () => {
+    const html = facebookFlowSurface({ status: "selecting", selection: "selection", selectedPageId: "messenger-only", error: null, pages: [
+      { id: "messenger-only", name: "Messenger only", canMessage: true, canPublish: false },
+      { id: "publish-only", name: "Publish only", canMessage: false, canPublish: true }
+    ] });
+    expect(html).toMatch(/<input type="radio" name="facebook-page" checked="" value="messenger-only"/);
+    expect(html).toContain("Có quyền nhắn tin");
+    expect(html).toContain("Có quyền đăng bài");
+    expect(html).toMatch(/<input type="radio" disabled="" name="facebook-page" value="publish-only"/);
+  });
+
+  it("shows a Messenger-specific safe localized error when no Page can message", () => {
+    const html = facebookFlowSurface({ status: "selecting", selection: "selection", selectedPageId: "", error: null, pages: [{ id: "publish-only", name: "Publish only", canMessage: false, canPublish: true }] });
+    expect(html).toContain("Không tìm thấy Facebook Page có quyền nhắn tin");
   });
 
   it("uses the refreshed connection menu treatment", () => {

@@ -36,8 +36,19 @@ const safeMessages: Record<string, string> = {
   FACEBOOK_OAUTH_CALLBACK_INVALID: "Phản hồi đăng nhập Facebook không hợp lệ.",
   FACEBOOK_OAUTH_FAILED: "Không thể đăng nhập Facebook. Hãy thử lại.",
   FACEBOOK_OAUTH_SELECTION_INVALID: "Danh sách Page đã hết hạn. Hãy đăng nhập Facebook lại.",
-  FACEBOOK_OAUTH_PAGE_NOT_PUBLISHABLE: "Tài khoản Facebook không có quyền đăng bài trên Page này."
+  FACEBOOK_OAUTH_PAGE_NOT_PUBLISHABLE: "Tài khoản Facebook không có quyền đăng bài trên Page này.",
+  FACEBOOK_OAUTH_PAGE_NOT_MESSAGING_CAPABLE: "Page này chưa có quyền nhắn tin qua Messenger.",
+  FACEBOOK_MESSENGER_PERMISSION_DENIED: "Facebook chưa cấp quyền nhắn tin cho Page này.",
+  FACEBOOK_MESSENGER_TOKEN_INVALID: "Token Facebook Page không hợp lệ hoặc đã hết hạn.",
+  FACEBOOK_MESSENGER_POLICY_WINDOW_CLOSED: "Đã quá thời hạn cho phép trả lời khách hàng trên Messenger.",
+  FACEBOOK_MESSENGER_RATE_LIMITED: "Facebook đang giới hạn gửi tin. Hãy thử lại sau.",
+  FACEBOOK_MESSENGER_TIMEOUT: "Facebook chưa xác nhận tin nhắn đã gửi. Hãy kiểm tra lại trước khi thử lại.",
+  FACEBOOK_MESSENGER_SEND_FAILED: "Chưa gửi được tin nhắn Messenger. Hãy thử lại sau."
 };
+
+export function facebookSafeApiErrorMessage(code: string | undefined): string | null {
+  return code ? safeMessages[code] ?? null : null;
+}
 
 function endpoint(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/$/, "")}${path}`;
@@ -95,6 +106,7 @@ export function startFacebookOAuth(baseUrl?: string): Promise<{ authorizationUrl
 export interface FacebookOAuthPage {
   id: string;
   name: string;
+  canMessage: boolean;
   canPublish: boolean;
 }
 

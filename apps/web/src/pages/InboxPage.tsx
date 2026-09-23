@@ -5,6 +5,7 @@ import { chatEvents, type AiSettingsContract, type AiSuggestionsResponse, type C
 import { apiRequest } from "../lib/api.js";
 import { createChatSocket } from "../lib/socket.js";
 import { resolveApiBaseUrl } from "../lib/api-url.js";
+import { facebookSafeApiErrorMessage } from "../lib/facebook-publishing.api.js";
 import { ConversationList } from "../components/conversations/ConversationList.js";
 import { ChatWindow } from "../components/conversations/ChatWindow.js";
 import type { ComposerSendPayload } from "../components/conversations/MessageComposer.js";
@@ -106,6 +107,10 @@ export function buildConversationListRequestPath(platform?: string, channelId?: 
   if (platform) query.set("platform", platform);
   if (channelId) query.set("channelId", channelId);
   return query.size > 0 ? `/api/v1/conversations?${query.toString()}` : "/api/v1/conversations";
+}
+
+export function facebookMessengerSendErrorMessage(code: string | undefined): string {
+  return facebookSafeApiErrorMessage(code) ?? "Chưa gửi được tin nhắn Messenger. Hãy thử lại sau.";
 }
 
 export function createOptimisticMessage(conversation: ConversationContract, payload: ComposerSendPayload, clientMessageId: string, createdAt = new Date().toISOString(), attachmentUrl?: string): ChatMessageContract {
@@ -526,6 +531,10 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
   }
   async function sendText(initialPayload: ComposerSendPayload, retryMessageId?: string): Promise<boolean> {
     if (!activeId || !active) return false;
+    if (active.platform === "facebook" && typeof initialPayload !== "string") {
+      toast.error("Messenger hiện chỉ hỗ trợ gửi tin nhắn văn bản.");
+      return false;
+    }
     const conversationId = activeId;
     const retryEntry = retryMessageId ? retryPayloadsRef.current.get(retryMessageId) : undefined;
     const retryPayload = retryEntry?.payload ?? initialPayload;
@@ -556,8 +565,12 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
       optimisticMessageIdsRef.current.delete(clientMessageId);
       setDrafts((current) => setConversationDraft(current, conversationId, ""));
       return true;
-    } catch {
+    } catch (requestError) {
       setMessages((current) => setMessageDeliveryStatus(current, optimisticMessage.id, "failed"));
+      if (active.platform === "facebook") {
+        const code = requestError && typeof requestError === "object" && "code" in requestError && typeof requestError.code === "string" ? requestError.code : undefined;
+        toast.error(facebookMessengerSendErrorMessage(code));
+      }
       return false;
     }
   }
