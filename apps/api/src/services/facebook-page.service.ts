@@ -3,11 +3,15 @@ import { env } from "@nhuu-chat/config";
 
 import { decryptSecret, encryptSecret } from "../common/crypto.js";
 import { AppError } from "../common/errors.js";
-import { facebookMessengerClient, type FacebookMessengerPageInput } from "../channels/facebook-messenger/facebook-messenger.client.js";
+import { facebookMessengerClient } from "../channels/facebook-messenger/facebook-messenger.client.js";
 import { FacebookPageConnectionModel } from "../models/facebook-page-connection.model.js";
 import { recordSettingHistory } from "./setting-history.service.js";
 
 const FACEBOOK_GRAPH_REQUEST_TIMEOUT_MS = 10_000;
+const SUBSCRIBE_PENDING = "FACEBOOK_MESSENGER_SUBSCRIBE_PENDING";
+const SUBSCRIBE_CONFIRM_FAILED = "FACEBOOK_MESSENGER_SUBSCRIBE_CONFIRM_FAILED";
+const REPLACE_PENDING = "FACEBOOK_MESSENGER_REPLACE_PENDING";
+const REMOVE_PENDING = "FACEBOOK_MESSENGER_REMOVE_PENDING";
 
 type GraphFetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -25,11 +29,19 @@ interface FacebookPageConnectionRecord {
   updatedAt: Date;
 }
 
+interface ValidatedPageValues {
+  pageId: string;
+  pageName: string | null;
+  avatarUrl: string | null;
+  encryptedPageAccessToken: string;
+  lastValidatedAt: Date;
+}
+
 interface ConnectionModel {
   findOne(filter: Record<string, unknown>): { select(selection: string): { lean(): Promise<FacebookPageConnectionRecord | null> }; lean(): Promise<FacebookPageConnectionRecord | null> };
   findOneAndUpdate(filter: Record<string, unknown>, update: Record<string, unknown>, options: Record<string, unknown>): Promise<FacebookPageConnectionRecord | null>;
   create(input: Record<string, unknown>): Promise<FacebookPageConnectionRecord>;
-  findOneAndDelete(filter: { userId: string }): Promise<FacebookPageConnectionRecord | null>;
+  findOneAndDelete(filter: Record<string, unknown>): Promise<FacebookPageConnectionRecord | null>;
 }
 
 type MessengerSubscriptionClient = Pick<typeof facebookMessengerClient, "subscribePage" | "unsubscribePage">;
@@ -73,6 +85,37 @@ function toHistoryMetadata(record: FacebookPageConnectionRecord | null) {
 
 function pageOwnershipError(): AppError {
   return new AppError(409, "FACEBOOK_PAGE_ALREADY_CONNECTED", "Facebook Page is already connected");
+}
+
+function connectionStateError(): AppError {
+  return new AppError(409, "FACEBOOK_PAGE_CONNECTION_BUSY", "Facebook Page connection is being updated");
+}
+
+function connectionPersistenceError(): AppError {
+  return new AppError(503, "FACEBOOK_PAGE_CONNECTION_FAILED", "Facebook Page connection could not be saved");
+}
+
+function safeMessengerError(error: unknown, operation: "SUBSCRIBE" | "UNSUBSCRIBE"): AppError {
+  if (error instanceof AppError && /^FACEBOOK_MESSENGER_[A-Z_]+$/.test(error.code)) {
+    return new AppError(error.statusCode, error.code, "Facebook Messenger request failed");
+  }
+  return new AppError(502, `FACEBOOK_MESSENGER_${operation}_FAILED`, "Facebook Messenger request failed");
+}
+
+function claimFilter(userId: string, record: FacebookPageConnectionRecord): Record<string, unknown> {
+  return {
+    _id: record._id,
+    userId,
+    pageId: record.pageId,
+    pageName: record.pageName ?? null,
+    status: record.status,
+    lastErrorCode: record.lastErrorCode ?? null,
+    encryptedPageAccessToken: record.encryptedPageAccessToken
+  };
+}
+
+function isTransition(record: FacebookPageConnectionRecord): boolean {
+  return [SUBSCRIBE_PENDING, REPLACE_PENDING, REMOVE_PENDING].includes(record.lastErrorCode ?? "");
 }
 
 function isPageDuplicate(error: unknown): boolean {
@@ -173,60 +216,85 @@ export class FacebookPageService {
     }
 
     const encryptedPageAccessToken = this.encrypt(input.pageAccessToken);
-    const values = {
+    const values: ValidatedPageValues = {
       pageId: input.pageId,
       pageName: typeof metadata.name === "string" ? metadata.name : null,
       avatarUrl: graphPictureUrl(body),
       encryptedPageAccessToken,
-      status: "connected",
-      lastValidatedAt: new Date(),
-      lastErrorCode: null
+      lastValidatedAt: new Date()
     };
     let existing: FacebookPageConnectionRecord | null;
-    let saved: FacebookPageConnectionRecord;
-    let subscribed = false;
-    // Chỉ ghi khi toàn bộ metadata audit còn khớp; đọc lại nếu kết nối bị thay hoặc xóa.
+    let reserved: FacebookPageConnectionRecord;
+    // Mongo giữ Page claim trước mọi tác động Meta; unique index phân xử kết nối cạnh tranh.
     for (;;) {
       existing = await this.model.findOne({ userId }).select("+encryptedPageAccessToken").lean();
-      // Từ chối Page đã thuộc owner khác trước khi ghi để bảo vệ dữ liệu khi index đang được triển khai.
       const otherOwner = await this.model.findOne({ pageId: input.pageId, userId: { $ne: userId } }).lean();
       if (otherOwner && (otherOwner.userId === undefined || stringId(otherOwner.userId) !== userId)) {
         throw pageOwnershipError();
       }
-      // Chỉ đăng ký webhook sau khi credential và quyền sở hữu Page đã được xác nhận.
-      if (!subscribed) {
-        await this.messengerClient.subscribePage({ pageId: input.pageId, pageAccessToken: input.pageAccessToken });
-        subscribed = true;
-      }
       if (existing) {
-        let updated: FacebookPageConnectionRecord | null;
+        if (isTransition(existing)) throw connectionStateError();
+        if (existing.pageId !== input.pageId) {
+          const replacement = await this.reserveReplacement(userId, existing, values);
+          if (!replacement) continue;
+          reserved = replacement;
+          break;
+        }
         try {
-          updated = await this.model.findOneAndUpdate(
-            { userId, _id: existing._id, ...toHistoryMetadata(existing) },
-            { $set: values },
+          const updated = await this.model.findOneAndUpdate(
+            claimFilter(userId, existing),
+            { $set: { ...values, status: "invalid", lastErrorCode: SUBSCRIBE_PENDING } },
             { returnDocument: "after" }
           );
+          if (!updated) continue;
+          reserved = { ...updated, encryptedPageAccessToken };
+          break;
         } catch (error) {
           if (isPageDuplicate(error)) throw pageOwnershipError();
           throw error;
         }
-        if (!updated) continue;
-        saved = updated;
-        break;
       }
       try {
-        saved = await this.model.create({ userId, platform: "facebook", ...values });
+        reserved = await this.model.create({
+          userId, platform: "facebook", ...values, status: "invalid", lastErrorCode: SUBSCRIBE_PENDING
+        });
+        reserved = { ...reserved, encryptedPageAccessToken };
         break;
       } catch (error) {
         if (isPageDuplicate(error)) throw pageOwnershipError();
-        // Index userId duy nhất phân xử hai lần kết nối đầu tiên; lỗi khác vẫn được trả về.
         const conflict = error as { code?: number; keyPattern?: { userId?: number } } | null;
         if (conflict?.code !== 11000 || conflict.keyPattern?.userId !== 1) throw error;
       }
     }
-    if (existing && existing.pageId !== input.pageId) {
-      await this.unsubscribeSafely(existing);
+    try {
+      await this.messengerClient.subscribePage({ pageId: input.pageId, pageAccessToken: input.pageAccessToken });
+    } catch (error) {
+      const safeError = safeMessengerError(error, "SUBSCRIBE");
+      if (["FACEBOOK_MESSENGER_TOKEN_INVALID", "FACEBOOK_MESSENGER_PERMISSION_DENIED", "FACEBOOK_MESSENGER_RATE_LIMITED"].includes(safeError.code)) {
+        await this.model.findOneAndUpdate(
+          { ...claimFilter(userId, reserved), lastErrorCode: SUBSCRIBE_PENDING },
+          { $set: { lastErrorCode: safeError.code } },
+          { returnDocument: "after" }
+        ).catch(() => undefined);
+      }
+      throw safeError;
     }
+    let saved: FacebookPageConnectionRecord | null;
+    try {
+      saved = await this.model.findOneAndUpdate(
+        { ...claimFilter(userId, reserved), lastErrorCode: SUBSCRIBE_PENDING },
+        { $set: { status: "connected", lastErrorCode: null } },
+        { returnDocument: "after" }
+      );
+    } catch {
+      await this.model.findOneAndUpdate(
+        { ...claimFilter(userId, reserved), lastErrorCode: SUBSCRIBE_PENDING },
+        { $set: { lastErrorCode: SUBSCRIBE_CONFIRM_FAILED } },
+        { returnDocument: "after" }
+      ).catch(() => undefined);
+      throw connectionPersistenceError();
+    }
+    if (!saved) throw connectionStateError();
     const result = toResponse(saved);
     recordSettingHistorySafely({
       userId,
@@ -238,18 +306,100 @@ export class FacebookPageService {
     return result;
   }
 
+  // Giữ reservation Page cũ cho đến khi Meta xác nhận đã ngắt, rồi mới CAS sang Page mới.
+  private async reserveReplacement(
+    userId: string,
+    oldPage: FacebookPageConnectionRecord,
+    values: ValidatedPageValues
+  ): Promise<FacebookPageConnectionRecord | null> {
+    const replacing = await this.model.findOneAndUpdate(
+      claimFilter(userId, oldPage),
+      { $set: { status: "invalid", lastErrorCode: REPLACE_PENDING } },
+      { returnDocument: "after" }
+    );
+    if (!replacing) return null;
+    const oldReservation = { ...replacing, encryptedPageAccessToken: oldPage.encryptedPageAccessToken };
+    if (!oldPage.encryptedPageAccessToken) throw connectionPersistenceError();
+    try {
+      await this.messengerClient.unsubscribePage({
+        pageId: oldPage.pageId,
+        pageAccessToken: this.decrypt(oldPage.encryptedPageAccessToken)
+      });
+    } catch (error) {
+      throw safeMessengerError(error, "UNSUBSCRIBE");
+    }
+
+    let reserved: FacebookPageConnectionRecord | null;
+    try {
+      reserved = await this.model.findOneAndUpdate(
+        { ...claimFilter(userId, oldReservation), lastErrorCode: REPLACE_PENDING },
+        { $set: { ...values, status: "invalid", lastErrorCode: SUBSCRIBE_PENDING } },
+        { returnDocument: "after" }
+      );
+    } catch (error) {
+      await this.restoreOldPage(userId, oldReservation);
+      if (isPageDuplicate(error)) throw pageOwnershipError();
+      throw connectionPersistenceError();
+    }
+    if (!reserved) {
+      await this.restoreOldPage(userId, oldReservation);
+      throw connectionStateError();
+    }
+    return { ...reserved, encryptedPageAccessToken: values.encryptedPageAccessToken };
+  }
+
+  // Khôi phục subscription cũ khi Page mới không thể giành ownership trong Mongo.
+  private async restoreOldPage(userId: string, oldPage: FacebookPageConnectionRecord): Promise<void> {
+    if (!oldPage.encryptedPageAccessToken) return;
+    try {
+      // Không gửi Meta khi CAS thất bại vì reservation đã mất.
+      const stillOwned = await this.model.findOne({
+        ...claimFilter(userId, oldPage), lastErrorCode: REPLACE_PENDING
+      }).lean();
+      if (!stillOwned) return;
+      await this.messengerClient.subscribePage({
+        pageId: oldPage.pageId,
+        pageAccessToken: this.decrypt(oldPage.encryptedPageAccessToken)
+      });
+      await this.model.findOneAndUpdate(
+        { ...claimFilter(userId, oldPage), lastErrorCode: REPLACE_PENDING },
+        { $set: { status: "connected", lastErrorCode: null } },
+        { returnDocument: "after" }
+      );
+    } catch {
+      // Row invalid vẫn giữ Page claim để lần xử lý sau có thể khôi phục.
+    }
+  }
+
   async get(userId: string): Promise<FacebookPageConnectionResponse | null> {
     const connection = await this.model.findOne({ userId }).lean();
     return connection ? toResponse(connection) : null;
   }
 
   async remove(userId: string): Promise<void> {
-    const candidate = await this.model.findOne({ userId }).select("+encryptedPageAccessToken").lean();
-    const existing = await this.model.findOneAndDelete({ userId });
+    const existing = await this.model.findOne({ userId }).select("+encryptedPageAccessToken").lean();
     if (!existing) return;
-    if (candidate && stringId(candidate._id) === stringId(existing._id) && candidate.pageId === existing.pageId) {
-      await this.unsubscribeSafely(candidate);
+    if (isTransition(existing) || existing.lastErrorCode === SUBSCRIBE_PENDING) throw connectionStateError();
+    const removing = await this.model.findOneAndUpdate(
+      claimFilter(userId, existing),
+      { $set: { status: "invalid", lastErrorCode: REMOVE_PENDING } },
+      { returnDocument: "after" }
+    );
+    if (!removing) throw connectionStateError();
+    if (!existing.encryptedPageAccessToken) throw connectionPersistenceError();
+    try {
+      await this.messengerClient.unsubscribePage({
+        pageId: existing.pageId,
+        pageAccessToken: this.decrypt(existing.encryptedPageAccessToken)
+      });
+    } catch (error) {
+      throw safeMessengerError(error, "UNSUBSCRIBE");
     }
+    const deleted = await this.model.findOneAndDelete({
+      ...claimFilter(userId, { ...removing, encryptedPageAccessToken: existing.encryptedPageAccessToken }),
+      lastErrorCode: REMOVE_PENDING
+    });
+    if (!deleted) throw connectionStateError();
     recordSettingHistorySafely({
       userId,
       actionType: "DISCONNECT_FACEBOOK_PAGE",
@@ -257,20 +407,6 @@ export class FacebookPageService {
       oldValue: toHistoryMetadata(existing),
       newValue: {}
     });
-  }
-
-  // Ngắt webhook ở Meta là best-effort vì kết nối đã bị xóa hoặc thay thế trong DB.
-  private async unsubscribeSafely(connection: FacebookPageConnectionRecord): Promise<void> {
-    if (!connection.encryptedPageAccessToken) return;
-    try {
-      const input: FacebookMessengerPageInput = {
-        pageId: connection.pageId,
-        pageAccessToken: this.decrypt(connection.encryptedPageAccessToken)
-      };
-      await this.messengerClient.unsubscribePage(input);
-    } catch {
-      // Không trả hoặc ghi raw lỗi Meta và token sau khi DB đã thay đổi.
-    }
   }
 }
 

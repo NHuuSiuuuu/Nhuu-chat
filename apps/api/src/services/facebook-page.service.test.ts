@@ -72,6 +72,15 @@ function dependencies(fetchResponse: unknown = {
     findOneAndDelete: vi.fn()
   };
   model.findOne.mockReturnValue(connectionQuery(null));
+  let savedRecord: ReturnType<typeof record> | null = null;
+  model.create.mockImplementation(async (input: Record<string, unknown>) => {
+    savedRecord = record(input);
+    return savedRecord;
+  });
+  model.findOneAndUpdate.mockImplementation(async (_filter: unknown, update: { $set: Record<string, unknown> }) => {
+    savedRecord = record({ ...savedRecord, ...update.$set });
+    return savedRecord;
+  });
   const fetchGraph = vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue(fetchResponse) });
   const messengerClient = {
     subscribePage: vi.fn().mockResolvedValue(undefined),
@@ -126,7 +135,7 @@ describe("FacebookPageService", () => {
       pageId: "page-123",
       pageName: "Nhuu Store",
       avatarUrl: "https://cdn.example/avatar.jpg",
-      status: "connected",
+      status: "invalid",
       encryptedPageAccessToken: "ciphertext:secret-token"
     }));
     expect(model.create.mock.calls[0]?.[0]).not.toHaveProperty("pageAccessToken");
@@ -141,7 +150,7 @@ describe("FacebookPageService", () => {
     });
   });
 
-  it("subscribes only after the Page identity and owner are validated and before persistence", async () => {
+  it("subscribes only after the Page identity, owner, and DB reservation are validated", async () => {
     const { deps, model, messengerClient } = dependencies();
     model.create.mockResolvedValue(record());
 
@@ -149,7 +158,8 @@ describe("FacebookPageService", () => {
 
     expect(messengerClient.subscribePage).toHaveBeenCalledWith({ pageId: "page-123", pageAccessToken: "private-token" });
     expect(messengerClient.subscribePage.mock.invocationCallOrder[0]).toBeGreaterThan(model.findOne.mock.invocationCallOrder[0]!);
-    expect(messengerClient.subscribePage.mock.invocationCallOrder[0]).toBeLessThan(model.create.mock.invocationCallOrder[0]!);
+    expect(messengerClient.subscribePage.mock.invocationCallOrder[0]).toBeGreaterThan(model.create.mock.invocationCallOrder[0]!);
+    expect(messengerClient.subscribePage.mock.invocationCallOrder[0]).toBeLessThan(model.findOneAndUpdate.mock.invocationCallOrder[0]!);
   });
 
   it("does not subscribe or persist when Page identity is invalid", async () => {
@@ -162,15 +172,15 @@ describe("FacebookPageService", () => {
     expect(model.create).not.toHaveBeenCalled();
   });
 
-  it("does not persist when Meta denies webhook subscription", async () => {
+  it("retains an invalid Page reservation when Meta denies webhook subscription", async () => {
     const { deps, model, messengerClient } = dependencies();
     messengerClient.subscribePage.mockRejectedValue(new AppError(403, "FACEBOOK_MESSENGER_PERMISSION_DENIED", "Permission denied"));
 
     await expect(new FacebookPageService(deps).connect("user-1", { pageId: "page-123", pageAccessToken: "private-token" }))
       .rejects.toMatchObject({ code: "FACEBOOK_MESSENGER_PERMISSION_DENIED" });
 
-    expect(model.create).not.toHaveBeenCalled();
-    expect(model.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(model.create).toHaveBeenCalledWith(expect.objectContaining({ pageId: "page-123", status: "invalid" }));
+    expect(model.findOneAndDelete).not.toHaveBeenCalled();
   });
 
   it("unsubscribes the previous Page after replacing it with a different Page", async () => {
@@ -185,21 +195,21 @@ describe("FacebookPageService", () => {
     expect(messengerClient.unsubscribePage.mock.invocationCallOrder[0]).toBeGreaterThan(model.findOneAndUpdate.mock.invocationCallOrder[0]!);
   });
 
-  it("removes a Page even if Meta unsubscribe fails without exposing its error", async () => {
+  it("keeps the Page reserved when Meta unsubscribe fails without exposing its error", async () => {
     const { deps, model, messengerClient } = dependencies();
     model.findOne.mockReturnValue(connectionQuery(record()));
     model.findOneAndDelete.mockResolvedValue(record());
     messengerClient.unsubscribePage.mockRejectedValue(new Error("private-token raw Meta error"));
 
-    await expect(new FacebookPageService(deps).remove("user-1")).resolves.toBeUndefined();
+    await expect(new FacebookPageService(deps).remove("user-1"))
+      .rejects.toMatchObject({ code: "FACEBOOK_MESSENGER_UNSUBSCRIBE_FAILED" });
 
-    expect(model.findOneAndDelete).toHaveBeenCalledWith({ userId: "user-1" });
+    expect(model.findOneAndDelete).not.toHaveBeenCalled();
     expect(messengerClient.unsubscribePage).toHaveBeenCalledWith({ pageId: "page-123", pageAccessToken: "token" });
   });
 
   it("safely persists a null avatar when Graph returns an incomplete picture payload", async () => {
     const { deps, model } = dependencies({ id: "page-123", name: "Nhuu Store", picture: { data: {} } });
-    model.create.mockResolvedValue(record({ avatarUrl: null }));
     const service = new FacebookPageService(deps);
 
     const result = await service.connect("user-1", { pageId: "page-123", pageAccessToken: "secret-token" });
@@ -320,7 +330,9 @@ describe("FacebookPageService", () => {
 
     await service.remove("user-1");
 
-    expect(model.findOneAndDelete).toHaveBeenCalledWith({ userId: "user-1" });
+    expect(model.findOneAndDelete).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "user-1", pageId: "page-123", status: "invalid", lastErrorCode: "FACEBOOK_MESSENGER_REMOVE_PENDING"
+    }));
   });
 
   it("records a connect action with previous and saved safe Page metadata only", async () => {
