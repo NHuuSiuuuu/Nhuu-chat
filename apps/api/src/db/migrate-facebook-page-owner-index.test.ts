@@ -36,6 +36,26 @@ describe("migrateFacebookPageOwnerIndex", () => {
     expect(pages.createIndex).toHaveBeenCalledWith({ pageId: 1 }, { name: "pageId_1", unique: true });
   });
 
+  it("creates the unique Page index when listIndexes reports a missing collection", async () => {
+    const pages = collection([]);
+    pages.listIndexes.mockReturnValue({
+      toArray: async () => { throw Object.assign(new Error("ns does not exist"), {
+        code: 26, codeName: "NamespaceNotFound"
+      }); }
+    });
+
+    await expect(migrateFacebookPageOwnerIndex(pages)).resolves.toEqual({ createdIndex: true, duplicates: [] });
+    expect(pages.createIndex).toHaveBeenCalledWith({ pageId: 1 }, { name: "pageId_1", unique: true });
+  });
+
+  it("preserves unrelated listIndexes failures", async () => {
+    const pages = collection([]);
+    pages.listIndexes.mockReturnValue({ toArray: async () => { throw new Error("connection lost"); } });
+
+    await expect(migrateFacebookPageOwnerIndex(pages)).rejects.toThrow("connection lost");
+    expect(pages.createIndex).not.toHaveBeenCalled();
+  });
+
   it("is idempotent when the compatible unique index already exists", async () => {
     const pages = collection([], [{ name: "pageId_1", key: { pageId: 1 }, unique: true }]);
 

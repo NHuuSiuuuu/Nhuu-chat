@@ -34,7 +34,14 @@ export interface FacebookPageOwnerIndexMigrationResult {
 export async function migrateFacebookPageOwnerIndex(
   collection: FacebookPageIndexCollection
 ): Promise<FacebookPageOwnerIndexMigrationResult> {
-  const indexes = await collection.listIndexes().toArray();
+  let indexes: PageIndex[];
+  try {
+    indexes = await collection.listIndexes().toArray();
+  } catch (error) {
+    // Collection mới chưa tồn tại có thể trả NamespaceNotFound khi đọc index.
+    if ((error as { code?: number } | null)?.code !== 26) throw error;
+    indexes = [];
+  }
   const pageIndexes = indexes.filter((index) => Object.keys(index.key).length === 1 && index.key.pageId === 1);
   if (pageIndexes.some((index) => index.unique !== true || index.sparse === true
     || index.partialFilterExpression !== undefined || index.collation !== undefined)) {
