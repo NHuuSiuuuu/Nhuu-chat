@@ -458,7 +458,6 @@ function ChatbotAutomationSettings({ token, refresh, ownerKey }: { token: string
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newAssistantName, setNewAssistantName] = useState("");
   const selected = assistants.find((assistant) => assistant.id === selectedAssistantId) ?? assistants[0];
-  const ownerKey = readAssistantOwnerKey();
 
   useEffect(() => {
     let active = true;
