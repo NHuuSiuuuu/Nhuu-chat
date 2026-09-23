@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createApp } from "../app.js";
 import { requireRole } from "./auth.middleware.js";
-import { hashPassword, issueTokens } from "../services/auth.service.js";
+import { hashPassword, issueTokens, rotateRefreshToken } from "../services/auth.service.js";
 import { verifyAccessToken } from "../services/auth.service.js";
 import { UserModel } from "../models/user.model.js";
 import { AuthSessionModel } from "../models/auth-session.model.js";
@@ -199,6 +199,90 @@ describe("authentication and roles", () => {
     expect(storedSession?.refreshTokenHash).toBe(
       createHash("sha256").update(newRefreshToken).digest("hex")
     );
+  });
+
+  it("upgrades a valid legacy refresh token into one session and rejects replay", async () => {
+    const document = await UserModel.create({
+      email: "legacy@example.com",
+      name: "Legacy User",
+      passwordHash: await hashPassword("correct horse battery staple"),
+      role: "customer"
+    });
+    const legacyTokens = await issueTokens({
+      id: document.id,
+      email: document.email,
+      role: document.role
+    });
+    expect(decodeJwt(legacyTokens.refreshToken).sessionId).toBeUndefined();
+    await UserModel.updateOne(
+      { _id: document._id },
+      { $set: { refreshTokenHash: createHash("sha256").update(legacyTokens.refreshToken).digest("hex") } }
+    );
+
+    const refreshed = await request(createApp())
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", `nhuu_refresh_token=${legacyTokens.refreshToken}`);
+
+    expect(refreshed.status).toBe(200);
+    const newRefreshToken = cookieValue(refreshed.headers["set-cookie"], "nhuu_refresh_token");
+    const sessionId = decodeJwt(newRefreshToken).sessionId;
+    expect(sessionId).toEqual(expect.any(String));
+    const storedSession = await AuthSessionModel.findOne({ userId: document._id }).select(
+      "+refreshTokenHash"
+    );
+    expect(storedSession?.sessionId).toBe(sessionId);
+    expect(storedSession?.refreshTokenHash).toBe(
+      createHash("sha256").update(newRefreshToken).digest("hex")
+    );
+    expect(await AuthSessionModel.countDocuments({ userId: document._id })).toBe(1);
+    const upgradedUser = await UserModel.findById(document._id).select("+refreshTokenHash");
+    expect(upgradedUser?.refreshTokenHash).toBeNull();
+
+    const replay = await request(createApp())
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", `nhuu_refresh_token=${legacyTokens.refreshToken}`);
+    expect(replay.status).toBe(401);
+    expect(replay.body.error.code).toBe("INVALID_REFRESH_TOKEN");
+    expect(await AuthSessionModel.countDocuments({ userId: document._id })).toBe(1);
+  });
+
+  it("allows exactly one concurrent upgrade of a legacy refresh token", async () => {
+    const document = await UserModel.create({
+      email: "legacy-race@example.com",
+      name: "Legacy User",
+      passwordHash: await hashPassword("correct horse battery staple"),
+      role: "customer"
+    });
+    const legacyTokens = await issueTokens({
+      id: document.id,
+      email: document.email,
+      role: document.role
+    });
+    await UserModel.updateOne(
+      { _id: document._id },
+      { $set: { refreshTokenHash: createHash("sha256").update(legacyTokens.refreshToken).digest("hex") } }
+    );
+
+    const results = await Promise.allSettled([
+      rotateRefreshToken(legacyTokens.refreshToken),
+      rotateRefreshToken(legacyTokens.refreshToken)
+    ]);
+    const fulfilled = results.filter((result) => result.status === "fulfilled");
+    const rejected = results.filter((result) => result.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    const winner = fulfilled[0];
+    if (winner?.status !== "fulfilled") throw new Error("Expected one successful refresh");
+    expect(decodeJwt(winner.value.tokens.refreshToken).sessionId).toEqual(expect.any(String));
+    const sessions = await AuthSessionModel.find({ userId: document._id }).select("+refreshTokenHash");
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]?.refreshTokenHash).toBe(
+      createHash("sha256").update(winner.value.tokens.refreshToken).digest("hex")
+    );
+    await expect(rotateRefreshToken(legacyTokens.refreshToken)).rejects.toMatchObject({
+      statusCode: 401,
+      code: "INVALID_REFRESH_TOKEN"
+    });
   });
 
   it("enforces the admin-only role matrix", async () => {

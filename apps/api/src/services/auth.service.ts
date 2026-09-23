@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import bcrypt from "bcryptjs";
 import { jwtVerify, SignJWT } from "jose";
+import mongoose from "mongoose";
 
 import { AppError } from "../common/errors.js";
 import { AuthSessionModel } from "../models/auth-session.model.js";
@@ -124,6 +125,18 @@ async function createAuthSession(user: AuthUser): Promise<{ tokens: TokenPair; s
   return { tokens, sessionId };
 }
 
+// Tạo collection trước transaction để các lượt nâng cấp legacy đầu tiên không tranh chấp tạo collection.
+async function ensureAuthSessionsCollection(): Promise<void> {
+  try {
+    await AuthSessionModel.createCollection();
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === 48) {
+      return;
+    }
+    throw error;
+  }
+}
+
 export async function verifyAccessToken(token: string): Promise<AuthUser> {
   const { tokenUse: _tokenUse, ...user } = await verifyToken(token, "access");
   return user;
@@ -221,27 +234,51 @@ export async function rotateRefreshToken(refreshToken: string): Promise<{ user: 
     return { user: currentUser, tokens };
   }
 
-  const document = await UserModel.findById(tokenUser.id).select("+refreshTokenHash");
-  if (!document || document.refreshTokenHash !== currentDigest) {
-    throw new AppError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid or revoked");
+  await ensureAuthSessionsCollection();
+  const mongoSession = await mongoose.startSession();
+  try {
+    let upgraded: { user: AuthUser; tokens: TokenPair } | undefined;
+    await mongoSession.withTransaction(async () => {
+      const legacyUser = await UserModel.findOne({
+        _id: tokenUser.id,
+        refreshTokenHash: currentDigest
+      }).select("+refreshTokenHash").session(mongoSession);
+      if (!legacyUser) {
+        throw new AppError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid or revoked");
+      }
+
+      const user: AuthUser = {
+        id: legacyUser.id,
+        email: legacyUser.email,
+        role: legacyUser.role
+      };
+      const sessionId = randomUUID();
+      const tokens = await issueSessionTokens(user, sessionId);
+      const now = new Date();
+      const result = await UserModel.updateOne(
+        { _id: legacyUser._id, refreshTokenHash: currentDigest },
+        { $set: { refreshTokenHash: null } },
+        { session: mongoSession }
+      );
+      if (result.modifiedCount !== 1) {
+        throw new AppError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid or revoked");
+      }
+
+      await AuthSessionModel.create([{
+        sessionId,
+        userId: legacyUser._id,
+        refreshTokenHash: refreshDigest(tokens.refreshToken),
+        lastUsedAt: now,
+        expiresAt: new Date(now.getTime() + REFRESH_TOKEN_TTL_MS)
+      }], { session: mongoSession });
+      upgraded = { user, tokens };
+    });
+
+    if (!upgraded) throw new Error("Legacy refresh transaction did not complete");
+    return upgraded;
+  } finally {
+    await mongoSession.endSession();
   }
-
-  const currentUser: AuthUser = {
-    id: document.id,
-    email: document.email,
-    role: document.role
-  };
-  const tokens = await issueTokens(currentUser);
-  const result = await UserModel.updateOne(
-    { _id: document._id, refreshTokenHash: currentDigest },
-    { $set: { refreshTokenHash: refreshDigest(tokens.refreshToken) } }
-  );
-
-  if (result.modifiedCount !== 1) {
-    throw new AppError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid or revoked");
-  }
-
-  return { user: currentUser, tokens };
 }
 
 export async function revokeRefreshToken(refreshToken: string): Promise<void> {
