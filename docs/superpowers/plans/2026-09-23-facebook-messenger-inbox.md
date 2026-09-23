@@ -20,6 +20,7 @@
 - Send API dùng Page Access Token được cấp bởi người có tác vụ nhắn tin (`MESSAGE`) trên Page cùng quyền `pages_messaging`.
 - Tin trả lời chuẩn chỉ được gửi trong cửa sổ 24 giờ kể từ tin nhắn gần nhất do khách gửi. MVP không dùng message tag hoặc luồng gửi ngoài cửa sổ này.
 - Customer identity dùng khóa nội bộ `facebook:<pageId>:<PSID>` trong `Customer.platformId`; Facebook adapter tách PSID gốc trước khi gọi Meta.
+- Mỗi Facebook PSID phải có một conversation riêng trong Page; giữ `channelId` là Page ID để Inbox vẫn lọc được theo Page.
 - Page ID trong webhook phải ánh xạ chính xác tới một tài khoản NhuuChat. Không fan-out một sự kiện sang nhiều owner.
 - Không đưa App Secret, Page Access Token hoặc webhook verify token vào API response/log.
 - Composer của Facebook MVP chỉ bật gửi văn bản. Không hiển thị trạng thái gửi thành công nếu Meta trả lỗi.
@@ -33,6 +34,8 @@
 - Create `apps/api/src/channels/facebook-messenger/facebook-messenger.client.ts` and `.test.ts`: Graph Send API call, Page webhook subscription and safe error mapping with injected fetch.
 - Create `apps/api/src/channels/facebook-messenger/facebook-messenger.normalizer.ts` and `.test.ts`: convert supported customer messages and echoes to the existing platform/message contract; namespace customer and external IDs.
 - Create `apps/api/src/channels/facebook-messenger/facebook-messenger.webhook.ts` and integration tests: verify GET challenge and POST raw-body signature; resolve connected Page; persist idempotently; update unread once; emit existing realtime events.
+- Modify `apps/api/src/models/conversation.model.ts` and create `apps/api/src/db/migrate-facebook-conversation-customer-index.ts` with tests: include `customerId` in Facebook conversation uniqueness while preserving non-Facebook uniqueness semantics.
+- Persist Meta provider event time as message `createdAt`, which the current API contract and history ordering already use.
 - Create `apps/api/src/routes/facebook-messenger-webhook.routes.ts`; modify `apps/api/src/app.ts` for raw-body signature access and route registration without changing JSON parsing for other routes.
 - Modify `apps/api/src/services/message.service.ts` and `apps/api/src/services/outbound-message.service.test.ts`: route Facebook text through sender, use owner+Page connection, decrypt token only in memory, enforce 24-hour window, persist Meta message ID and safe delivery state.
 - Modify `packages/contracts/src/index.ts` only if current message/conversation contracts cannot carry the required Facebook-safe metadata; add focused contract tests where applicable.
@@ -111,10 +114,13 @@
 - `GET` compares `hub.mode`, `hub.verify_token` and returns `hub.challenge` only when configured verify token matches.
 - `POST` accepts raw bytes and validates `X-Hub-Signature-256` with HMAC-SHA256 using `META_APP_SECRET` before JSON parsing.
 - Webhook processor resolves `entry.id` to exactly one connection owner and ignores unsupported events safely.
-- Message persistence upserts by namespaced external ID; unread increments only when a new customer message is inserted; echo never creates a duplicate outbound message.
+- Conversation persistence upserts by `{ platform: "facebook", channelId: pageId, ownerId, customerId }`, keeping each PSID in a separate thread while preserving Page filtering.
+- Message persistence upserts by namespaced external ID and stores provider event time as `createdAt`; unread increments only when a new customer message is inserted; echo never creates a duplicate outbound message.
 
 - [ ] Add failing route tests for valid/invalid challenge, valid/invalid signature, malformed JSON, missing secret and unknown Page.
-- [ ] Add failing processor tests for supported text, unsupported attachment/event, echo, duplicate retry, Page ownership collision and malformed payload.
+- [ ] Add failing processor tests for two PSIDs on one Page creating separate conversations, supported text, unsupported attachment/event, echo, duplicate retry, Page ownership collision and malformed payload.
+- [ ] Add migration tests proving Facebook uniqueness adds `customerId` while non-Facebook uniqueness remains unchanged and the old index is replaced idempotently.
+- [ ] Add message history coverage proving delayed webhook messages sort by provider event time.
 - [ ] Implement normalizer and processor using existing customer/conversation/message schemas and realtime emit helpers; persist before returning webhook success.
 - [ ] Assert duplicate delivery leaves message count and unread count unchanged and each emitted event is scoped to the resolved conversation.
 - [ ] Run webhook unit/integration tests and commit the inbound slice.
@@ -173,6 +179,7 @@
 ## Acceptance Gate
 
 - Text received from a connected test Page creates exactly one customer message and appears in Inbox in real time.
+- Two customers messaging the same Page remain in separate conversations and replies use the corresponding PSID.
 - An authorized employee can send text and sees success only after Meta accepts it; policy-window and Meta errors are shown safely.
 - A Page ID resolves to one NhuuChat owner; access tokens and app secrets remain server-side.
 - Focused tests, relevant full suites, production build, type checks, and `git diff --check` pass; any pre-existing unrelated failures are documented.
