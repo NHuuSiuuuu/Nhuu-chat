@@ -1040,8 +1040,8 @@ function WorkspaceChannelCheckboxGroups({ channels, selected, onToggle }: {
 }) {
   return <div className="grid gap-4">{Object.entries(groupWorkspaceChannels(channels)).map(([platformKey, platformChannels]) => {
     const platform = platformKey as WorkspaceChannelPlatform;
-    return <fieldset className="grid gap-2" key={platform}>
-      <legend className="mb-1 flex w-full min-w-0 items-center gap-2 text-sm font-semibold text-slate-700"><PlatformIcon provider={workspaceChannelIconProvider(platform)} size={18} /><span className="min-w-0 break-words">{workspaceChannelLabel(platform)}</span></legend>
+    return <fieldset aria-label={workspaceChannelLabel(platform)} className="grid min-w-0 gap-2" key={platform}>
+      <div className="mb-1 flex min-w-0 items-center gap-2 text-sm font-semibold text-slate-700"><PlatformIcon provider={workspaceChannelIconProvider(platform)} size={18} /><span className="min-w-0 break-words">{workspaceChannelLabel(platform)}</span></div>
       {platformChannels.map((channel) => <label key={`${channel.platform}:${channel.channelId}`} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
         <input className="cursor-pointer" type="checkbox" checked={hasWorkspaceChannel(selected, channel)} onChange={(event) => onToggle(channel, event.target.checked)} />
         <span className="min-w-0 flex-1 truncate">{channel.name}</span><span className="max-w-[40%] shrink truncate text-right text-xs text-slate-400">{channel.displayId ?? channel.channelId}</span>
@@ -1152,7 +1152,7 @@ function WorkspaceMembersPanel({ token, refresh }: { token: string; refresh?: ()
             finally { setBusy(false); }
           }}>Xóa</button>}
         </div>
-        {canManage && member.role === "staff" && channels.length > 0 && <fieldset className="grid w-full min-w-0 gap-2 rounded-lg bg-slate-50 p-3 sm:rounded-none sm:bg-transparent sm:p-0 sm:pl-2"><legend className="mb-2 w-full min-w-0 text-xs font-medium text-slate-600">Kênh được phép truy cập</legend>{renderChannelChoices(member.allowedChannels, (channel, enabled) => {
+        {canManage && member.role === "staff" && channels.length > 0 && <fieldset aria-label="Kênh được phép truy cập" className="grid w-full min-w-0 gap-2 rounded-lg bg-slate-50 p-3 sm:rounded-none sm:bg-transparent sm:p-0 sm:pl-2"><div className="mb-2 text-xs font-medium text-slate-600">Kênh được phép truy cập</div>{renderChannelChoices(member.allowedChannels, (channel, enabled) => {
           const next = enabled ? [...member.allowedChannels, channel] : member.allowedChannels.filter((current) => current.platform !== channel.platform || current.channelId !== channel.channelId);
           void updateMemberChannels(member, next);
         })}</fieldset>}
@@ -1165,7 +1165,7 @@ function WorkspaceMembersPanel({ token, refresh }: { token: string; refresh?: ()
         <form className="grid gap-4 overflow-y-auto p-5" onSubmit={(event) => void submit(event)}>
           <label className="grid gap-1 text-sm font-medium text-slate-700">Email (đã có tài khoản trong hệ thống)<input className="rounded-lg border border-slate-200 px-3 py-2.5" type="email" required placeholder="nhanvien@email.com" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
           <label className="grid gap-1 text-sm font-medium text-slate-700">Vai trò<select className="rounded-lg border border-slate-200 px-3 py-2.5" value={role} onChange={(event) => setRole(event.target.value as "admin" | "staff")}><option value="admin">Quản trị viên</option><option value="staff">Nhân viên</option></select></label>
-          {role === "staff" && channels.length > 0 && <fieldset className="grid gap-2"><legend className="mb-2 text-sm font-medium text-slate-700">Kênh được phép truy cập</legend><div className="max-h-60 overflow-y-auto rounded-lg border border-gray-200 p-4">{renderChannelChoices(allowedChannels, (channel, enabled) => setAllowedChannels((current) => enabled ? [...current, channel] : current.filter((item) => item.platform !== channel.platform || item.channelId !== channel.channelId)))}</div><p className="text-xs text-slate-500">Không chọn gì = không giới hạn, thấy hết mọi Page (giống Quản trị viên).</p></fieldset>}
+          {role === "staff" && channels.length > 0 && <fieldset aria-label="Kênh được phép truy cập" className="grid min-w-0 gap-2"><div className="mb-2 text-sm font-medium text-slate-700">Kênh được phép truy cập</div><div className="max-h-60 overflow-y-auto rounded-lg border border-gray-200 p-4">{renderChannelChoices(allowedChannels, (channel, enabled) => setAllowedChannels((current) => enabled ? [...current, channel] : current.filter((item) => item.platform !== channel.platform || item.channelId !== channel.channelId)))}</div><p className="text-xs text-slate-500">Không chọn gì = không giới hạn, thấy hết mọi Page (giống Quản trị viên).</p></fieldset>}
           {role === "staff" && channels.length === 0 && <p className="text-sm text-slate-500">Workspace chưa có kênh để phân quyền.</p>}
           {error && <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</p>}
           <footer className="mt-2 flex justify-end gap-3 border-t border-slate-100 pt-4"><button type="button" disabled={busy} onClick={() => setIsModalOpen(false)} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 cursor-pointer disabled:cursor-not-allowed">Huỷ</button><button type="submit" disabled={busy} className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60">{busy ? "Đang lưu..." : "Thêm"}</button></footer>
