@@ -1044,7 +1044,7 @@ function WorkspaceChannelCheckboxGroups({ channels, selected, onToggle }: {
       <legend className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700"><PlatformIcon provider={workspaceChannelIconProvider(platform)} size={18} />{workspaceChannelLabel(platform)}</legend>
       {platformChannels.map((channel) => <label key={`${channel.platform}:${channel.channelId}`} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
         <input className="cursor-pointer" type="checkbox" checked={hasWorkspaceChannel(selected, channel)} onChange={(event) => onToggle(channel, event.target.checked)} />
-        <span className="min-w-0 flex-1 truncate">{channel.name}</span><span className="truncate text-xs text-slate-400">{channel.displayId ?? channel.channelId}</span>
+        <span className="min-w-0 flex-1 truncate">{channel.name}</span><span className="max-w-[40%] shrink truncate text-right text-xs text-slate-400">{channel.displayId ?? channel.channelId}</span>
       </label>)}
     </fieldset>;
   })}</div>;
@@ -1127,15 +1127,15 @@ function WorkspaceMembersPanel({ token, refresh }: { token: string; refresh?: ()
     <WorkspaceChannelCheckboxGroups channels={channels} selected={selected} onToggle={onToggle} />
   );
 
-  return <div className="p-6">
-    <h2 className="mb-2 text-2xl font-bold text-gray-900">Thành viên Workspace</h2>
-    <p className="mb-5 text-sm text-gray-600">Chỉ tài khoản đã đăng ký mới được thêm. Chủ sở hữu không thể sửa hoặc xóa. Không chọn kênh nào nghĩa là được truy cập tất cả kênh.</p>
+  return <div className="p-3 sm:p-6">
+    <h2 className="mb-2 text-xl font-bold text-gray-900 sm:text-2xl">Thành viên Workspace</h2>
+    <p className="mb-4 text-sm leading-5 text-gray-600 sm:mb-5">Chỉ tài khoản đã đăng ký mới được thêm. Chủ sở hữu không thể sửa hoặc xóa. Không chọn kênh nào nghĩa là được truy cập tất cả kênh.</p>
     {error && !isModalOpen && <p className="mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</p>}
-    <div className="rounded-2xl bg-white p-5 shadow-sm">
-      <div className="grid gap-3">{members.map((member) => <div key={member.userId} className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 py-3">
-        <div><p className="font-semibold text-slate-800">{member.name || member.email}</p><p className="text-sm text-slate-500">{member.email}{member.allowedChannels.length ? ` · ${member.allowedChannels.map((channel) => `${workspaceChannelLabel(channel.platform)}: ${channels.find((available) => available.platform === channel.platform && available.channelId === channel.channelId)?.displayId ?? channel.channelId}`).join(", ")}` : " · Tất cả kênh"}</p></div>
-        <div className="flex items-center gap-2">
-          {member.role === "owner" ? <span className="rounded-md bg-gray-100 px-3 py-1 text-sm font-medium text-gray-500">Chủ sở hữu</span> : <select aria-label={`Vai trò của ${member.email}`} disabled={!canManage || busy} value={member.role} className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50" onChange={async (event) => {
+    <div className="rounded-2xl bg-white p-0 shadow-sm sm:p-5">
+      <div className="grid gap-3">{members.map((member) => <div key={member.userId} className="flex min-w-0 flex-col gap-3 rounded-xl border border-slate-100 bg-white p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:rounded-none sm:border-0 sm:border-b sm:px-0 sm:py-3">
+        <div className="min-w-0 sm:flex-1"><p className="break-words font-semibold text-slate-800">{member.name || member.email}</p><p className="break-all text-sm text-slate-500">{member.email}{member.allowedChannels.length ? ` · ${member.allowedChannels.map((channel) => `${workspaceChannelLabel(channel.platform)}: ${channels.find((available) => available.platform === channel.platform && available.channelId === channel.channelId)?.displayId ?? channel.channelId}`).join(", ")}` : " · Tất cả kênh"}</p></div>
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          {member.role === "owner" ? <span className="rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-500">Chủ sở hữu</span> : <select aria-label={`Vai trò của ${member.email}`} disabled={!canManage || busy} value={member.role} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 sm:flex-none" onChange={async (event) => {
             const nextRole = event.target.value as "admin" | "staff";
             setBusy(true);
             try {
@@ -1152,13 +1152,13 @@ function WorkspaceMembersPanel({ token, refresh }: { token: string; refresh?: ()
             finally { setBusy(false); }
           }}>Xóa</button>}
         </div>
-        {canManage && member.role === "staff" && channels.length > 0 && <fieldset className="grid w-full gap-2 sm:pl-2"><legend className="mb-2 text-xs font-medium text-slate-600">Kênh được phép truy cập</legend>{renderChannelChoices(member.allowedChannels, (channel, enabled) => {
+        {canManage && member.role === "staff" && channels.length > 0 && <fieldset className="grid w-full gap-2 rounded-lg bg-slate-50 p-3 sm:rounded-none sm:bg-transparent sm:p-0 sm:pl-2"><legend className="mb-2 text-xs font-medium text-slate-600">Kênh được phép truy cập</legend>{renderChannelChoices(member.allowedChannels, (channel, enabled) => {
           const next = enabled ? [...member.allowedChannels, channel] : member.allowedChannels.filter((current) => current.platform !== channel.platform || current.channelId !== channel.channelId);
           void updateMemberChannels(member, next);
         })}</fieldset>}
       </div>)}</div>
     </div>
-    {canManage && <button type="button" onClick={() => { setError(""); setIsModalOpen(true); }} className="mt-5 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700 cursor-pointer">Thêm nhân viên</button>}
+    {canManage && <button type="button" onClick={() => { setError(""); setIsModalOpen(true); }} className="mt-4 w-full rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700 cursor-pointer sm:mt-5 sm:w-auto">Thêm nhân viên</button>}
     {canManage && isModalOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsModalOpen(false); }}>
       <section className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="workspace-member-modal-title">
         <header className="flex items-center justify-between border-b border-slate-100 p-5"><h3 id="workspace-member-modal-title" className="font-semibold text-slate-800">Thêm nhân viên</h3><button type="button" className="grid size-8 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 cursor-pointer" aria-label="Đóng modal thêm nhân viên" onClick={() => setIsModalOpen(false)}>×</button></header>
