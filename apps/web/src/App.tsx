@@ -4,6 +4,7 @@ import { toast, Toaster } from "sonner";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { chatEvents, type ChatMessageContract, type GeneralSettingsContract } from "@nhuu-chat/contracts";
 import { createChatSocket } from "./lib/socket.js";
+import { pauseSocketWhenHidden } from "./state/inbox-session-state.js";
 import { loadGeneralSettings } from "./components/settings/general-settings.js";
 import { InboxPage } from "./pages/InboxPage.js";
 import { conversationPathForPlatform, DashboardPage } from "./pages/DashboardPage.js";
@@ -305,6 +306,7 @@ export function App() {
     let notificationSettings: GeneralSettingsContract | null = null;
     const seenMessageIds = new Set<string>();
     const socket = createChatSocket(API_URL, undefined, activeWorkspaceId || undefined);
+    const stopSocketWhileHidden = pauseSocketWhenHidden(socket, document);
     const handleSettingsUpdated = (event: Event) => {
       const updatedSettings = (event as CustomEvent<GeneralSettingsContract>).detail;
       if (updatedSettings) notificationSettings = updatedSettings;
@@ -331,6 +333,7 @@ export function App() {
     return () => {
       window.removeEventListener(GENERAL_SETTINGS_UPDATED_EVENT, handleSettingsUpdated);
       socket.off(chatEvents.incomingMessage, handleIncomingMessage);
+      stopSocketWhileHidden();
       socket.disconnect();
     };
   }, [auth, authReady, activeWorkspaceId, location.pathname, navigateToIncomingConversation, refresh]);
@@ -383,7 +386,7 @@ export function App() {
       routerNavigate(nextPath);
     };
     const topbarProps = { user: auth.user, onLogout: logout, onProfile: openProfile };
-    privatePage = page === "dashboard" ? <DashboardPage {...topbarProps} token="" refresh={refresh} onOpenInbox={(platform) => navigate("inbox", platform)} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} settingsSubmenuItems={mobileSettingsItems} nestedSettingsSubmenuItems={{ "Giới thiệu": mobileAboutSections }} onSettingsSubmenuNavigate={navigateFromMobileSettings} onNestedSettingsSubmenuNavigate={navigateFromMobileAbout} /> : page === "telegram" ? <TelegramPersonalPage token="" refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage {...topbarProps} token="" refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "profile" ? <ProfilePage {...topbarProps} token="" onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "posts" ? <FacebookPublishingPage {...topbarProps} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "development" ? <DevelopmentPage {...topbarProps} section={developmentSection} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : <InboxPage {...topbarProps} token="" platform={inboxConversationPlatform} channelId={inboxChannelId} selectedConversationId={requestedConversation?.id} selectedConversationRequest={requestedConversation?.request} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} />;
+    privatePage = page === "dashboard" ? <DashboardPage {...topbarProps} token="" refresh={refresh} onOpenInbox={(platform) => navigate("inbox", platform)} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} settingsSubmenuItems={mobileSettingsItems} nestedSettingsSubmenuItems={{ "Giới thiệu": mobileAboutSections }} onSettingsSubmenuNavigate={navigateFromMobileSettings} onNestedSettingsSubmenuNavigate={navigateFromMobileAbout} /> : page === "telegram" ? <TelegramPersonalPage token="" refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage {...topbarProps} token="" refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "profile" ? <ProfilePage {...topbarProps} token="" onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "posts" ? <FacebookPublishingPage {...topbarProps} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "development" ? <DevelopmentPage {...topbarProps} section={developmentSection} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : <InboxPage key={`inbox-${auth.user.id}-${activeWorkspaceId}`} {...topbarProps} token="" workspaceId={activeWorkspaceId} platform={inboxConversationPlatform} channelId={inboxChannelId} selectedConversationId={requestedConversation?.id} selectedConversationRequest={requestedConversation?.request} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} />;
   }
   return <>
     <WorkspacePickerProvider value={authReady && auth ? {

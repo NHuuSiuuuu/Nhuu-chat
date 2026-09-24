@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 
 import { apiRequest } from "../../lib/api.js";
 import { connectFacebookPage, FacebookPublishingApiError, listFacebookOAuthPages, selectFacebookOAuthPage, startFacebookOAuth, type FacebookOAuthPage } from "../../lib/facebook-publishing.api.js";
+import { runIntervalWhileVisible } from "../../state/inbox-session-state.js";
 import { connectionProviders, initialConnectionProvider, type ConnectionProviderId } from "../../state/dashboard-ui.js";
 import { PlatformIcon } from "./PlatformIcon.js";
 import { connectModalCloseDurationMs } from "../../state/modal-ui.js";
@@ -120,11 +121,15 @@ export function ConnectModal({ token, refresh, onClose, onConnected, initialProv
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
 
   function requestClose() {
     if (closing) return;
     setClosing(true);
-    window.setTimeout(onClose, connectModalCloseDurationMs);
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      onClose();
+    }, connectModalCloseDurationMs);
   }
 
   useEffect(() => {
@@ -152,6 +157,7 @@ export function ConnectModal({ token, refresh, onClose, onConnected, initialProv
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
       window.removeEventListener("keydown", handleKeyDown);
       openerRef.current?.focus();
     };
@@ -159,28 +165,26 @@ export function ConnectModal({ token, refresh, onClose, onConnected, initialProv
 
   useEffect(() => {
     if (!qr || (qr.status !== "waiting" && qr.status !== "password_required")) return;
-    const timer = window.setInterval(() => {
+    return runIntervalWhileVisible(() => {
       void apiRequest<QrStatus>("", `/api/v1/channels/telegram-personal/qr/${qr.id}`, token, {}, refresh)
         .then((next) => {
           setQr(next);
           if (next.status === "connected") onConnected();
         })
         .catch(() => undefined);
-    }, 2000);
-    return () => window.clearInterval(timer);
+    }, 2000, document);
   }, [onConnected, qr?.id, qr?.status, refresh, token]);
 
   useEffect(() => {
     if (!zaloQr || zaloQr.status !== "waiting_qr") return;
-    const timer = window.setInterval(() => {
+    return runIntervalWhileVisible(() => {
       void apiRequest<ZaloQrStatus>("", `/api/v1/channels/zalo-personal/qr/${zaloQr.id}`, token, {}, refresh)
         .then((next) => {
           setZaloQr(next);
           if (next.status === "connected") onConnected();
         })
         .catch(() => undefined);
-    }, 2000);
-    return () => window.clearInterval(timer);
+    }, 2000, document);
   }, [onConnected, refresh, token, zaloQr?.id, zaloQr?.status]);
 
   useEffect(() => {

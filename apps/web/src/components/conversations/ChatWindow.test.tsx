@@ -103,6 +103,26 @@ describe("ChatWindow delivery indicator", () => {
   });
 });
 
+describe("ChatWindow recovery state", () => {
+  it("keeps the previous conversation layout represented while its URL id is loading", () => {
+    const html = renderToStaticMarkup(<chatWindow.ChatWindow
+      conversation={null}
+      messages={[]}
+      isRestoringConversation
+      onSend={async () => true}
+      quickReplies={[]}
+      pinnedMessages={[]}
+      isPinned={() => false}
+      onPinMessage={async () => undefined}
+      onUnpinMessage={async () => undefined}
+    />);
+
+    expect(html).toContain('aria-label="Đang khôi phục hội thoại"');
+    expect(html).toContain("animate-pulse");
+    expect(html).not.toContain("Chọn một hội thoại từ danh sách bên trái");
+  });
+});
+
 describe("ChatWindow bot toggle colors", () => {
   it("uses the brand blue background when bot automation is enabled", () => {
     const html = renderToStaticMarkup(<chatWindow.ChatWindow

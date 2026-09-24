@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { resolveApiBaseUrl } from "../../lib/api-url.js";
@@ -15,6 +15,10 @@ export function ResetPasswordPage({ onNavigateLogin, onResetSuccess }: { onNavig
   const [error, setError] = useState(token ? "" : "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn");
   const [submitting, setSubmitting] = useState(false);
   const [resetSucceeded, setResetSucceeded] = useState(false);
+  const redirectTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (redirectTimerRef.current !== null) window.clearTimeout(redirectTimerRef.current);
+  }, []);
 
   // Chỉ xóa token khỏi thanh địa chỉ sau khi API xác nhận mật khẩu đã được cập nhật.
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -46,7 +50,10 @@ export function ResetPasswordPage({ onNavigateLogin, onResetSuccess }: { onNavig
 
       navigate("/reset-password", { replace: true });
       setResetSucceeded(true);
-      window.setTimeout(onResetSuccess, 1200);
+      redirectTimerRef.current = window.setTimeout(() => {
+        redirectTimerRef.current = null;
+        onResetSuccess();
+      }, 1200);
     } catch {
       setError("Không thể đặt lại mật khẩu lúc này. Vui lòng thử lại sau.");
     } finally {

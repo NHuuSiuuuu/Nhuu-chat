@@ -8,6 +8,7 @@ describe("MessageComposer accessibility", () => {
 
     expect(source).toContain("focus-visible:ring-2");
     expect(source).toContain("focus-visible:ring-blue-300");
+    expect(source).toContain('useState(draft ?? "")');
   });
 
   it("provides the prompt-defined multiline composer structure", () => {

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 
 import { apiRequest } from "../lib/api.js";
+import { runIntervalWhileVisible } from "../state/inbox-session-state.js";
 
 interface QrStatus { id: string; status: "waiting" | "password_required" | "connected" | "failed"; qrUrl: string | null; expiresAt: string | null; error: string | null; passwordHint: string | null; }
 
@@ -12,7 +13,7 @@ export function TelegramPersonalPage({ token, refresh, onBack }: { token: string
   const [error, setError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [submittingPassword, setSubmittingPassword] = useState(false);
-  useEffect(() => { if (!qr || (qr.status !== "waiting" && qr.status !== "password_required")) return; const timer = window.setInterval(() => { void apiRequest<QrStatus>("", `/api/v1/channels/telegram-personal/qr/${qr.id}`, token, {}, refresh).then(setQr).catch(() => undefined); }, 2000); return () => window.clearInterval(timer); }, [qr, token, refresh]);
+  useEffect(() => { if (!qr || (qr.status !== "waiting" && qr.status !== "password_required")) return; return runIntervalWhileVisible(() => { void apiRequest<QrStatus>("", `/api/v1/channels/telegram-personal/qr/${qr.id}`, token, {}, refresh).then(setQr).catch(() => undefined); }, 2000, document); }, [qr, token, refresh]);
   useEffect(() => { if (!qr?.qrUrl) { setImage(null); return; } void QRCode.toDataURL(qr.qrUrl, { width: 280, margin: 2 }).then(setImage).catch(() => setError("Không thể tạo mã QR")); }, [qr?.qrUrl]);
   async function start() { setError(null); try { setQr(await apiRequest<QrStatus>("", "/api/v1/channels/telegram-personal/qr", token, { method: "POST" }, refresh)); } catch (requestError) { setError(requestError instanceof Error ? requestError.message : "Không thể tạo mã QR"); } }
   async function submitPassword(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); setError(null); setSubmittingPassword(true); try { setQr(await apiRequest<QrStatus>("", `/api/v1/channels/telegram-personal/qr/${qr?.id}/password`, token, { method: "POST", body: JSON.stringify({ password }) }, refresh)); setPassword(""); } catch (requestError) { setError(requestError instanceof Error ? requestError.message : "Không thể gửi mật khẩu Telegram"); } finally { setSubmittingPassword(false); } }

@@ -89,7 +89,7 @@ export function processComposerKey(state: ComposerBehaviorState, event: { key: s
 }
 
 export function MessageComposer({ onSend, quickReplies, disabled = false, draft, onDraftChange, aiSuggestions, aiSuggestionsEnabled = true, isAiSuggestionsLoading = false, aiSuggestionsError, onRefreshAiSuggestions, availableTags = [], conversationTags = [], onTagsChange, platform }: { onSend: (content: ComposerSendPayload) => Promise<boolean>; quickReplies: QuickReplyContract[]; disabled?: boolean; draft?: string; onDraftChange?: (content: string) => void; aiSuggestions?: string[] | null; aiSuggestionsEnabled?: boolean; isAiSuggestionsLoading?: boolean; aiSuggestionsError?: string | null; onRefreshAiSuggestions?: () => void; availableTags?: ConversationTagContract[]; conversationTags?: ConversationTagContract[]; onTagsChange?: (tags: ConversationTagContract[]) => Promise<void>; platform?: string }) {
-  const [content, setContent] = useState("");
+  const [content, setContent] = useState(draft ?? "");
   const [selectedAttachmentUrl, setSelectedAttachmentUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedFilePreviewUrl, setSelectedFilePreviewUrl] = useState<string | null>(null);

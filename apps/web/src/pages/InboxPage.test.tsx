@@ -363,6 +363,26 @@ describe("Inbox Tailwind migration", () => {
     expect(source).toContain('"nhuu-chat.inbox-list-open"');
   });
 
+  it("checkpoints drafts and scroll positions on background and scopes them to the active Workspace", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("inboxSessionStorageKey(user?.id, workspaceId)");
+    expect(source).toContain('document.addEventListener("visibilitychange", persistWhenHidden)');
+    expect(source).toContain('window.addEventListener("pagehide", persistSessionState)');
+    expect(source).toContain("drafts: draftsRef.current");
+    expect(source).toContain("scrollPositions: scrollPositionsRef.current");
+    expect(source).toContain("savedScrollTop={activeId ? scrollPositionsRef.current[activeId] : undefined}");
+    expect(source).toContain("onScrollPositionChange={(id, scrollTop) => { scrollPositionsRef.current[id] = scrollTop; }}");
+  });
+
+  it("pauses realtime in the background and refreshes missed inbox data on resume", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("pauseSocketWhenHidden(socket, document, syncAfterResume)");
+    expect(source).toContain("mergeMessages(current, result.messages)");
+    expect(source).toContain("socket.disconnect()");
+  });
+
   it("applies per-account notification and unread-navigation settings without a second sound path", () => {
     const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
 

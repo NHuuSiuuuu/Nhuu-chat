@@ -45,6 +45,7 @@ interface ChatWindowProps {
   conversation: ConversationContract | null;
   messages: ChatMessageContract[];
   isLoadingMessages?: boolean;
+  isRestoringConversation?: boolean;
   onSend: (content: ComposerSendPayload) => Promise<boolean>;
   onRetryMessage?: (messageId: string) => void;
   quickReplies: QuickReplyContract[];
@@ -66,6 +67,8 @@ interface ChatWindowProps {
   onTagsChange?: (tags: ConversationTagContract[]) => Promise<void>;
   draft?: string;
   onDraftChange?: (content: string) => void;
+  savedScrollTop?: number;
+  onScrollPositionChange?: (conversationId: string, scrollTop: number) => void;
   onToggleBot?: () => Promise<void>;
   isTogglingBot?: boolean;
   toggleBotError?: string | null;
@@ -110,7 +113,7 @@ function PinnedMessagesBar({ pinnedMessages, activeIndex, onChangeIndex, onUnpin
     <span className="min-w-0 truncate text-xs text-gray-600">{pinnedMessageQuote(pin)}</span></button><div className="invisible flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/pinned-item:visible group-hover/pinned-item:opacity-100 group-focus-within/pinned-item:visible group-focus-within/pinned-item:opacity-100"><button className="grid size-7 place-items-center rounded-full text-gray-400 hover:bg-red-50 hover:text-red-600 cursor-pointer" type="button" onClick={(event) => handlePinnedBarUnpin(event, pin.messageId, onUnpinMessage)} aria-label="Bỏ ghim" title="Bỏ ghim"><InboxIcon name="close" size={14} /></button><button className="grid size-7 place-items-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 cursor-pointer" type="button" onClick={(event) => { event.stopPropagation(); void copyPinnedMessage(pinnedMessageQuote(pin)); }} aria-label="Sao chép tin đã ghim" title="Sao chép"><InboxIcon name="copy" size={14} /></button></div></div>)}</div>}</>}{pinError && <p className="mt-1 text-xs text-red-600" role="alert">{pinError}</p>}</div>;
 }
 
-export function ChatWindow({ conversation, messages, isLoadingMessages = false, onSend, onRetryMessage, quickReplies, pinnedMessages, isPinned, onPinMessage, onUnpinMessage, pinError, onOpenConversationList, showOpenNextUnreadAction = false, onOpenNextUnread, isCustomerTyping = false, aiSuggestions, isAiSuggestionsLoading = false, aiSuggestionsError, onRefreshAiSuggestions, aiSuggestionsEnabled = true, availableTags = [], onTagsChange, draft = "", onDraftChange, onToggleBot, isTogglingBot = false, toggleBotError }: ChatWindowProps) {
+export function ChatWindow({ conversation, messages, isLoadingMessages = false, isRestoringConversation = false, onSend, onRetryMessage, quickReplies, pinnedMessages, isPinned, onPinMessage, onUnpinMessage, pinError, onOpenConversationList, showOpenNextUnreadAction = false, onOpenNextUnread, isCustomerTyping = false, aiSuggestions, isAiSuggestionsLoading = false, aiSuggestionsError, onRefreshAiSuggestions, aiSuggestionsEnabled = true, availableTags = [], onTagsChange, draft = "", onDraftChange, savedScrollTop, onScrollPositionChange, onToggleBot, isTogglingBot = false, toggleBotError }: ChatWindowProps) {
   const messagesRef = useRef<HTMLDivElement>(null);
   const stickToLatestRef = useRef(true);
   const scrollFrameRef = useRef<number | null>(null);
@@ -137,11 +140,23 @@ export function ChatWindow({ conversation, messages, isLoadingMessages = false, 
   }
 
   useEffect(() => {
-    stickToLatestRef.current = true;
+    stickToLatestRef.current = savedScrollTop === undefined;
     setShowLatestButton(false);
-    scheduleScrollToLatest("auto");
+    if (!isLoadingMessages) {
+      scrollFrameRef.current = requestAnimationFrame(() => {
+        scrollFrameRef.current = null;
+        const element = messagesRef.current;
+        if (!element) return;
+        if (savedScrollTop !== undefined) {
+          element.scrollTop = savedScrollTop;
+          handleScroll();
+        } else {
+          scrollToLatest("auto");
+        }
+      });
+    }
     return () => { if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current); };
-  }, [conversation?.id]);
+  }, [conversation?.id, isLoadingMessages]);
 
   useEffect(() => {
     if (stickToLatestRef.current) scheduleScrollToLatest("auto");
@@ -156,8 +171,10 @@ export function ChatWindow({ conversation, messages, isLoadingMessages = false, 
     const nearLatest = isNearLatestMessage(element);
     stickToLatestRef.current = nearLatest;
     setShowLatestButton(!nearLatest && element.scrollHeight > element.clientHeight);
+    if (conversation?.id) onScrollPositionChange?.(conversation.id, element.scrollTop);
   }
 
+  if (!conversation && isRestoringConversation) return <section className="chat-main flex h-full min-w-0 min-h-0 flex-col bg-slate-100" aria-label="Đang khôi phục hội thoại"><div className="flex min-h-0 flex-1 flex-col bg-white p-4" role="status" aria-label="Đang khôi phục hội thoại"><div className="flex items-center gap-3 border-b border-slate-100 pb-4"><span className="size-10 animate-pulse rounded-full bg-slate-200" /><span className="h-4 w-40 animate-pulse rounded bg-slate-200" /></div><div className="grid flex-1 content-end gap-4 py-5"><span className="h-12 w-2/3 animate-pulse rounded-xl bg-slate-100" /><span className="ml-auto h-12 w-1/2 animate-pulse rounded-xl bg-blue-100" /><span className="h-12 w-3/5 animate-pulse rounded-xl bg-slate-100" /></div></div></section>;
   if (!conversation) return <section className="chat-main flex h-full min-w-0 min-h-0 flex-col bg-slate-100" aria-label="Cửa sổ chat"><div className="flex min-h-0 flex-1"><div className="flex min-w-0 flex-1 flex-col"><div className="chat-empty-state grid h-full place-content-center justify-items-center p-6 text-center"><div className="chat-empty-icon grid size-[120px] place-items-center rounded-full bg-white text-blue-600 shadow-sm"><InboxIcon name="chat" size={52} /></div><p className="mt-3.5 text-base text-gray-500">Chọn một hội thoại từ danh sách bên trái để bắt đầu.</p><button className="mt-5 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 min-[900px]:hidden cursor-pointer" type="button" onClick={onOpenConversationList} aria-label="Mở danh sách hội thoại"><InboxIcon name="list" size={17} />Mở danh sách hội thoại</button></div></div><ConversationInfoSidebar hasConversation={false} /></div></section>;
   const name = conversationDisplayName(conversation);
   const platformIconProvider = conversation.platform === "zalo_personal" ? "zalo" : conversation.platform === "telegram_personal" ? "telegram" : conversation.platform;
@@ -206,7 +223,7 @@ export function ChatWindow({ conversation, messages, isLoadingMessages = false, 
           {isCustomerTyping && <div className="my-4 flex items-start gap-3" aria-label="Người dùng đang nhập"><div className="flex items-center gap-1 rounded-2xl bg-white px-4 py-3 shadow-sm"><span className="size-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.3s]" /><span className="size-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.15s]" /><span className="size-2 animate-bounce rounded-full bg-gray-400" /></div></div>}
           {showLatestButton && <button className="sticky bottom-3 left-1/2 z-10 mx-auto -mt-10 flex translate-y-0 items-center gap-1 rounded-full border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 shadow-lg transition duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:ring-2 focus-visible:ring-blue-300 cursor-pointer" type="button" onClick={() => scrollToLatest("smooth")} aria-label="Cuộn xuống tin nhắn mới nhất">↓ Tin mới nhất</button>}
         </div>
-        <MessageComposer onSend={onSend} quickReplies={quickReplies} draft={draft} onDraftChange={onDraftChange} aiSuggestions={aiSuggestions} isAiSuggestionsLoading={isAiSuggestionsLoading} aiSuggestionsError={aiSuggestionsError} onRefreshAiSuggestions={onRefreshAiSuggestions} aiSuggestionsEnabled={aiSuggestionsEnabled} availableTags={availableTags} conversationTags={conversation.tags ?? []} onTagsChange={onTagsChange} platform={conversation?.platform} />
+        <MessageComposer key={conversation.id} onSend={onSend} quickReplies={quickReplies} draft={draft} onDraftChange={onDraftChange} aiSuggestions={aiSuggestions} isAiSuggestionsLoading={isAiSuggestionsLoading} aiSuggestionsError={aiSuggestionsError} onRefreshAiSuggestions={onRefreshAiSuggestions} aiSuggestionsEnabled={aiSuggestionsEnabled} availableTags={availableTags} conversationTags={conversation.tags ?? []} onTagsChange={onTagsChange} platform={conversation?.platform} />
       </div>
       <ConversationInfoSidebar mobileOpen={isInfoSidebarOpen} onClose={() => setIsInfoSidebarOpen(false)} hasConversation={Boolean(conversation)} />
     </div>

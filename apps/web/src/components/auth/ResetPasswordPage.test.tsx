@@ -12,7 +12,7 @@ describe("ResetPasswordPage", () => {
   });
 
   function renderPage(search: string, onNavigateLogin = vi.fn(), onResetSuccess = vi.fn()) {
-    vi.stubGlobal("window", { setTimeout: globalThis.setTimeout });
+    vi.stubGlobal("window", { setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout });
     let currentPath = "";
     function PathProbe() { currentPath = useLocation().pathname + useLocation().search; return null; }
     let renderer!: ReactTestRenderer;
@@ -55,6 +55,20 @@ describe("ResetPasswordPage", () => {
     expect(onResetSuccess).not.toHaveBeenCalled();
     await act(async () => { await vi.advanceTimersByTimeAsync(1200); });
     expect(onResetSuccess).toHaveBeenCalledOnce();
+  });
+
+  it("clears the delayed reset callback when its page unmounts", async () => {
+    vi.useFakeTimers();
+    const { renderer, onResetSuccess } = renderPage("?token=reset-token");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 204 }));
+    const [password, confirmation] = renderer.root.findAllByType("input");
+    act(() => password.props.onChange({ target: { value: "new-password-123" } }));
+    act(() => confirmation.props.onChange({ target: { value: "new-password-123" } }));
+    await act(async () => renderer.root.findByType("form").props.onSubmit({ preventDefault: vi.fn() }));
+
+    act(() => renderer.unmount());
+    await act(async () => { await vi.advanceTimersByTimeAsync(1200); });
+    expect(onResetSuccess).not.toHaveBeenCalled();
   });
 
   it("shows the same invalid-link message when reset API rejects the token", async () => {

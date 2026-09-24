@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { chatEvents, type AiSettingsContract, type AiSuggestionsResponse, type ChatMessageContract, type ConversationContract, type ConversationPinEventPayload, type ConversationTagContract, type GeneralSettingsContract, type QuickReplyContract } from "@nhuu-chat/contracts";
 import { apiRequest } from "../lib/api.js";
 import { createChatSocket } from "../lib/socket.js";
+import { inboxSessionStorageKey, pauseSocketWhenHidden, readInboxSessionState, writeInboxSessionState, type InboxSessionState } from "../state/inbox-session-state.js";
 import { resolveApiBaseUrl } from "../lib/api-url.js";
 import { facebookSafeApiErrorMessage } from "../lib/facebook-publishing.api.js";
 import { ConversationList } from "../components/conversations/ConversationList.js";
@@ -140,16 +141,24 @@ export async function loadInboxQuickReplies(request: () => Promise<{ quickReplie
 type InboxAccount = DashboardAccount & { id?: string };
 type RetryPayloadEntry = { conversationId: string; payload: ComposerSendPayload; previewUrl?: string };
 
-export function InboxPage({ token, refresh, platform, channelId, selectedConversationId, selectedConversationRequest, onBack, onLogoClick, onNavigate, user, onLogout, onProfile }: { token: string; refresh?: () => Promise<string | null>; platform?: string; channelId?: string; selectedConversationId?: string | null; selectedConversationRequest?: number; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void; user?: InboxAccount | null; onLogout?: () => void; onProfile?: () => void }) {
+export function InboxPage({ token, refresh, platform, channelId, selectedConversationId, selectedConversationRequest, workspaceId = "", onBack, onLogoClick, onNavigate, user, onLogout, onProfile }: { token: string; refresh?: () => Promise<string | null>; platform?: string; channelId?: string; selectedConversationId?: string | null; selectedConversationRequest?: number; workspaceId?: string; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void; user?: InboxAccount | null; onLogout?: () => void; onProfile?: () => void }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const sessionStorageKey = inboxSessionStorageKey(user?.id, workspaceId);
+  const initialSessionStateRef = React.useRef<InboxSessionState | null>(null);
+  if (initialSessionStateRef.current === null) {
+    try { initialSessionStateRef.current = readInboxSessionState(window.sessionStorage, sessionStorageKey); }
+    catch { initialSessionStateRef.current = { drafts: {}, scrollPositions: {} }; }
+  }
   const [conversations, setConversations] = useState<ConversationContract[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageContract[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [pinnedMessagesState, setPinnedMessagesState] = useState<ConversationPinnedMessagesState>({ conversationId: null, pinnedMessages: [] });
   const [pinnedMessagesError, setPinnedMessagesError] = useState<string | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [drafts, setDrafts] = useState<Record<string, string>>(() => initialSessionStateRef.current?.drafts ?? {});
+  const draftsRef = React.useRef(drafts);
+  const scrollPositionsRef = React.useRef(initialSessionStateRef.current?.scrollPositions ?? {});
   const [aiSuggestions, setAiSuggestions] = useState<AiSuggestionsResponse["suggestions"] | null>(null);
   const [isAiSuggestionsLoading, setIsAiSuggestionsLoading] = useState(false);
   const [aiSuggestionsError, setAiSuggestionsError] = useState<string | null>(null);
@@ -168,6 +177,7 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
   const [conversationListWidth, setConversationListWidth] = useState(CONVERSATION_LIST_MAX_WIDTH);
   const isConversationListCollapsed = conversationListWidth <= CONVERSATION_LIST_MIN_WIDTH;
   const nextReadGenerationRef = React.useRef(0);
+  const resizeCleanupRef = React.useRef<(() => void) | null>(null);
   const conversationRevisionRef = React.useRef(new Map<string, number>());
   const conversationsRef = React.useRef<ConversationContract[]>([]);
   const readStateRef = React.useRef(new Map<string, { generation: number; baseline: number; revision: number; confirmedGeneration?: number; confirmedRevision?: number }>());
@@ -201,6 +211,24 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
   useEffect(() => () => {
     for (const messageId of retryPayloadsRef.current.keys()) releaseRetryPayload(messageId);
   }, []);
+  useEffect(() => () => { resizeCleanupRef.current?.(); }, []);
+  useEffect(() => {
+    const persistSessionState = () => {
+      try {
+        writeInboxSessionState(window.sessionStorage, sessionStorageKey, {
+          drafts: draftsRef.current,
+          scrollPositions: scrollPositionsRef.current
+        });
+      } catch { /* Bộ nhớ phiên có thể bị trình duyệt vô hiệu hóa. */ }
+    };
+    const persistWhenHidden = () => { if (document.visibilityState === "hidden") persistSessionState(); };
+    document.addEventListener("visibilitychange", persistWhenHidden);
+    window.addEventListener("pagehide", persistSessionState);
+    return () => {
+      document.removeEventListener("visibilitychange", persistWhenHidden);
+      window.removeEventListener("pagehide", persistSessionState);
+    };
+  }, [sessionStorageKey]);
   // Uses generation and revision guards so delayed read responses cannot undo newer realtime activity.
   async function markActiveRead(id: string): Promise<boolean> {
     const previousReadState = readStateRef.current.get(id);
@@ -363,6 +391,26 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
   }, [activeId, token, refresh, aiSuggestionsEnabled, aiSettingsLoaded, aiSettings.suggestionMode]);
   useEffect(() => {
     const socket = createChatSocket(API_URL, token);
+    let disposed = false;
+    const syncAfterResume = () => {
+      void apiRequest<{ conversations: ConversationContract[] }>(API_URL, buildConversationListRequestPath(platform, channelId), token, {}, refresh)
+        .then((result) => {
+          if (disposed) return;
+          setConversations((current) => {
+            const next = result.conversations.reduce(upsertConversation, current);
+            conversationsRef.current = next;
+            return next;
+          });
+        })
+        .catch(() => undefined);
+      if (activeId) {
+        const resumedConversationId = activeId;
+        void apiRequest<{ messages: ChatMessageContract[] }>(API_URL, `/api/v1/conversations/${resumedConversationId}/messages`, token, {}, refresh)
+          .then((result) => { if (!disposed) setMessages((current) => mergeMessages(current, result.messages)); })
+          .catch(() => undefined);
+      }
+    };
+    const stopSocketWhileHidden = pauseSocketWhenHidden(socket, document, syncAfterResume);
     const joinActiveRoom = () => { if (activeId) socket.emit(chatEvents.joinRoom, activeId); };
     const handleMessagePinUpdated = (payload: ConversationPinEventPayload) => {
       if (payload.conversationId !== activeId) return;
@@ -373,7 +421,7 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
       }));
       setPinnedMessagesError(null);
     };
-    socket.on(chatEvents.messageReceived, (message: ChatMessageContract) => {
+    const handleMessageReceived = (message: ChatMessageContract) => {
       const revision = (conversationRevisionRef.current.get(message.conversationId) ?? 0) + 1;
       conversationRevisionRef.current.set(message.conversationId, revision);
       if (message.clientMessageId) {
@@ -409,14 +457,12 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
         void markActiveRead(activeId);
         if (message.senderType === "customer" && aiSettingsLoaded && shouldAutoRefreshAiSuggestions(aiSettings.suggestionMode, "customer_message")) void refreshAiSuggestions(activeId, "customer_message");
       }
-    });
-    socket.on("connect", joinActiveRoom);
-    socket.on(chatEvents.messagePinUpdated, handleMessagePinUpdated);
-    socket.on(chatEvents.agentTyping, (payload: { conversationId?: unknown; isTyping?: unknown }) => {
+    };
+    const handleAgentTyping = (payload: { conversationId?: unknown; isTyping?: unknown }) => {
       if (payload.conversationId !== activeId) return;
       setIsCustomerTyping(payload.isTyping === true);
-    });
-    socket.on(chatEvents.conversationUpdated, (conversation: ConversationContract) => {
+    };
+    const handleConversationUpdated = (conversation: ConversationContract) => {
       if (channelId && (conversation.platform !== platform || conversation.channelId !== channelId)) return;
       const revision = (conversationRevisionRef.current.get(conversation.id) ?? 0) + 1;
       conversationRevisionRef.current.set(conversation.id, revision);
@@ -426,9 +472,23 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
       conversationsRef.current = updatedConversations;
       setConversations(updatedConversations);
       if (conversation.id === activeId && conversation.unreadCount > 0) void markActiveRead(conversation.id);
-    });
+    };
+    socket.on(chatEvents.messageReceived, handleMessageReceived);
+    socket.on("connect", joinActiveRoom);
+    socket.on(chatEvents.messagePinUpdated, handleMessagePinUpdated);
+    socket.on(chatEvents.agentTyping, handleAgentTyping);
+    socket.on(chatEvents.conversationUpdated, handleConversationUpdated);
     joinActiveRoom();
-    return () => { socket.off("connect", joinActiveRoom); socket.off(chatEvents.messagePinUpdated, handleMessagePinUpdated); socket.disconnect(); };
+    return () => {
+      disposed = true;
+      stopSocketWhileHidden();
+      socket.off(chatEvents.messageReceived, handleMessageReceived);
+      socket.off("connect", joinActiveRoom);
+      socket.off(chatEvents.messagePinUpdated, handleMessagePinUpdated);
+      socket.off(chatEvents.agentTyping, handleAgentTyping);
+      socket.off(chatEvents.conversationUpdated, handleConversationUpdated);
+      socket.disconnect();
+    };
   }, [token, platform, channelId, activeId, aiSettingsLoaded, aiSettings.suggestionMode, aiSuggestionsEnabled, generalSettings, hasCurrentGeneralSettings]);
   function setConversationListOpen(open: boolean) {
     setIsConversationListOpen(open);
@@ -554,7 +614,7 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
       setMessages((current) => appendUniqueMessage(current, message));
       releaseRetryPayload(optimisticMessage.id);
       optimisticMessageIdsRef.current.delete(clientMessageId);
-      setDrafts((current) => setConversationDraft(current, conversationId, ""));
+      updateConversationDraft(conversationId, "");
       return true;
     } catch (requestError) {
       setMessages((current) => setMessageDeliveryStatus(current, optimisticMessage.id, "failed"));
@@ -569,7 +629,12 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
     const entry = retryPayloadsRef.current.get(messageId);
     if (entry?.conversationId === activeId) void sendText(entry.payload, messageId);
   }
-  function updateActiveDraft(content: string) { if (activeId) setDrafts((current) => setConversationDraft(current, activeId, content)); }
+  function updateConversationDraft(id: string, content: string) {
+    const nextDrafts = setConversationDraft(draftsRef.current, id, content);
+    draftsRef.current = nextDrafts;
+    setDrafts(nextDrafts);
+  }
+  function updateActiveDraft(content: string) { if (activeId) updateConversationDraft(activeId, content); }
   const chatWindowPinProps = {
     pinnedMessages,
     isPinned: (messageId: string) => Boolean(findPinnedMessage(pinnedMessages, messageId)),
@@ -578,21 +643,27 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
     pinError: pinnedMessagesError
   };
   function handleConversationListResizeStart(event: React.PointerEvent<HTMLDivElement>) {
+    resizeCleanupRef.current?.();
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = conversationListWidth;
     const onPointerMove = (moveEvent: PointerEvent) => setConversationListWidth(clampConversationListWidth(startWidth + moveEvent.clientX - startX));
-    const onPointerUp = () => {
+    const cleanup = () => {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", cleanup);
+      if (resizeCleanupRef.current === cleanup) resizeCleanupRef.current = null;
     };
+    const onPointerUp = cleanup;
+    resizeCleanupRef.current = cleanup;
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp, { once: true });
+    window.addEventListener("pointercancel", cleanup, { once: true });
   }
   return <main className="inbox-shell"><div className="flex h-screen min-h-0 flex-col overflow-hidden bg-slate-100"><DashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} /><div className="inbox-page grid min-h-0 flex-1 grid-cols-[44px_var(--conversation-list-width)_minmax(0,1fr)] overflow-hidden bg-slate-100 text-gray-800 transition-[grid-template-columns] duration-200 max-[900px]:grid-cols-[44px_minmax(0,1fr)]" style={{ "--conversation-list-width": `${conversationListWidth}px` } as React.CSSProperties}><aside className="inbox-nav flex flex-col items-center gap-3 bg-blue-600 px-1 py-3" aria-label="Thanh điều hướng">
     <button className="inbox-nav-item grid size-9 place-items-center rounded-lg bg-black/15 text-white transition-colors hover:bg-black/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 cursor-pointer" type="button" aria-label="Hội thoại"><InboxIcon name="chat" /></button>
     <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 cursor-pointer" type="button" aria-label="Hộp thư"><InboxIcon name="inbox" /></button>
     {/* <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Khách hàng"><InboxIcon name="users" /></button><div className="inbox-nav-spacer flex-1" /><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Trợ giúp"><InboxIcon name="help" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Cài đặt"><InboxIcon name="settings" /></button> */}
     {/* {onBack && <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-gray-100 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Về Dashboard" onClick={onBack}>←</button>} */}
-    </aside><div className="min-h-0 max-[899px]:hidden"><ConversationList items={orderedConversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} collapsed={isConversationListCollapsed} onResizeStart={handleConversationListResizeStart} /></div><div className="flex min-h-0 min-w-0 flex-col"><div className={`flex min-h-0 flex-1 flex-col ${isConversationListOpen ? "max-[899px]:hidden" : ""}`}><ChatWindow {...chatWindowPinProps} conversation={active} messages={messages} isLoadingMessages={isLoadingMessages} onSend={sendText} onRetryMessage={retryMessage} quickReplies={quickReplies} draft={getConversationDraft(drafts, activeId)} onDraftChange={updateActiveDraft} onOpenConversationList={() => setConversationListOpen(true)} showOpenNextUnreadAction={hasCurrentGeneralSettings && generalSettings.openNextUnreadConversation && Boolean(getNextUnreadConversationId(orderedConversations, activeId ?? ""))} onOpenNextUnread={openNextUnreadConversation} isCustomerTyping={isCustomerTyping} aiSuggestions={aiSuggestions} isAiSuggestionsLoading={isAiSuggestionsLoading} aiSuggestionsError={aiSuggestionsError} onRefreshAiSuggestions={refreshAiSuggestions} aiSuggestionsEnabled={aiSuggestionsEnabled} availableTags={availableTags} onTagsChange={updateActiveConversationTags} onToggleBot={toggleActiveBot} isTogglingBot={isTakingOver} toggleBotError={takeoverError} /></div></div>{isConversationListOpen && <><button className="fixed inset-0 z-40 bg-slate-900/30 min-[900px]:hidden cursor-pointer" type="button" onClick={() => setConversationListOpen(false)} aria-label="Đóng danh sách hội thoại" /><div className="fixed left-[44px] right-0 top-16 bottom-0 z-50 flex min-[900px]:hidden"><ConversationList items={orderedConversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} /></div></>}</div></div></main>;
+    </aside><div className="min-h-0 max-[899px]:hidden"><ConversationList items={orderedConversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} collapsed={isConversationListCollapsed} onResizeStart={handleConversationListResizeStart} /></div><div className="flex min-h-0 min-w-0 flex-col"><div className={`flex min-h-0 flex-1 flex-col ${isConversationListOpen ? "max-[899px]:hidden" : ""}`}><ChatWindow {...chatWindowPinProps} conversation={active} isRestoringConversation={Boolean(selectedConversationId && isConversationListLoading)} messages={messages} isLoadingMessages={isLoadingMessages} savedScrollTop={activeId ? scrollPositionsRef.current[activeId] : undefined} onScrollPositionChange={(id, scrollTop) => { scrollPositionsRef.current[id] = scrollTop; }} onSend={sendText} onRetryMessage={retryMessage} quickReplies={quickReplies} draft={getConversationDraft(drafts, activeId)} onDraftChange={updateActiveDraft} onOpenConversationList={() => setConversationListOpen(true)} showOpenNextUnreadAction={hasCurrentGeneralSettings && generalSettings.openNextUnreadConversation && Boolean(getNextUnreadConversationId(orderedConversations, activeId ?? ""))} onOpenNextUnread={openNextUnreadConversation} isCustomerTyping={isCustomerTyping} aiSuggestions={aiSuggestions} isAiSuggestionsLoading={isAiSuggestionsLoading} aiSuggestionsError={aiSuggestionsError} onRefreshAiSuggestions={refreshAiSuggestions} aiSuggestionsEnabled={aiSuggestionsEnabled} availableTags={availableTags} onTagsChange={updateActiveConversationTags} onToggleBot={toggleActiveBot} isTogglingBot={isTakingOver} toggleBotError={takeoverError} /></div></div>{isConversationListOpen && <><button className="fixed inset-0 z-40 bg-slate-900/30 min-[900px]:hidden cursor-pointer" type="button" onClick={() => setConversationListOpen(false)} aria-label="Đóng danh sách hội thoại" /><div className="fixed left-[44px] right-0 top-16 bottom-0 z-50 flex min-[900px]:hidden"><ConversationList items={orderedConversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} /></div></>}</div></div></main>;
 }

@@ -81,6 +81,13 @@ describe("App navigation", () => {
     expect(source).toContain("workspaceContentVersion");
   });
 
+  it("suspends the app-wide socket while hidden and keys inbox recovery by user and Workspace", () => {
+    const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+    expect(source).toContain("pauseSocketWhenHidden(socket, document)");
+    expect(source).toContain("<InboxPage key={`inbox-${auth.user.id}-${activeWorkspaceId}`}");
+    expect(source).toContain("workspaceId={activeWorkspaceId}");
+  });
+
   it("routes the settings header item to /settings and renders it below the shared header", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
