@@ -17,11 +17,12 @@ Cho phép Workspace kết nối tài khoản Instagram Professional (Business ho
 
 1. Chủ Workspace chọn Instagram trong modal kết nối.
 2. Backend tạo OAuth state dùng một lần, có thời hạn, gắn với user và provider Instagram; state Instagram không thể dùng ở Facebook OAuth.
-3. Chuyển hướng sang Instagram Login với các quyền tối thiểu cần cho hồ sơ cơ bản và quản lý tin nhắn. Tên scope cụ thể phải được đối chiếu lại với Meta Developer Docs trong lúc triển khai vì Meta có thể đổi tên/quyền truy cập.
-4. Callback đổi authorization code lấy token, xác thực token và lấy Instagram-scoped account ID, username, tên hiển thị và avatar nếu API cung cấp.
-5. Token được mã hóa lúc lưu. API, log, response và Socket không được trả token hoặc authorization code.
-6. Backend đăng ký webhook cần thiết cho tin nhắn và xác nhận kết nối. Nếu subscription thất bại, không báo kết nối hoàn tất; lưu trạng thái lỗi có thể khôi phục để retry an toàn.
-7. Frontend cập nhật danh sách kết nối và channel picker. Redirect/callback không được xem là thành công trước khi backend lưu connection.
+3. Chuyển hướng đến Instagram OAuth với `response_type=code`, redirect URI đã đăng ký và scope tối thiểu `instagram_business_basic` + `instagram_business_manage_messages`.
+4. Callback đổi authorization code tại `api.instagram.com/oauth/access_token`, sau đó đổi short-lived token sang long-lived token bằng Instagram Graph API; lưu ngày hết hạn và refresh token khi còn hợp lệ.
+5. Lấy Instagram professional account ID và hồ sơ bằng API Instagram Login. Kiểm tra lại field names với tài liệu hiện hành; không lấy nhầm Facebook Page ID hoặc nhầm `id` với `user_id`.
+6. Token được mã hóa lúc lưu. API, log, response và Socket không được trả token hoặc authorization code.
+7. Đăng ký `messages` webhook cho object `instagram` ở App Dashboard và subscribe từng account qua `graph.instagram.com/{version}/{ig-user-id}/subscribed_apps`. Nếu subscription thất bại, không báo kết nối hoàn tất; lưu trạng thái lỗi có thể khôi phục để retry an toàn.
+8. Frontend cập nhật danh sách kết nối và channel picker. Redirect/callback không được xem là thành công trước khi backend lưu connection.
 
 ## Mô hình dữ liệu và định danh
 
@@ -44,11 +45,11 @@ Collection riêng, tối thiểu gồm `ownerUserId`, `instagramUserId`, `userna
 
 ## Nhận tin, gửi tin và realtime
 
-- Webhook xác minh challenge và chữ ký theo yêu cầu Instagram Login hiện hành; route dùng raw body khi cần để chữ ký được tính trên bytes gốc.
+- Webhook xác minh challenge (`hub.mode`, verify token, trả `hub.challenge`) và kiểm tra `X-Hub-Signature-256` trên raw body. Payload chuẩn có `object="instagram"`, `entry[]` và `messaging[]`; parser phải chấp nhận batches hợp lệ và xử lý riêng inbound với echo (`message.is_echo`). Dùng app secret theo contract Meta đã kiểm nghiệm; tài liệu công khai không chỉ rõ đầy đủ biến thể app secret nào được dùng.
 - Resolve chính xác một connection từ Instagram account ID, kiểm tra trạng thái/subscription, rồi ghi nhận tin nhắn. Event lặp không tăng unread nhiều lần.
 - Lưu customer, conversation và message theo quy ước hiện có; cập nhật snippet/unread và phát Socket event đúng owner, Workspace members và channel grant.
 - Mọi API Inbox, tìm kiếm, lịch sử, thao tác hội thoại và Socket room/join tiếp tục dùng cùng workspace/channel access filter.
-- Gửi văn bản qua Instagram Send API bằng token server-side, recipient IGSID và quyền hội thoại hiện hành. Kiểm tra điều kiện người dùng đã khởi tạo hội thoại, cửa sổ/giới hạn nhắn tin và chính sách Meta theo tài liệu hiện hành khi triển khai; lỗi policy phải trả mã lỗi ổn định, không retry vô hạn.
+- Gửi văn bản qua `POST graph.instagram.com/{version}/{ig-user-id}/messages` bằng token server-side và recipient IGSID. Recipient phải nhắn Professional account trước; standard response window là 24 giờ và text tối đa 1000 UTF-8 bytes theo tài liệu đang được dùng. Lỗi policy phải trả mã lỗi ổn định, không retry vô hạn.
 - Trước khi gửi phải kiểm tra quyền thành viên trên cặp `{ platform: "instagram", channelId: instagramUserId }`; tuyệt đối không tin channel ID/owner do client tự khai.
 
 ## Workspace và giao diện
@@ -87,8 +88,11 @@ Collection riêng, tối thiểu gồm `ownerUserId`, `instagramUserId`, `userna
 
 ## Tài liệu Meta cần đối chiếu khi triển khai
 
-- [Instagram API with Instagram Login — Meta Postman](https://www.postman.com/meta/instagram/folder/6raa77c/instagram-api-with-instagram-login)
-- [Instagram API — Meta Postman](https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api)
-- [Messenger Platform API for Instagram — Meta Postman](https://www.postman.com/meta/messenger-platform-api/folder/22794852-255610cd-47f5-4f4d-b3fa-71aec360be9a)
+- [Instagram Login OAuth and setup — Meta Developers](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-instagram-login/business-login.md)
+- [Instagram Messaging API — Meta Developers](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-instagram-login/messaging-api.md)
+- [Instagram Webhooks — Meta Developers](https://developers.facebook.com/documentation/instagram-platform/webhooks.md)
+- [Instagram Webhook examples — Meta Developers](https://developers.facebook.com/documentation/instagram-platform/webhooks/examples.md)
+- [Instagram account and customer profile — Meta Developers](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-instagram-login/messaging-api/user-profile.md)
+- [Instagram API with Instagram Login — Meta Postman](https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login)
 
-Các scope, payload webhook, quyền App Review, send policy và endpoint version phải được xác minh lại theo tài liệu Meta đang hiệu lực trước khi code/deploy; các đường dẫn trên là điểm bắt đầu nghiên cứu, không thay cho nghiệm thu tài khoản/app thực tế.
+Meta có điểm không nhất quán giữa webhook examples về bọc payload gốc; triển khai theo object payload cụ thể `{ object: "instagram", entry: [...] }` và chấp nhận batching `entry[]`/`messaging[]`. Tài liệu cũng chưa chỉ rõ app secret variant cần dùng cho signature; cần xác minh bằng test app thật. Kiểm tra lại version, scope, quyền Advanced Access/App Review, webhook contract và messaging policy trước deploy; tài liệu không thay nghiệm thu app/account thực tế.

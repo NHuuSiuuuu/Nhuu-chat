@@ -17,7 +17,10 @@
 - Keep credentials server-side, encrypted at rest, excluded from DTOs/logs/realtime, and revoke/remove safely.
 - `platform="instagram"` channel authorization is the pair `{ platform, channelId: instagramUserId }`; client-supplied ownership is never authoritative.
 - One Instagram account belongs to one Workspace; multiple different Instagram accounts may belong to a Workspace.
-- Verify current Meta scopes, webhook signature/payload, send endpoint, messaging policy window, and App Review requirements from official docs before implementation; avoid embedding unverified policy assumptions.
+- Use the verified Instagram Login scopes `instagram_business_basic` and `instagram_business_manage_messages`. Reconfirm current Meta docs during implementation for app review/version details.
+- OAuth code exchange starts at `api.instagram.com/oauth/access_token`; exchange the resulting short-lived token through `graph.instagram.com/access_token` for a long-lived token and refresh before expiry.
+- Subscribe to the Instagram object's `messages` field, validate `X-Hub-Signature-256` on raw bytes, and use the `instagram` webhook payload object. Meta docs are ambiguous about the exact app-secret variant for signature; verify with the configured development app.
+- Instagram text Send API: `POST graph.instagram.com/{version}/{ig-user-id}/messages`. Customer must have messaged first; standard window is 24 hours and text is limited to 1,000 UTF-8 bytes per current Meta docs. Map policy failures permanently; do not retry them.
 - Migration must preflight duplicates, be idempotent, preserve Facebook/other platform indexes, and must not run against production without backup and explicit operational readiness.
 - Follow TDD for changed behavior: add a focused failing test, run it to observe failure, implement the minimal path, then run focused tests. Do not weaken or delete unrelated assertions.
 
@@ -55,7 +58,7 @@
 
 **Interfaces:**
 - `GET /api/v1/instagram/oauth/start` starts OAuth for the authenticated owner and returns/redirects to the Meta authorization URL.
-- `GET /api/v1/instagram/oauth/callback` validates one-time state, exchanges code server-side, fetches account metadata, persists encrypted credentials, subscribes the required webhook, and returns through an allowlisted frontend completion route.
+- `GET /api/v1/instagram/oauth/callback` validates one-time state, exchanges code at `api.instagram.com/oauth/access_token`, exchanges short-lived token for long-lived token, fetches `/me` profile metadata, persists encrypted credentials, subscribes the required webhook, and returns through an allowlisted frontend completion route.
 - `GET /api/v1/instagram/connections` lists safe connection metadata for the authenticated owner.
 - `DELETE /api/v1/instagram/connections/:connectionId` disconnects only a connection owned by caller and records history after success.
 - Reuse shared encryption primitives and connection/history conventions where appropriate, not Facebook-specific database records or OAuth states.
@@ -63,7 +66,7 @@
 - [ ] Add failing tests for valid/cancelled/expired/replayed OAuth state, wrong-user callback, account already claimed, token encryption, provider failure, and ownership-checked disconnect.
 - [ ] Confirm focused tests fail before implementation.
 - [ ] Implement bounded Meta HTTP calls, callback-safe error handling, masked logs, token encryption, safe DTOs, and idempotent disconnect.
-- [ ] Confirm OAuth redirect URI and required Instagram Login scopes against official Meta docs before setting defaults.
+- [ ] Use scopes `instagram_business_basic,instagram_business_manage_messages`; verify the exact authorization/token/profile endpoints and long-lived token refresh against official Meta docs and development-app responses before setting defaults.
 
 ### Task 3: Instagram webhook verification, event normalization, and persistence
 
@@ -75,15 +78,15 @@
 - Reuse existing `CustomerModel`, `ConversationModel`, `MessageModel`, persistence and realtime event helpers.
 
 **Interfaces:**
-- GET webhook verification follows the current Meta challenge contract and is constrained by configured verify token.
-- POST webhook validates the exact raw-body signature per Instagram Login docs, resolves one active connection by account ID, and rejects unknown/invalid accounts.
+- GET webhook verification follows the current Meta challenge contract (`hub.mode`, `hub.verify_token`, return `hub.challenge`) and is constrained by configured verify token.
+- POST webhook validates `X-Hub-Signature-256` over the exact raw body, expects concrete root `object="instagram"` with batched `entry[].messaging[]`, resolves one active connection by `entry.id`, and rejects unknown/invalid accounts. Handle inbound and `message.is_echo` separately. Verify the app-secret variant with a development app because Meta's public guide is unclear on this detail.
 - Normalize one-to-one text DMs to `platform="instagram"`, account `channelId`, Workspace `ownerId`, and namespaced IGSID/customer and provider message identifiers.
 - Duplicate delivery is idempotent; unread and last-message fields update once; publish realtime only to authorized Workspace recipients.
 
 - [ ] Add failing tests for signature mismatch, invalid account, status mismatch, text message normalization, multiple customers, repeated delivery, and realtime isolation.
 - [ ] Run webhook/event focused tests and confirm expected failures.
 - [ ] Implement raw-body verification, bounded payload validation, event-to-domain mapping, persistence, idempotency, and authorized emit.
-- [ ] Verify exact webhook object/field/subscription names using current official Meta docs and a development app before enabling subscriptions.
+- [ ] Configure app `instagram` webhook object with `messages`, then subscribe each professional account using `POST graph.instagram.com/{version}/{ig-user-id}/subscribed_apps?subscribed_fields=messages`; verify current requirements and payload using official Meta docs/development app before enabling subscriptions.
 
 ### Task 4: Outbound text messaging and policy-aware errors
 
@@ -96,12 +99,12 @@
 - Send text through the current Instagram Send API using encrypted account credentials and the conversation’s IGSID.
 - Verify caller’s Workspace/channel access and conversation platform/account before any external API request.
 - Persist provider message ID and delivery/error state using existing message flow; apply bounded retry only to safe transient errors.
-- Represent policy window, permission, recipient and token errors with stable domain error codes; do not retry permanent/policy failures.
+- Enforce Meta's standard 24-hour response window and 1,000 UTF-8-byte text maximum (subject to revalidation); represent policy window, permission, recipient and token errors with stable domain error codes; do not retry permanent/policy failures.
 
 - [ ] Add failing tests for valid Instagram text send, cross-account recipient denial, unauthorized staff, missing/expired credential, Meta policy error, and bounded transient retry.
 - [ ] Run focused message service/client tests and confirm expected failures.
 - [ ] Implement server-side account lookup/decryption, authorization guard, Meta request, and delivery/error mapping.
-- [ ] Confirm allowed send window and error semantics against current official Meta docs and API responses.
+- [ ] Confirm send window, text byte limit, and error semantics against current official Meta docs and API responses.
 
 ### Task 5: Workspace channel directory, realtime access, and activity history
 
