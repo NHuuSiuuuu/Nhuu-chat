@@ -2,6 +2,7 @@ import type { TelegramUpdate } from "../channels/telegram/telegram.schemas.js";
 import { normalizeTelegramUpdate } from "../channels/telegram/telegram.normalizer.js";
 import { TelegramClient } from "../channels/telegram/telegram.client.js";
 import { processTelegramCustomerMessage } from "../chatbot/telegram-inbound.service.js";
+import { AppError } from "../common/errors.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { CustomerModel } from "../models/customer.model.js";
 import { MessageModel } from "../models/message.model.js";
@@ -10,7 +11,7 @@ import { isBotPaused } from "../orchestration/bot-pause.service.js";
 import { emitChatEvent, emitInboxEventToRecipients } from "../realtime/socket.js";
 import { toConversation } from "./conversation.service.js";
 import { toMessage } from "./message.service.js";
-import { createProviderSecret } from "./provider-secret.service.js";
+import { createProviderSecret, readProviderSecret } from "./provider-secret.service.js";
 import { recordSettingHistorySafely } from "./setting-history.service.js";
 
 export interface TelegramChannelConfigInput {
@@ -120,6 +121,31 @@ export async function registerTelegramChannel(config: TelegramChannelConfigInput
     newValue: { connected: true }
   });
   return { provider: "telegram", webhookUrl } as const;
+}
+
+export async function disconnectTelegramChannel(ownerId: string): Promise<void> {
+  const secret = await ProviderSecretModel.findOne({ provider: "telegram", name: "bot-token" });
+  if (!secret) {
+    throw new AppError(404, "TELEGRAM_CHANNEL_NOT_CONNECTED", "Telegram bot is not connected");
+  }
+
+  const botToken = await readProviderSecret(String(secret._id));
+  try {
+    await new TelegramClient(botToken).setWebhook("");
+  } catch {
+    throw new AppError(503, "TELEGRAM_DISCONNECT_FAILED", "Telegram bot could not be disconnected");
+  }
+
+  const deletion = await ProviderSecretModel.deleteOne({ _id: secret._id });
+  if (deletion.deletedCount === 1) {
+    recordSettingHistorySafely({
+      userId: ownerId,
+      actionType: "DISCONNECT_CHANNEL",
+      actionTitle: "Ngắt kết nối Telegram Bot",
+      oldValue: { connected: true },
+      newValue: { connected: false }
+    });
+  }
 }
 
 export async function orchestrateTelegramReply(input: TelegramReplyInput, deps: { now: () => Date; answer: (content: string) => Promise<{ answer: string; sources: unknown[]; handoff: boolean }>; createBotMessage: (input: TelegramReplyInput, answer: string) => Promise<{ id: string }>; enqueue: (command: { messageId: string; conversationId: string; platform: "telegram"; channelId: string; content: string }) => Promise<string> }): Promise<void> {

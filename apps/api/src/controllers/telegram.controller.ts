@@ -7,6 +7,7 @@ import {
   telegramWebhookUpdateSchema
 } from "../schemas/telegram.schemas.js";
 import {
+  disconnectTelegramChannel as disconnectTelegramChannelService,
   ingestTelegramUpdate,
   registerTelegramChannel
 } from "../services/telegram.service.js";
@@ -40,6 +41,17 @@ export const registerChannel: RequestHandler = async (request, response, next) =
     const ownerId = (request as AuthenticatedRequest).auth?.id;
     if (!ownerId) throw new AppError(401, "AUTHENTICATION_REQUIRED", "Authentication is required");
     response.status(201).json(await registerTelegramChannel(input, ownerId));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const disconnectChannel: RequestHandler = async (request, response, next) => {
+  try {
+    const ownerId = (request as AuthenticatedRequest).auth?.id;
+    if (!ownerId) throw new AppError(401, "AUTHENTICATION_REQUIRED", "Authentication is required");
+    await disconnectTelegramChannelService(ownerId);
+    response.status(204).send();
   } catch (error) {
     next(error);
   }

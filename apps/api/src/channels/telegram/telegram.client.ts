@@ -36,8 +36,11 @@ export class TelegramClient {
     return { externalMessageId: String(result.message_id), status: "sent" };
   }
 
-  async setWebhook(url: string, secretToken: string): Promise<void> {
-    const result = await this.request("setWebhook", { url, secret_token: secretToken });
+  async setWebhook(url: string, secretToken?: string): Promise<void> {
+    const result = await this.request("setWebhook", {
+      url,
+      ...(secretToken ? { secret_token: secretToken } : {})
+    });
     if (result !== true) throw new Error("Telegram API returned an invalid response");
   }
 
