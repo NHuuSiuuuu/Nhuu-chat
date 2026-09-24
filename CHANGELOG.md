@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Mở tab Phân quyền Workspace và Hỗ trợ trả lời trên desktop/mobile, nối tới giao diện quản lý thành viên và trả lời nhanh đã hoàn thiện.
 - Thêm Workspace owner/admin/staff, quản lý thành viên và giới hạn quyền Inbox Facebook theo Page; hỗ trợ kết nối nhiều Facebook Page, chọn Page để đăng bài và migration riêng cho dữ liệu Workspace cùng index Page.
 - Bổ sung bộ chọn Workspace toàn ứng dụng và giao diện Cài đặt → Thành viên; giữ quyền hệ thống `User.role` và hành vi các kênh không phải Facebook hiện có.
 - Bổ sung hướng dẫn triển khai Inbox Messenger: callback HTTPS, verify token và app secret, quyền OAuth, migration MongoDB và quản lý secret backend.

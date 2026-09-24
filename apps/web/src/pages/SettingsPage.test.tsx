@@ -247,26 +247,31 @@ describe("Settings page", () => {
     expect(bulletGroup).not.toContain("<InboxIcon name={icon} size={16} />");
   });
 
-  it("marks unfinished settings tabs as development placeholders", () => {
+  it("enables completed quick reply and Workspace permission settings", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
     expect(typeof settingsModule.isSettingsPlaceholderTab).toBe("function");
 
-    expect(source).toContain('item: "Hỗ trợ trả lời", isComingSoon: true');
+    expect(source).toContain('item: "Hỗ trợ trả lời", isComingSoon: false');
     expect(source).toContain('item: "Giao diện", isComingSoon: true');
-    expect(source).toContain('item: "Phân quyền", isComingSoon: true');
+    expect(source).toContain('item: "Phân quyền", isComingSoon: false');
     expect(source).toContain('disabled={isComingSoon}');
     expect(source).toContain('>Sắp có</small>');
+    expect(source).toContain('if (activeTab === "Hỗ trợ trả lời") return <SettingsLayout');
+    expect(source).toContain('<QuickReplySettings token={token} refresh={refresh} />');
+    expect(source).toContain('if (activeTab === "Phân quyền") return <SettingsLayout');
+    expect(source).toContain('<WorkspaceMembersPanel token={token} refresh={refresh} />');
+    expect(source).toContain('"Hỗ trợ trả lời", "Phân quyền"');
 
     if (typeof settingsModule.isSettingsPlaceholderTab === "function") {
       expect([
-        "Hỗ trợ trả lời",
         "Giao diện",
         "Cuộc gọi",
         "Chế độ xoay vòng",
         "Đồng bộ",
-        "Công cụ",
-        "Phân quyền"
+        "Công cụ"
       ].every((item) => settingsModule.isSettingsPlaceholderTab(item as never))).toBe(true);
+      expect(settingsModule.isSettingsPlaceholderTab("Hỗ trợ trả lời" as never)).toBe(false);
+      expect(settingsModule.isSettingsPlaceholderTab("Phân quyền" as never)).toBe(false);
       expect(settingsModule.isSettingsPlaceholderTab("Cài đặt chung" as never)).toBe(false);
       expect(settingsModule.isSettingsPlaceholderTab("Thẻ hội thoại" as never)).toBe(false);
       expect(settingsModule.isSettingsPlaceholderTab("Trợ lý AI" as never)).toBe(false);
@@ -432,7 +437,7 @@ describe("Settings page", () => {
     const settingsSource = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
     const topbarSource = readFileSync(new URL("../components/dashboard/DashboardTopbar.tsx", import.meta.url), "utf8");
 
-    expect(settingsModule.mobileSettingsItems).toEqual(["Giới thiệu", "Cài đặt chung", "Thành viên", "Trợ lý AI", "Giao diện"]);
+    expect(settingsModule.mobileSettingsItems).toEqual(["Giới thiệu", "Cài đặt chung", "Thành viên", "Trợ lý AI", "Hỗ trợ trả lời", "Phân quyền", "Giao diện"]);
     expect(settingsSource).toContain("settingsSubmenuItems={mobileSettingsItems}");
     expect(settingsSource).toContain("onSettingsSubmenuNavigate={handleTabChange}");
     expect(topbarSource).toContain('aria-controls="mobile-settings-submenu"');
@@ -467,7 +472,7 @@ describe("Settings page", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("function SettingsLayout");
-    expect(source.match(/<SettingsLayout/g)?.length).toBe(7);
+    expect(source.match(/<SettingsLayout/g)?.length).toBe(9);
     expect(source).not.toContain('if (activeTab === "Trợ lý AI") return <main');
     expect(source).not.toContain('if (activeTab === "Hỗ trợ trả lời") return <main');
   });
@@ -558,19 +563,12 @@ describe("Settings page", () => {
     expect(source).toContain("onSettingsChange");
   });
 
-  it("shows the development placeholder for quick replies", () => {
+  it("routes quick reply settings to the existing quick reply manager", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain("isSettingsPlaceholderTab(activeTab)");
-    expect(source).toContain("Chức năng đang được phát triển");
-    expect(source).toContain("disabled={isComingSoon}");
-    expect(source).toContain("onClick={isComingSoon ? undefined : () => handleTabChange(item)}");
-    expect(source).toContain("handleTabChange(item)");
-    expect(source).toContain("cursor-not-allowed");
-    expect(source).toContain('import { toast } from "sonner";');
-    expect(source).toContain('toast.info(`${item}: Chức năng đang được phát triển`)');
-    expect(source).not.toContain("DevelopmentToast");
-    expect(source).not.toContain("developmentToast");
+    expect(source).toContain('if (activeTab === "Hỗ trợ trả lời") return <SettingsLayout');
+    expect(source).toContain("<QuickReplySettings token={token} refresh={refresh} />");
+    expect(source).toContain('"Hỗ trợ trả lời": "quick-replies"');
   });
 
   it("supports selecting an attached image in the quick reply modal", () => {
