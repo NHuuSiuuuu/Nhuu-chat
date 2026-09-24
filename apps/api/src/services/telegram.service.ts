@@ -11,6 +11,7 @@ import { emitChatEvent, emitInboxEventToRecipients } from "../realtime/socket.js
 import { toConversation } from "./conversation.service.js";
 import { toMessage } from "./message.service.js";
 import { createProviderSecret } from "./provider-secret.service.js";
+import { recordSettingHistorySafely } from "./setting-history.service.js";
 
 export interface TelegramChannelConfigInput {
   botToken: string;
@@ -111,6 +112,13 @@ export async function registerTelegramChannel(config: TelegramChannelConfigInput
   const webhookUrl = `${config.webhookBaseUrl.replace(/\/$/, "")}/api/v1/channels/telegram/webhook/${webhookSecret}`;
   await createProviderSecret("telegram", "bot-token", config.botToken, ownerId);
   await new TelegramClient(config.botToken).setWebhook(webhookUrl, webhookSecret);
+  recordSettingHistorySafely({
+    userId: ownerId,
+    actionType: "CONNECT_CHANNEL",
+    actionTitle: "Kết nối Telegram Bot",
+    oldValue: { connected: false },
+    newValue: { connected: true }
+  });
   return { provider: "telegram", webhookUrl } as const;
 }
 

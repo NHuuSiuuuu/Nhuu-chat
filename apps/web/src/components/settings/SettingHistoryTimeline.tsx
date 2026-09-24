@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 import { apiRequest } from "../../lib/api.js";
 
 export type SettingHistoryActionType =
+  | "LOGIN"
+  | "LOGOUT"
   | "UPDATE_AI_SETTINGS"
+  | "CONNECT_CHANNEL"
+  | "DISCONNECT_CHANNEL"
   | "CONNECT_FACEBOOK_PAGE"
   | "DISCONNECT_FACEBOOK_PAGE";
 
@@ -103,7 +107,10 @@ function isSafeHistoryChange(change: SettingHistoryChange): boolean {
 }
 
 function actionTypeLabel(actionType: SettingHistoryActionType): string {
+  if (actionType === "LOGIN" || actionType === "LOGOUT") return "Tài khoản";
   if (actionType === "UPDATE_AI_SETTINGS") return "Cài đặt AI";
+  if (actionType === "CONNECT_CHANNEL") return "Kết nối kênh";
+  if (actionType === "DISCONNECT_CHANNEL") return "Ngắt kết nối kênh";
   if (actionType === "DISCONNECT_FACEBOOK_PAGE") return "Ngắt kết nối Facebook";
   return "Kết nối Facebook";
 }

@@ -26,6 +26,16 @@ const SENSITIVE_FIELD_NAMES = new Set([
   "sessioncookie"
 ]);
 
+export function recordSettingHistorySafely(input: Parameters<typeof recordSettingHistory>[0]): void {
+  void recordSettingHistory(input).catch((error) => {
+    console.error("Failed to record setting history", {
+      userId: input.userId,
+      actionType: input.actionType,
+      error
+    });
+  });
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value);

@@ -13,6 +13,7 @@ import { MessageModel } from "../models/message.model.js";
 import { emitChatEvent, emitInboxEventToRecipients } from "../realtime/socket.js";
 import { toConversation } from "./conversation.service.js";
 import { toMessage } from "./message.service.js";
+import { recordSettingHistorySafely } from "./setting-history.service.js";
 
 const QR_TTL_MS = 100_000;
 const NATIVE_LOGIN_CLEANUP_TIMEOUT_MS = 2_000;
@@ -154,6 +155,11 @@ export async function logoutZaloPersonal(userId: string): Promise<void> {
   await runOwnerLifecycle(userId, async () => {
     const pending = pendingSessionsByOwner.get(userId);
     const active = activeClientsByOwner.get(userId);
+    const persistedSession = await ZaloPersonalSessionModel.findOne({ ownerId: userId })
+      .select("status")
+      .lean()
+      .catch(() => null);
+    const wasConnected = Boolean(active) || pending?.status === "connected" || persistedSession?.status === "connected";
     try {
       // Khi QR đã connected, active API là nguồn listener duy nhất để không stop hai lần qua adapter.
       if (active) await active.stopListener();
@@ -176,6 +182,15 @@ export async function logoutZaloPersonal(userId: string): Promise<void> {
         { $set: { status: "error", lastErrorCode: "ZALO_PERSONAL_LOGOUT_DELETE_FAILED" } }
       ).catch(() => undefined);
       throw new AppError(503, "ZALO_PERSONAL_LOGOUT_FAILED", "Zalo personal logout is temporarily unavailable");
+    }
+    if (wasConnected) {
+      recordSettingHistorySafely({
+        userId,
+        actionType: "DISCONNECT_CHANNEL",
+        actionTitle: "Ngắt kết nối Zalo cá nhân",
+        oldValue: { connected: true },
+        newValue: { connected: false }
+      });
     }
   });
 }
@@ -344,6 +359,16 @@ async function completeQrLogin(pending: PendingZaloPersonalSession, api: ZaloPer
   pending.username = nullableString(account.username) ?? undefined;
   runtimeErrorsByOwner.delete(pending.ownerId);
   activeClientsByOwner.set(pending.ownerId, api);
+  recordSettingHistorySafely({
+    userId: pending.ownerId,
+    actionType: "CONNECT_CHANNEL",
+    actionTitle: "Kết nối Zalo cá nhân",
+    oldValue: { connected: false },
+    newValue: {
+      connected: true,
+      ...(nullableString(account.displayName) ? { account: nullableString(account.displayName) } : {})
+    }
+  });
 }
 
 // Xóa session vừa ghi khi ownership đã đổi; nếu không xóa được thì chỉ giữ trạng thái lỗi an toàn.

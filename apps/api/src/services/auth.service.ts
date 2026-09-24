@@ -7,6 +7,7 @@ import mongoose from "mongoose";
 import { AppError } from "../common/errors.js";
 import { AuthSessionModel } from "../models/auth-session.model.js";
 import { UserModel, type Role } from "../models/user.model.js";
+import { recordSettingHistorySafely } from "./setting-history.service.js";
 import { workspaceService } from "./workspace.service.js";
 
 const ACCESS_TOKEN_TTL = "15m";
@@ -222,6 +223,14 @@ export async function login(email: string, password: string): Promise<{
   };
   const { tokens } = await createAuthSession(user, document.passwordHash);
 
+  recordSettingHistorySafely({
+    userId: user.id,
+    actionType: "LOGIN",
+    actionTitle: "Đăng nhập tài khoản",
+    oldValue: { session: "Đã kết thúc" },
+    newValue: { session: "Đang hoạt động" }
+  });
+
   return { user, tokens };
 }
 
@@ -347,12 +356,25 @@ export async function revokeRefreshToken(refreshToken: string): Promise<string |
       refreshTokenHash: currentDigest,
       expiresAt: { $gt: now }
     });
-    return result.deletedCount === 1 ? tokenUser.sessionId : undefined;
+    if (result.deletedCount !== 1) return undefined;
+    recordLogoutHistory(tokenUser.id);
+    return tokenUser.sessionId;
   }
 
-  await UserModel.updateOne(
+  const result = await UserModel.updateOne(
     { _id: tokenUser.id, refreshTokenHash: currentDigest },
     { $set: { refreshTokenHash: null } }
   );
+  if (result.matchedCount === 1) recordLogoutHistory(tokenUser.id);
   return undefined;
+}
+
+function recordLogoutHistory(userId: string): void {
+  recordSettingHistorySafely({
+    userId,
+    actionType: "LOGOUT",
+    actionTitle: "Đăng xuất tài khoản",
+    oldValue: { session: "Đang hoạt động" },
+    newValue: { session: "Đã kết thúc" }
+  });
 }

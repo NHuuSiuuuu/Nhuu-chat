@@ -1,7 +1,11 @@
 import mongoose, { model, Schema, type InferSchemaType } from "mongoose";
 
 export const SETTING_HISTORY_ACTION_TYPES = [
+  "LOGIN",
+  "LOGOUT",
   "UPDATE_AI_SETTINGS",
+  "CONNECT_CHANNEL",
+  "DISCONNECT_CHANNEL",
   "CONNECT_FACEBOOK_PAGE",
   "DISCONNECT_FACEBOOK_PAGE"
 ] as const;

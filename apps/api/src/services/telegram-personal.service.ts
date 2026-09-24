@@ -18,6 +18,7 @@ import { pauseBot } from "../orchestration/bot-pause.service.js";
 import { emitChatEvent, emitInboxEventToRecipients } from "../realtime/socket.js";
 import { toConversation } from "./conversation.service.js";
 import { toMessage } from "./message.service.js";
+import { recordSettingHistorySafely } from "./setting-history.service.js";
 
 const QR_TTL_MS = 30_000;
 
@@ -164,6 +165,13 @@ export async function startPersonalQrLogin(userId: string) {
       },
       { upsert: true, new: true }
     );
+    recordSettingHistorySafely({
+      userId,
+      actionType: "CONNECT_CHANNEL",
+      actionTitle: "Kết nối Telegram cá nhân",
+      oldValue: { connected: false },
+      newValue: { connected: true, account: displayName }
+    });
     login.status = "connected";
     activePersonalClients.set(userId, client);
     attachPersonalMessageSync(userId, client);
@@ -210,6 +218,11 @@ export async function getPersonalSessionStatus(userId: string) {
 export async function logoutPersonalSession(userId: string): Promise<void> {
   const pending = [...pendingQrLogins.values()].filter((login) => login.userId === userId);
   const active = activePersonalClients.get(userId);
+  const persistedSession = await TelegramPersonalSessionModel.findOne({ userId, status: "active" })
+    .select("_id")
+    .lean()
+    .catch(() => null);
+  const wasConnected = Boolean(active) || Boolean(persistedSession);
   const clients = [...new Set([...pending.map((login) => login.client), ...(active ? [active] : [])])];
 
   pending.forEach((login) => {
@@ -234,6 +247,15 @@ export async function logoutPersonalSession(userId: string): Promise<void> {
       { $set: { status: "disconnected" } }
     ).catch(() => undefined);
     throw new AppError(503, "TELEGRAM_PERSONAL_LOGOUT_FAILED", "Telegram personal logout is temporarily unavailable");
+  }
+  if (wasConnected) {
+    recordSettingHistorySafely({
+      userId,
+      actionType: "DISCONNECT_CHANNEL",
+      actionTitle: "Ngắt kết nối Telegram cá nhân",
+      oldValue: { connected: true },
+      newValue: { connected: false }
+    });
   }
 }
 
