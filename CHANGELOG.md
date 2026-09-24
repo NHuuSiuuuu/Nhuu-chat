@@ -7,6 +7,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 - Ẩn nút đăng xuất khỏi Landing Header trên mobile và thêm nút gradient ở cuối menu hamburger.
 - Chuyển thông tin tài khoản khỏi header mobile vào menu hamburger, đặt ngay phía trên nút đăng xuất.
+- Hiển thị tên tài khoản phía trên email trong menu hamburger.
 - Ghi lịch sử đăng nhập/đăng xuất tài khoản và kết nối/ngắt kết nối Facebook, Telegram, Zalo.
 - Sửa phát âm thanh thông báo qua Socket.IO, mở khóa AudioContext từ tương tác người dùng và thêm nút thử âm thanh trong Cài đặt.
 - Hiển thị vai trò Chủ sở hữu thành badge tĩnh trong danh sách thành viên, không có thao tác sửa hoặc xóa.

@@ -1,11 +1,13 @@
 import * as React from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import { apiRequest } from "../../lib/api.js";
+import { resolveApiBaseUrl } from "../../lib/api-url.js";
 import type { AuthRole } from "../../state/auth.store.js";
 import { LandingHeader } from "./LandingHeader.js";
 import { LandingFooter } from "./LandingFooter.js";
 
 export interface LandingPageProps {
-  user: { email: string; role: AuthRole } | null;
+  user: { email: string; role: AuthRole; displayName?: string } | null;
   onDashboard: () => void;
   onLogin: () => void;
   onRegister: () => void;
@@ -13,6 +15,7 @@ export interface LandingPageProps {
 }
 
 type IconName = "arrow" | "bolt" | "bot" | "chart" | "check" | "chevron" | "facebook" | "globe" | "google" | "instagram" | "layers" | "mail" | "message" | "monitor" | "send" | "shield" | "shop" | "sparkle" | "telegram" | "tiktok" | "users" | "whatsapp" | "website" | "workflow" | "zalo";
+const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 
 const iconPaths: Record<IconName, React.ReactNode> = {
   arrow: <path d="M5 12h14m-6-6 6 6-6 6" />, bolt: <path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z" />, bot: <><rect x="5" y="7" width="14" height="12" rx="3" /><path d="M12 3v4m-4 5h.01M16 12h.01M9 16h6" /></>, chart: <><path d="M5 20V10m7 10V4m7 16v-7" /><path d="M3 20h18" /></>, check: <path d="m5 12 4 4L19 6" />, chevron: <path d="m6 9 6 6 6-6" />, facebook: <path d="M14 8h3V5h-3a4 4 0 0 0-4 4v2H7v3h3v5h3v-5h3l1-3h-4V9a1 1 0 0 1 1-1Z" />, globe: <><circle cx="12" cy="12" r="8" /><path d="M4 12h16M12 4c2 2.2 3 4.8 3 8s-1 5.8-3 8c-2-2.2-3-4.8-3-8s1-5.8 3-8Z" /></>, google: <path d="M21 12h-9v3h5.2a5 5 0 1 1-1.5-5.2l2.2-2.2A8 8 0 1 0 20 12h1Z" />, instagram: <><rect x="4" y="4" width="16" height="16" rx="5" /><circle cx="12" cy="12" r="3.5" /><path d="M17.5 6.5h.01" /></>, layers: <><path d="m12 4 8 4-8 4-8-4 8-4Z" /><path d="m4 12 8 4 8-4M4 16l8 4 8-4" /></>, mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6" /></>, message: <path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 8 8 0 0 1-3-.6L4 20l1.7-4.5A7.3 7.3 0 0 1 4.5 11 7.5 7.5 0 0 1 12 4a7.5 7.5 0 0 1 8 7.5Z" />, monitor: <><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8m-4-4v4" /></>, send: <path d="m4 4 16 8-16 8 3-8-3-8Zm3 8h13" />, shield: <path d="M12 3 20 6v5c0 5-3.4 8.3-8 10-4.6-1.7-8-5-8-10V6l8-3Z" />, shop: <><path d="M4 10v10h16V10M3 10l2-6h14l2 6" /><path d="M3 10c0 2 3 3 4.5 0 1.5 3 4.5 3 6 0 1.5 3 4.5 2 7.5 0" /></>, sparkle: <path d="m12 3 1.6 5.4L19 10l-5.4 1.6L12 17l-1.6-5.4L5 10l5.4-1.6L12 3Zm6 12 .7 2.3L21 18l-2.3.7L18 21l-.7-2.3L15 18l2.3-.7L18 15Z" />, telegram: <path d="m21 4-3 16-6-5-3 3v-5L21 4ZM9 13l8-6" />, tiktok: <path d="M15 4v10.5a4.5 4.5 0 1 1-3-4.2V7c2.4 2.2 4.2 2.4 6 2V6c-1.8-.1-2.8-.8-3-2Z" />, users: <><circle cx="9" cy="9" r="3" /><path d="M3 20a6 6 0 0 1 12 0M16 7a3 3 0 0 1 0 6m1 1a5 5 0 0 1 4 6" /></>, whatsapp: <path d="M20 11.5a8 8 0 0 1-12.8 6.4L4 19l1.2-3.1A8 8 0 1 1 20 11.5Z" />, website: <><circle cx="12" cy="12" r="8" /><path d="M4 12h16M12 4c1.4 2 2 4.7 2 8s-.6 6-2 8M7 7h10M7 17h10" /></>, workflow: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /><path d="M10 7h3a3 3 0 0 1 3 3v4" /></>, zalo: <><rect x="4" y="4" width="16" height="16" rx="4" /><path d="M8 16 16 8M10 8h6v6" /></>,
@@ -70,9 +73,18 @@ function PricingCard({ name, price, description, featured, items }: { name: stri
 export function LandingPage({ user, onDashboard, onLogin, onRegister, onLogout }: LandingPageProps) {
   const [openFaq, setOpenFaq] = React.useState<number | null>(0);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [profile, setProfile] = React.useState<{ email: string; displayName: string } | null>(null);
   const reducedMotion = useReducedMotion();
+  React.useEffect(() => {
+    if (!user || user.displayName?.trim() || !mobileMenuOpen || profile?.email === user.email) return;
+    let active = true;
+    void apiRequest<{ email?: string; displayName?: string; name?: string }>(API_URL, "/api/v1/me", "").then((currentUser) => {
+      if (active) setProfile({ email: currentUser.email ?? user.email, displayName: currentUser.displayName?.trim() || currentUser.name?.trim() || "" });
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [mobileMenuOpen, profile?.email, user?.email, user?.displayName]);
   return <div id="top" className="min-h-screen overflow-x-hidden bg-white font-sans text-slate-900">
-    <LandingHeader user={user} landingLinks={LANDING_PAGE_LINKS} mobileMenuOpen={mobileMenuOpen} onMobileMenuToggle={() => setMobileMenuOpen(open => !open)} onDashboard={onDashboard} onLogin={onLogin} onRegister={onRegister} onLogout={onLogout} onMobileLinkClick={() => setMobileMenuOpen(false)} />
+    <LandingHeader user={user ? { ...user, displayName: profile?.email === user.email ? profile.displayName : user.displayName } : null} landingLinks={LANDING_PAGE_LINKS} mobileMenuOpen={mobileMenuOpen} onMobileMenuToggle={() => setMobileMenuOpen(open => !open)} onDashboard={onDashboard} onLogin={onLogin} onRegister={onRegister} onLogout={onLogout} onMobileLinkClick={() => setMobileMenuOpen(false)} />
     <main>
       <section className="relative overflow-hidden bg-gradient-to-b from-[#edf5ff] via-[#f7fbff] to-white px-5 pb-16 pt-24 lg:px-8 lg:pb-16 lg:pt-24"><div className="pointer-events-none absolute left-1/2 top-0 h-96 w-[42rem] -translate-x-1/2 rounded-full bg-blue-100/40 blur-3xl" /><div className="relative mx-auto max-w-6xl"><FadeUp className="mx-auto max-w-4xl text-center"><span className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white/80 px-4 py-2 text-xs font-medium text-blue-600 shadow-sm"><span className="h-1.5 w-1.5 rounded-full bg-blue-500" />NhuuChat AI 2.0 đã ra mắt <Icon name="arrow" className="h-3.5 w-3.5" /></span><h1 className="mx-auto mt-8 max-w-4xl text-5xl font-semibold leading-[1.08] tracking-[-0.045em] text-slate-950 sm:text-6xl md:text-7xl lg:text-[5rem]">Quản lý tin nhắn đa kênh &amp; <span className="bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent">AI<br className="hidden sm:block" /> Chatbot tự động</span></h1><p className="mx-auto mt-7 max-w-2xl text-lg font-normal leading-8 text-slate-500 sm:text-xl">NhuuChat kết nối Facebook, Zalo, Instagram, WhatsApp và Website. Tự động hóa bán hàng với AI Chatbot thông minh, tăng x3 tỷ lệ chốt đơn.</p><div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row"><button type="button" onClick={onRegister} className="rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 px-8 py-4 text-lg font-semibold text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5 hover:shadow-xl cursor-pointer">Bắt đầu dùng thử miễn phí</button><button type="button" className="inline-flex items-center rounded-full border border-slate-200 bg-white px-8 py-4 text-lg font-medium text-blue-600 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 cursor-pointer"><span className="mr-2 flex h-5 w-5 items-center justify-center rounded-full border border-blue-500 text-[10px]">▶</span>Xem demo thực tế</button></div><p className="mt-5 text-xs font-normal text-slate-400">Miễn phí 14 ngày • Không cần thẻ tín dụng • Setup trong 5 phút</p></FadeUp><FadeUp className="mx-auto mt-16 w-full max-w-6xl" delay={0.12}><InboxMockup /></FadeUp></div></section>
       <FadeUp><section id="kenh-tich-hop" className="scroll-mt-24 border-b border-slate-100 bg-slate-50 px-5 py-24 lg:px-8"><div className="mx-auto max-w-6xl text-center"><h2 className="text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">Tích hợp tất cả kênh bán hàng của bạn</h2><p className="mx-auto mt-4 max-w-2xl text-lg font-normal leading-8 text-slate-500">Không còn bỏ sót tin nhắn. NhuuChat gom tất cả hội thoại về một nền tảng duy nhất, giúp đội ngũ hỗ trợ nhanh hơn 300%.</p><div className="mx-auto mt-16 grid max-w-6xl gap-8 sm:grid-cols-2 lg:grid-cols-4">{channels.map(channel => <ChannelCard key={channel.name} channel={channel} />)}</div></div></section></FadeUp>

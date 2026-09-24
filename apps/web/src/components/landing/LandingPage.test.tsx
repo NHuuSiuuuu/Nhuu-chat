@@ -182,7 +182,7 @@ describe("LandingPage", () => {
   it("moves authenticated logout from the mobile header to the end of the mobile menu", () => {
     const onLogout = vi.fn();
     const renderer = renderLanding({
-      user: { email: "admin@example.com", role: "admin" },
+      user: { email: "admin@example.com", role: "admin", displayName: "Nguyễn Ngọc Hữu" },
       onDashboard: vi.fn(),
       onLogin: vi.fn(),
       onRegister: vi.fn(),
@@ -202,10 +202,13 @@ describe("LandingPage", () => {
     const mobileNavigation = renderer.root.findByProps({ id: "mobile-navigation" });
     const mobileLogout = mobileNavigation.findByProps({ "aria-label": "Đăng xuất" });
     const mobileEmail = mobileNavigation.findAllByType("span").find((candidate) => candidate.children.includes("admin@example.com"));
+    const mobileName = mobileNavigation.findAllByType("span").find((candidate) => candidate.children.includes("Nguyễn Ngọc Hữu"));
     const mobileUser = mobileNavigation.findByProps({ "aria-label": "Tài khoản đang đăng nhập" });
     const lastMenuItem = mobileNavigation.findAllByType("button").at(-1);
 
+    expect(mobileName?.props.className).toContain("font-semibold");
     expect(mobileEmail?.props.className).toContain("truncate");
+    expect(mobileUser.findAllByType("span").findIndex((candidate) => candidate.children.includes("Nguyễn Ngọc Hữu"))).toBeLessThan(mobileUser.findAllByType("span").findIndex((candidate) => candidate.children.includes("admin@example.com")));
     expect(mobileUser.findAllByType("span").some((candidate) => candidate.children.includes("admin@example.com"))).toBe(true);
     expect(lastMenuItem?.props["aria-label"]).toBe("Đăng xuất");
     expect(mobileLogout.props.className).toContain("bg-gradient-to-r from-[#0875ff] to-[#09bce9]");
