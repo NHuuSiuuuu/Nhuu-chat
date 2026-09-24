@@ -25,12 +25,40 @@ interface DashboardTopbarProps {
 }
 
 const fallbackAccount: DashboardAccount = { email: "", role: "OWNER", username: "nhuusiuu", displayName: "nhuusiuu" };
+const MOBILE_MENU_OPEN_STORAGE_KEY = "nhuu-chat.mobile-menu-open";
+const MOBILE_SETTINGS_OPEN_STORAGE_KEY = "nhuu-chat.mobile-settings-open";
+const MOBILE_NESTED_SETTINGS_OPEN_STORAGE_KEY = "nhuu-chat.mobile-nested-settings-open";
+
+function readStoredBoolean(key: string): boolean {
+  try {
+    return window.sessionStorage.getItem(key) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function readStoredValue(key: string): string | null {
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredValue(key: string, value: string | null): void {
+  try {
+    if (value === null) window.sessionStorage.removeItem(key);
+    else window.sessionStorage.setItem(key, value);
+  } catch {
+    // Giao diện vẫn dùng được khi trình duyệt chặn sessionStorage.
+  }
+}
 
 export function DashboardTopbar({ onLogoClick, onNavigate, user, onLogout, onProfile, settingsSubmenuItems, nestedSettingsSubmenuItems, activeSettingsSubmenuItem, onSettingsSubmenuNavigate, onNestedSettingsSubmenuNavigate }: DashboardTopbarProps = {}) {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isMobileSettingsOpen, setIsMobileSettingsOpen] = useState(false);
-  const [isMobileNestedSettingsOpen, setIsMobileNestedSettingsOpen] = useState<string | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpenState] = useState(() => readStoredBoolean(MOBILE_MENU_OPEN_STORAGE_KEY));
+  const [isMobileSettingsOpen, setIsMobileSettingsOpenState] = useState(() => readStoredBoolean(MOBILE_SETTINGS_OPEN_STORAGE_KEY));
+  const [isMobileNestedSettingsOpen, setIsMobileNestedSettingsOpenState] = useState(() => readStoredValue(MOBILE_NESTED_SETTINGS_OPEN_STORAGE_KEY));
   const account = user ?? fallbackAccount;
   const isLoading = user === null;
   const accountName = isLoading ? "Đang tải..." : account.displayName ?? account.username ?? account.email.split("@")[0] ?? "Tài khoản";
@@ -51,19 +79,34 @@ export function DashboardTopbar({ onLogoClick, onNavigate, user, onLogout, onPro
     onProfile?.();
   }
 
+  function setMobileMenuOpen(open: boolean) {
+    setIsMobileMenuOpenState(open);
+    writeStoredValue(MOBILE_MENU_OPEN_STORAGE_KEY, String(open));
+  }
+
+  function setMobileSettingsOpen(open: boolean) {
+    setIsMobileSettingsOpenState(open);
+    writeStoredValue(MOBILE_SETTINGS_OPEN_STORAGE_KEY, String(open));
+  }
+
+  function setMobileNestedSettingsOpen(item: string | null) {
+    setIsMobileNestedSettingsOpenState(item);
+    writeStoredValue(MOBILE_NESTED_SETTINGS_OPEN_STORAGE_KEY, item);
+  }
+
   function toggleMobileMenu() {
-    setIsMobileMenuOpen((current) => !current);
+    setMobileMenuOpen(!isMobileMenuOpen);
   }
 
   function navigateFromMobile(item: typeof dashboardNavItems[number]) {
-    setIsMobileMenuOpen(false);
+    setMobileMenuOpen(false);
     onNavigate?.(item);
   }
 
   function navigateSettingsFromMobile(item: string) {
-    setIsMobileMenuOpen(false);
-    setIsMobileSettingsOpen(false);
-    setIsMobileNestedSettingsOpen(null);
+    setMobileMenuOpen(false);
+    setMobileSettingsOpen(false);
+    setMobileNestedSettingsOpen(null);
     const nestedParent = Object.entries(nestedSettingsSubmenuItems ?? {}).find(([, nestedItems]) => nestedItems.includes(item))?.[0];
     if (nestedParent && onNestedSettingsSubmenuNavigate) onNestedSettingsSubmenuNavigate(item);
     else if (nestedParent) onSettingsSubmenuNavigate?.(nestedParent);
@@ -71,7 +114,7 @@ export function DashboardTopbar({ onLogoClick, onNavigate, user, onLogout, onPro
   }
 
   function toggleNestedSettings(item: string) {
-    setIsMobileNestedSettingsOpen((current) => current === item ? null : item);
+    setMobileNestedSettingsOpen(isMobileNestedSettingsOpen === item ? null : item);
   }
 
   return <div className="min-h-16"><header className="fixed left-0 right-0 top-0 z-50 flex min-h-16 items-center justify-between bg-blue-600 px-7 text-white max-[767px]:gap-2 max-[767px]:p-3">
@@ -91,10 +134,10 @@ export function DashboardTopbar({ onLogoClick, onNavigate, user, onLogout, onPro
       </div>}
     </div>
   </header>
-  {isMobileMenuOpen && <button className="fixed inset-0 z-[55] bg-slate-950/40 min-[768px]:hidden cursor-pointer" type="button" aria-label="Đóng menu điều hướng" onClick={() => setIsMobileMenuOpen(false)} />}
+  {isMobileMenuOpen && <button className="fixed inset-0 z-[55] bg-slate-950/40 min-[768px]:hidden cursor-pointer" type="button" aria-label="Đóng menu điều hướng" onClick={() => setMobileMenuOpen(false)} />}
   <aside className={`fixed bottom-0 left-0 top-0 z-[60] w-72 bg-white text-slate-800 shadow-2xl transition-transform duration-200 min-[768px]:hidden ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`} aria-label="Menu điều hướng mobile" aria-hidden={!isMobileMenuOpen}>
-    <div className="flex h-16 items-center justify-between border-b border-slate-100 px-4"><img className="h-9 w-[100px] object-contain" src="/nhuu-logo.svg" alt="NhuuChat" /><button className="grid size-9 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 cursor-pointer" type="button" aria-label="Đóng menu điều hướng" onClick={() => setIsMobileMenuOpen(false)}><InboxIcon name="close" size={19} /></button></div>
-    <nav className="grid gap-1 p-3" aria-label="Điều hướng mobile">{dashboardNavItems.map((item) => item === "Cài đặt" && settingsSubmenuItems?.length ? <div className="grid gap-1" key={item}><button className="flex items-center justify-between rounded-lg px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:text-gray-900  hover:text-sky-700 cursor-pointer" type="button" aria-expanded={isMobileSettingsOpen} aria-controls="mobile-settings-submenu" onClick={() => setIsMobileSettingsOpen((current) => !current)}><span>{item}</span><InboxIcon name={isMobileSettingsOpen ? "chevron-up" : "chevron-down"} size={16} /></button>{isMobileSettingsOpen && <div className="ml-3 grid gap-1 border-l border-slate-200 pl-2" id="mobile-settings-submenu" role="group" aria-label="Menu Cài đặt mobile">{settingsSubmenuItems.map((settingsItem) => { const nestedItems = nestedSettingsSubmenuItems?.[settingsItem]; return <div className="grid gap-1" key={settingsItem}><button className="flex items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition cursor-pointer transition-opacity hover:opacity-80" type="button" aria-expanded={nestedItems ? isMobileNestedSettingsOpen === settingsItem : undefined} onClick={() => nestedItems ? toggleNestedSettings(settingsItem) : navigateSettingsFromMobile(settingsItem)}><span>{settingsItem}</span>{nestedItems && <InboxIcon name={isMobileNestedSettingsOpen === settingsItem ? "chevron-up" : "chevron-down"} size={15} />}</button>{nestedItems && isMobileNestedSettingsOpen === settingsItem && <div className="ml-3 grid gap-1 border-l border-slate-100 pl-2" role="group" aria-label={`${settingsItem} submenu`}>{nestedItems.map((nestedItem) => <button className="rounded-lg px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50 cursor-pointer" type="button" key={nestedItem} onClick={() => navigateSettingsFromMobile(nestedItem)}>{nestedItem}</button>)}</div>}</div>; })}</div>}</div> : <button className="rounded-lg px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:text-gray-900  hover:text-sky-700 cursor-pointer" type="button" key={item} onClick={() => navigateFromMobile(item)}>{item}</button>)}</nav>
+    <div className="flex h-16 items-center justify-between border-b border-slate-100 px-4"><img className="h-9 w-[100px] object-contain" src="/nhuu-logo.svg" alt="NhuuChat" /><button className="grid size-9 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 cursor-pointer" type="button" aria-label="Đóng menu điều hướng" onClick={() => setMobileMenuOpen(false)}><InboxIcon name="close" size={19} /></button></div>
+    <nav className="grid gap-1 p-3" aria-label="Điều hướng mobile">{dashboardNavItems.map((item) => item === "Cài đặt" && settingsSubmenuItems?.length ? <div className="grid gap-1" key={item}><button className="flex items-center justify-between rounded-lg px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:text-gray-900  hover:text-sky-700 cursor-pointer" type="button" aria-expanded={isMobileSettingsOpen} aria-controls="mobile-settings-submenu" onClick={() => setMobileSettingsOpen(!isMobileSettingsOpen)}><span>{item}</span><InboxIcon name={isMobileSettingsOpen ? "chevron-up" : "chevron-down"} size={16} /></button>{isMobileSettingsOpen && <div className="ml-3 grid gap-1 border-l border-slate-200 pl-2" id="mobile-settings-submenu" role="group" aria-label="Menu Cài đặt mobile">{settingsSubmenuItems.map((settingsItem) => { const nestedItems = nestedSettingsSubmenuItems?.[settingsItem]; return <div className="grid gap-1" key={settingsItem}><button className="flex items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition cursor-pointer transition-opacity hover:opacity-80" type="button" aria-expanded={nestedItems ? isMobileNestedSettingsOpen === settingsItem : undefined} onClick={() => nestedItems ? toggleNestedSettings(settingsItem) : navigateSettingsFromMobile(settingsItem)}><span>{settingsItem}</span>{nestedItems && <InboxIcon name={isMobileNestedSettingsOpen === settingsItem ? "chevron-up" : "chevron-down"} size={15} />}</button>{nestedItems && isMobileNestedSettingsOpen === settingsItem && <div className="ml-3 grid gap-1 border-l border-slate-100 pl-2" role="group" aria-label={`${settingsItem} submenu`}>{nestedItems.map((nestedItem) => <button className="rounded-lg px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50 cursor-pointer" type="button" key={nestedItem} onClick={() => navigateSettingsFromMobile(nestedItem)}>{nestedItem}</button>)}</div>}</div>; })}</div>}</div> : <button className="rounded-lg px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:text-gray-900  hover:text-sky-700 cursor-pointer" type="button" key={item} onClick={() => navigateFromMobile(item)}>{item}</button>)}</nav>
   </aside>
   </div>;
 }

@@ -357,8 +357,17 @@ describe("Inbox Tailwind migration", () => {
 
     expect(source).toContain("selectedConversationId?: string | null");
     expect(source).toContain("handledRequestedConversationRef.current = selectedConversationRequest");
-    expect(source).toContain("selectConversation(selectedConversationId)");
-    expect(source).toContain('params.delete("conversationId")');
+    expect(source).toContain("selectConversation(selectedConversationId, false)");
+    expect(source).not.toContain('params.delete("conversationId")');
+    expect(source).toContain('params.set("conversationId", id)');
+  });
+
+  it("restores whether the mobile conversation list drawer was open", () => {
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('const CONVERSATION_LIST_OPEN_STORAGE_KEY = "nhuu-chat.inbox-list-open"');
+    expect(source).toContain('window.sessionStorage.getItem(CONVERSATION_LIST_OPEN_STORAGE_KEY) === "true"');
+    expect(source).toContain("window.sessionStorage.setItem(CONVERSATION_LIST_OPEN_STORAGE_KEY, String(open))");
   });
 
   it("applies per-account general settings to inbox notifications and unread navigation", () => {

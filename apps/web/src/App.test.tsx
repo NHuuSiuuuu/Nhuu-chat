@@ -10,6 +10,14 @@ type AppModuleWithRouteTitle = typeof AppModule & {
 const appModule = AppModule as AppModuleWithRouteTitle;
 
 describe("App navigation", () => {
+  it("switches workspace without a document reload and remounts workspace scoped content", () => {
+    const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+
+    expect(source).not.toContain("window.location.reload()");
+    expect(source).toContain('<ProtectedRoute key={workspaceContentVersion} token="cookie-session">');
+    expect(source).toContain("setWorkspaceContentVersion((version) => version + 1)");
+  });
+
   it("keeps the public landing page at root and sends an authenticated user to dashboard only from the user action", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 

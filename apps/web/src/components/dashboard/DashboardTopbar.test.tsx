@@ -50,6 +50,15 @@ describe("DashboardTopbar", () => {
     expect(source).toContain("max-[767px]:hidden");
   });
 
+  it("restores the mobile navigation sidebar and settings submenu state from session storage", () => {
+    const source = readFileSync(new URL("./DashboardTopbar.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('const MOBILE_MENU_OPEN_STORAGE_KEY = "nhuu-chat.mobile-menu-open"');
+    expect(source).toContain("readStoredBoolean(MOBILE_MENU_OPEN_STORAGE_KEY)");
+    expect(source).toContain("writeStoredValue(MOBILE_MENU_OPEN_STORAGE_KEY, String(open))");
+    expect(source).toContain('const MOBILE_SETTINGS_OPEN_STORAGE_KEY = "nhuu-chat.mobile-settings-open"');
+  });
+
   it("renders nested settings items without navigating from the parent", () => {
     const source = readFileSync(new URL("./DashboardTopbar.tsx", import.meta.url), "utf8");
 

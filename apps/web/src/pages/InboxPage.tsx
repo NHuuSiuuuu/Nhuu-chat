@@ -156,6 +156,15 @@ export async function loadInboxQuickReplies(request: () => Promise<{ quickReplie
 
 type InboxAccount = DashboardAccount & { id?: string };
 type RetryPayloadEntry = { conversationId: string; payload: ComposerSendPayload; previewUrl?: string };
+const CONVERSATION_LIST_OPEN_STORAGE_KEY = "nhuu-chat.inbox-list-open";
+
+function readConversationListOpen(): boolean {
+  try {
+    return window.sessionStorage.getItem(CONVERSATION_LIST_OPEN_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
 
 export function InboxPage({ token, refresh, platform, channelId, selectedConversationId, selectedConversationRequest, onBack, onLogoClick, onNavigate, user, onLogout, onProfile }: { token: string; refresh?: () => Promise<string | null>; platform?: string; channelId?: string; selectedConversationId?: string | null; selectedConversationRequest?: number; onBack?: () => void; onLogoClick?: () => void; onNavigate?: (item: "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt") => void; user?: InboxAccount | null; onLogout?: () => void; onProfile?: () => void }) {
   const [conversations, setConversations] = useState<ConversationContract[]>([]);
@@ -177,7 +186,7 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
   const [availableTags, setAvailableTags] = useState<ConversationTagContract[]>([]);
   const [quickReplies, setQuickReplies] = useState<QuickReplyContract[]>([]);
   const [isConversationListLoading, setIsConversationListLoading] = useState(true);
-  const [isConversationListOpen, setIsConversationListOpen] = useState(false);
+  const [isConversationListOpen, setIsConversationListOpen] = useState(readConversationListOpen);
   const [isTakingOver, setIsTakingOver] = useState(false);
   const [takeoverError, setTakeoverError] = useState<string | null>(null);
   const [conversationListWidth, setConversationListWidth] = useState(CONVERSATION_LIST_MAX_WIDTH);
@@ -308,11 +317,7 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
     if (!selectedConversationId || selectedConversationRequest === undefined || isConversationListLoading || handledRequestedConversationRef.current === selectedConversationRequest) return;
     if (!conversations.some((conversation) => conversation.id === selectedConversationId)) return;
     handledRequestedConversationRef.current = selectedConversationRequest;
-    selectConversation(selectedConversationId);
-    const params = new URLSearchParams(window.location.search);
-    params.delete("conversationId");
-    const query = params.toString();
-    window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+    selectConversation(selectedConversationId, false);
   }, [conversations, isConversationListLoading, selectedConversationId, selectedConversationRequest]);
   useEffect(() => {
     let cancelled = false;
@@ -450,7 +455,22 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
     joinActiveRoom();
     return () => { socket.off("connect", joinActiveRoom); socket.off(chatEvents.messagePinUpdated, handleMessagePinUpdated); socket.disconnect(); };
   }, [token, platform, channelId, activeId, aiSettingsLoaded, aiSettings.suggestionMode, aiSuggestionsEnabled, generalSettings, hasCurrentGeneralSettings]);
-  function selectConversation(id: string) { setActiveId(id); setReadRequestKey((current) => current + 1); setIsConversationListOpen(false); }
+  function setConversationListOpen(open: boolean) {
+    setIsConversationListOpen(open);
+    try {
+      window.sessionStorage.setItem(CONVERSATION_LIST_OPEN_STORAGE_KEY, String(open));
+    } catch {
+      // Trạng thái trong component vẫn dùng được nếu trình duyệt chặn sessionStorage.
+    }
+  }
+  function selectConversation(id: string, closeConversationList = true) {
+    setActiveId(id);
+    setReadRequestKey((current) => current + 1);
+    const params = new URLSearchParams(window.location.search);
+    params.set("conversationId", id);
+    window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
+    if (closeConversationList) setConversationListOpen(false);
+  }
   async function openNextUnreadConversation() {
     if (!activeId || !await markActiveRead(activeId)) return;
     const unreadOrdered = orderConversationsByUnread(conversationsRef.current, hasCurrentGeneralSettings && generalSettings.moveUnreadConversationsToTop);
@@ -603,5 +623,5 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
     <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 cursor-pointer" type="button" aria-label="Hộp thư"><InboxIcon name="inbox" /></button>
     {/* <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Khách hàng"><InboxIcon name="users" /></button><div className="inbox-nav-spacer flex-1" /><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Trợ giúp"><InboxIcon name="help" /></button><button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-black/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Cài đặt"><InboxIcon name="settings" /></button> */}
     {/* {onBack && <button className="inbox-nav-item grid size-9 place-items-center rounded-lg text-white/80 transition-colors hover:bg-gray-100 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Về Dashboard" onClick={onBack}>←</button>} */}
-    </aside><div className="min-h-0 max-[899px]:hidden"><ConversationList items={orderedConversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} collapsed={isConversationListCollapsed} onResizeStart={handleConversationListResizeStart} /></div><div className="flex min-h-0 min-w-0 flex-col"><div className={`flex min-h-0 flex-1 flex-col ${isConversationListOpen ? "max-[899px]:hidden" : ""}`}><ChatWindow {...chatWindowPinProps} conversation={active} messages={messages} isLoadingMessages={isLoadingMessages} onSend={sendText} onRetryMessage={retryMessage} quickReplies={quickReplies} draft={getConversationDraft(drafts, activeId)} onDraftChange={updateActiveDraft} onOpenConversationList={() => setIsConversationListOpen(true)} showOpenNextUnreadAction={hasCurrentGeneralSettings && generalSettings.openNextUnreadConversation && Boolean(getNextUnreadConversationId(orderedConversations, activeId ?? ""))} onOpenNextUnread={openNextUnreadConversation} isCustomerTyping={isCustomerTyping} aiSuggestions={aiSuggestions} isAiSuggestionsLoading={isAiSuggestionsLoading} aiSuggestionsError={aiSuggestionsError} onRefreshAiSuggestions={refreshAiSuggestions} aiSuggestionsEnabled={aiSuggestionsEnabled} availableTags={availableTags} onTagsChange={updateActiveConversationTags} onToggleBot={toggleActiveBot} isTogglingBot={isTakingOver} toggleBotError={takeoverError} /></div></div>{isConversationListOpen && <><button className="fixed inset-0 z-40 bg-slate-900/30 min-[900px]:hidden cursor-pointer" type="button" onClick={() => setIsConversationListOpen(false)} aria-label="Đóng danh sách hội thoại" /><div className="fixed left-[44px] right-0 top-16 bottom-0 z-50 flex min-[900px]:hidden"><ConversationList items={orderedConversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} /></div></>}</div></div></main>;
+    </aside><div className="min-h-0 max-[899px]:hidden"><ConversationList items={orderedConversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} collapsed={isConversationListCollapsed} onResizeStart={handleConversationListResizeStart} /></div><div className="flex min-h-0 min-w-0 flex-col"><div className={`flex min-h-0 flex-1 flex-col ${isConversationListOpen ? "max-[899px]:hidden" : ""}`}><ChatWindow {...chatWindowPinProps} conversation={active} messages={messages} isLoadingMessages={isLoadingMessages} onSend={sendText} onRetryMessage={retryMessage} quickReplies={quickReplies} draft={getConversationDraft(drafts, activeId)} onDraftChange={updateActiveDraft} onOpenConversationList={() => setConversationListOpen(true)} showOpenNextUnreadAction={hasCurrentGeneralSettings && generalSettings.openNextUnreadConversation && Boolean(getNextUnreadConversationId(orderedConversations, activeId ?? ""))} onOpenNextUnread={openNextUnreadConversation} isCustomerTyping={isCustomerTyping} aiSuggestions={aiSuggestions} isAiSuggestionsLoading={isAiSuggestionsLoading} aiSuggestionsError={aiSuggestionsError} onRefreshAiSuggestions={refreshAiSuggestions} aiSuggestionsEnabled={aiSuggestionsEnabled} availableTags={availableTags} onTagsChange={updateActiveConversationTags} onToggleBot={toggleActiveBot} isTogglingBot={isTakingOver} toggleBotError={takeoverError} /></div></div>{isConversationListOpen && <><button className="fixed inset-0 z-40 bg-slate-900/30 min-[900px]:hidden cursor-pointer" type="button" onClick={() => setConversationListOpen(false)} aria-label="Đóng danh sách hội thoại" /><div className="fixed left-[44px] right-0 top-16 bottom-0 z-50 flex min-[900px]:hidden"><ConversationList items={orderedConversations} activeId={activeId} onSelect={selectConversation} isLoading={isConversationListLoading} availableTags={availableTags} onTagsChange={updateConversationTags} /></div></>}</div></div></main>;
 }
