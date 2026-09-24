@@ -144,7 +144,10 @@ export function emitInboxEventToRecipients(event: string, recipientIds: string[]
     : typeof payloadRecord?.conversationId === "string" ? payloadRecord.conversationId : null;
   if (conversationId && isWorkspaceChannelPlatform(payloadRecord?.platform)) {
     const server = activeServer;
-    void ConversationModel.findById(conversationId).select("ownerId platform channelId").lean().then(async (conversation) => {
+    const lookup = event === chatEvents.conversationDeleted
+      ? Promise.resolve(payloadRecord as { ownerId: string; platform: string; channelId: string })
+      : ConversationModel.findById(conversationId).select("ownerId platform channelId").lean();
+    void lookup.then(async (conversation) => {
       if (!conversation?.ownerId || !conversation.channelId || !isWorkspaceChannelPlatform(conversation.platform)) return;
       const workspace = await WorkspaceModel.findOne({ ownerUserId: conversation.ownerId }).select("_id").lean();
       if (!workspace) {

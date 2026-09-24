@@ -97,6 +97,22 @@ describe("inbox realtime recipients", () => {
     });
   });
 
+  it("routes deletion events from trusted conversation metadata after the record is removed", async () => {
+    workspaceMocks.findOne.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({ _id: "workspace-1" }) }) });
+    workspaceMemberMocks.find.mockReturnValue({ select: () => ({ lean: () => Promise.resolve([
+      { userId: "owner-1", role: "owner", allowedChannels: [], allowedPages: [] },
+      { userId: "staff-allowed", role: "staff", allowedChannels: [{ platform: "facebook", channelId: "page-1" }], allowedPages: ["page-1"] },
+      { userId: "staff-denied", role: "staff", allowedChannels: [{ platform: "facebook", channelId: "page-2" }], allowedPages: ["page-2"] }
+    ]) }) });
+    const payload = { id: "conversation-deleted", platform: "facebook", ownerId: "owner-1", channelId: "page-1", assignedAgentId: "staff-denied" };
+
+    emitInboxEventToRecipients("chat:conversation_deleted", ["owner-1", "staff-denied"], payload);
+
+    await vi.waitFor(() => expect(socketMocks.to).toHaveBeenCalledWith(["inbox:owner-1", "inbox:staff-allowed"]));
+    expect(conversationMocks.findById).not.toHaveBeenCalled();
+    expect(socketMocks.emit).toHaveBeenCalledWith("chat:conversation_deleted", payload);
+  });
+
   it("broadcasts personal-account updates only to staff assigned that Workspace owner session", async () => {
     conversationMocks.findById.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({
       ownerId: "owner-1", platform: "telegram_personal", channelId: "target-chat"

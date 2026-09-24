@@ -9,6 +9,8 @@ import { conversationAccessFilter } from "../realtime/access.js";
 import { TelegramPersonalSessionModel } from "../channels/telegram-personal/telegram-personal.model.js";
 import { ConversationTagModel } from "../models/conversation-tag.model.js";
 import { MessageModel } from "../models/message.model.js";
+import { ConversationNoteModel } from "../models/conversation-note.model.js";
+import { BotProcessingModel } from "../models/bot-processing.model.js";
 import type { AiSuggestionsResponse } from "@nhuu-chat/contracts";
 import { shouldGenerateSuggestions, type AiSuggestionTrigger } from "../ai/ai-settings.js";
 import { getAiSettings } from "./ai-settings.service.js";
@@ -93,6 +95,27 @@ export async function markConversationRead(id: string, auth: AuthUser) {
   const row = await ConversationModel.findOneAndUpdate({ _id: id, ...accessFilter }, { unreadCount: 0 }, { new: true }).populate("customerId", "name avatarUrl").populate("tagIds", "name color").lean();
   if (!row) throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
   return toConversation(row);
+}
+
+// Xử lý trọn một lô hội thoại sau khi xác nhận người gọi có quyền với mọi ID.
+export async function bulkConversationActions(ids: string[], action: "read" | "unread" | "delete", auth: AuthUser) {
+  const filter = { _id: { $in: ids }, ...conversationAccessFilter(auth) };
+  const accessible = await ConversationModel.find(filter).lean();
+  if (accessible.length !== ids.length) throw new AppError(404, "CONVERSATION_NOT_FOUND", "One or more conversations were not found");
+
+  if (action === "delete") {
+    await ConversationModel.db.transaction(async (session) => {
+      await MessageModel.deleteMany({ conversationId: { $in: ids } }, { session });
+      await ConversationNoteModel.deleteMany({ conversationId: { $in: ids } }, { session });
+      await BotProcessingModel.deleteMany({ conversationId: { $in: ids } }, { session });
+      await ConversationModel.deleteMany(filter, { session });
+    });
+    return { action, conversations: accessible.map((row: any) => ({ id: String(row._id), platform: row.platform, ownerId: String(row.ownerId ?? ""), channelId: row.channelId, assignedAgentId: row.assignedAgentId ? String(row.assignedAgentId) : null })) };
+  }
+
+  await ConversationModel.updateMany(filter, { $set: { unreadCount: action === "read" ? 0 : 1 } });
+  const rows = await ConversationModel.find(filter).populate("customerId", "name avatarUrl").populate("tagIds", "name color").sort({ lastMessageAt: -1 }).lean();
+  return { action, conversations: rows.map((row: any) => toConversation(row)) };
 }
 
 // Replaces all tags atomically after checking tag existence and conversation access.

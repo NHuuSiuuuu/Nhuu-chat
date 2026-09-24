@@ -1,4 +1,5 @@
 import type { Request, RequestHandler } from "express";
+import { chatEvents } from "@nhuu-chat/contracts";
 
 import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
 import { AppError } from "../common/errors.js";
@@ -12,10 +13,12 @@ import {
   conversationListQuerySchema,
   conversationStatusSchema,
   conversationTagsSchema,
-  aiSuggestionRequestSchema
+  aiSuggestionRequestSchema,
+  conversationBulkActionSchema
 } from "../schemas/conversation.schemas.js";
 import {
   listConversations as listConversationRecords,
+  bulkConversationActions as bulkConversationActionsRecord,
   markConversationRead as markConversationReadRecord,
   updateAssignment as updateConversationAssignment,
   updateBotEnabled as updateConversationBotEnabled,
@@ -73,6 +76,28 @@ export const markConversationRead: RequestHandler = async (request, response, ne
       ],
       result
     );
+    response.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const bulkConversationActions: RequestHandler = async (request, response, next) => {
+  try {
+    const auth = authenticatedRequest(request);
+    const body = conversationBulkActionSchema.safeParse(request.body);
+    if (!body.success) throw new AppError(400, "INVALID_REQUEST", "Bulk conversation action is invalid");
+    const result = await bulkConversationActionsRecord(body.data.conversationIds, body.data.action, auth);
+    for (const conversation of result.conversations) {
+      if (result.action === "delete") {
+        const deleted = conversation as { id: string; platform: string; ownerId: string; channelId: string; assignedAgentId: string | null };
+        emitInboxEventToRecipients(chatEvents.conversationDeleted, [deleted.ownerId, deleted.assignedAgentId ?? ""], deleted);
+      } else {
+        const updated = conversation as { id: string; assignedAgentId: string | null };
+        const original = await ConversationModel.findById(updated.id).select("ownerId assignedAgentId").lean();
+        emitInboxEventToRecipients("chat:conversation_updated", [original?.ownerId ? String(original.ownerId) : "", original?.assignedAgentId ? String(original.assignedAgentId) : ""], conversation);
+      }
+    }
     response.json(result);
   } catch (error) {
     next(error);

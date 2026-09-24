@@ -226,6 +226,7 @@ export const chatEvents = {
   messageReceived: "chat:message_received",
   incomingMessage: "chat:incoming_message",
   conversationUpdated: "chat:conversation_updated",
+  conversationDeleted: "chat:conversation_deleted",
   deliveryUpdated: "chat:delivery_updated",
   messagePinUpdated: "chat:message_pin_updated",
   joinRoom: "chat:join_room",

@@ -10,6 +10,7 @@ const routeMocks = vi.hoisted(() => ({
   }),
   getConversationReplySuggestions: vi.fn((_request: unknown, response: { sendStatus: (status: number) => unknown }) => response.sendStatus(204)),
   updateBotEnabled: vi.fn(),
+  bulkConversationActions: vi.fn(),
   listConversationPins: vi.fn(),
   pinConversationMessage: vi.fn(),
   unpinConversationMessage: vi.fn()
@@ -22,6 +23,7 @@ vi.mock("../auth/workspace.middleware.js", () => ({
 vi.mock("../controllers/conversations.controller.js", () => ({
   listConversations: vi.fn(),
   markConversationRead: vi.fn(),
+  bulkConversationActions: routeMocks.bulkConversationActions,
   updateAssignment: vi.fn(),
   updateBotEnabled: routeMocks.updateBotEnabled,
   updateStatus: vi.fn(),
@@ -86,6 +88,12 @@ describe("conversation routes", () => {
 
     expect(route?.route?.path).toBe("/:id/bot");
     expect(routeMocks.requireRole).toHaveBeenCalledWith("admin", "agent", "customer");
+  });
+
+  it("registers a protected bulk conversation action endpoint", () => {
+    const route = conversationRouter.stack.find((layer) => layer.route?.path === "/bulk");
+    expect(route?.route?.methods).toMatchObject({ post: true });
+    expect(route?.route?.stack.at(-1)?.handle).toBe(routeMocks.bulkConversationActions);
   });
 
   it("registers the AI suggestions endpoint as POST and protects it for admins and agents", async () => {

@@ -1,10 +1,12 @@
 import * as React from "react";
 
-type IconName = "inbox" | "chat" | "user" | "users" | "settings" | "help" | "info" | "search" | "filter" | "plus" | "list" | "chevron-left" | "chevron-down" | "chevron-up" | "tag" | "edit" | "trash" | "pin" | "monitor" | "phone" | "cloud" | "wrench" | "clock" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more" | "check" | "copy" | "download" | "upload" | "file" | "camera" | "robot" | "layers" | "alert" | "shield" | "bell";
+type IconName = "inbox" | "mail" | "mail-open" | "chat" | "user" | "users" | "settings" | "help" | "info" | "search" | "filter" | "plus" | "list" | "chevron-left" | "chevron-down" | "chevron-up" | "tag" | "edit" | "trash" | "pin" | "monitor" | "phone" | "cloud" | "wrench" | "clock" | "send" | "paperclip" | "sparkles" | "refresh" | "note" | "image" | "template" | "close" | "smile" | "reply" | "more" | "check" | "copy" | "download" | "upload" | "file" | "camera" | "robot" | "layers" | "alert" | "shield" | "bell";
 
 export function InboxIcon({ name, size = 18, className = "" }: { name: IconName; size?: number; className?: string }) {
   const paths: Record<IconName, React.ReactNode> = {
     inbox: <><path d="M4 5h16v14H4z" /><path d="M4 14h4l1.5 2h5L16 14h4" /></>,
+    mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6" /></>,
+    "mail-open": <><path d="m3 8 9-5 9 5v11H3z" /><path d="m3 8 9 6 9-6" /></>,
     chat: <><path d="M5 5h14v10H9l-4 4z" /><path d="M8 9h8M8 12h5" /></>,
     user: <><circle cx="12" cy="8" r="3" /><path d="M5 20c.7-3.5 3-5.5 7-5.5s6.3 2 7 5.5" /></>,
     users: <><circle cx="9" cy="9" r="3" /><path d="M3.5 19c.5-3 2.3-4.5 5.5-4.5s5 1.5 5.5 4.5M16 7a3 3 0 0 1 0 5M16 14.5c2.4.2 3.8 1.7 4.2 4.5" /></>,

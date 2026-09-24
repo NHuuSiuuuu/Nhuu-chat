@@ -21,6 +21,7 @@ MVP quản lý inbox chăm sóc khách hàng Facebook Messenger và Telegram cù
 - Knowledge chunking, TXT/Markdown/PDF/DOCX parser, provider-independent RAG.
 - Bot Pause 30 phút; queue có chính sách retry 0s/1s/4s, riêng chatbot tự động chỉ gửi một lần để tránh trả lời trùng.
 - Inbox React tối thiểu.
+- Chọn nhiều hội thoại trong Inbox để đánh dấu đã đọc/chưa đọc hoặc xóa; API kiểm tra quyền trên toàn bộ lô, và thao tác xóa đồng bộ đến các phiên đang mở.
 - Ghim tối đa 10 tin nhắn trong mỗi hội thoại, có thanh tin đã ghim và đồng bộ realtime cho admin/agent.
 - Ghi chú nội bộ theo từng hội thoại; agent/admin có thể tạo, sửa, xóa và ghim ghi chú trong sidebar Thông tin.
 - Trang `Cài đặt > Lịch sử` hiển thị Timeline thay đổi Cài đặt AI và kết nối/ngắt kết nối Facebook Page theo từng người dùng.

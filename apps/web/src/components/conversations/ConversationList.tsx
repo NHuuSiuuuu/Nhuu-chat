@@ -5,6 +5,7 @@ import { conversationAccountName, conversationDisplayName, formatConversationTim
 import { InboxIcon } from "./InboxIcon.js";
 import { ConversationAvatar } from "./ConversationAvatar.js";
 import { PlatformIcon } from "../dashboard/PlatformIcon.js";
+import { toggleConversationSelection, toggleVisibleConversationSelection, type BulkConversationAction } from "./conversation-selection.js";
 
 interface ConversationListProps {
   items: ConversationContract[];
@@ -15,6 +16,7 @@ interface ConversationListProps {
   [key: string]: unknown;
   collapsed?: boolean;
   onResizeStart?: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onBulkAction?: (action: BulkConversationAction, ids: string[]) => Promise<void>;
 }
 export const UNTAGGED_CONVERSATION_FILTER = "__untagged__";
 
@@ -46,8 +48,11 @@ export function getVisibleConversationTagCount(width: number, tagsOrCount: numbe
   return Math.max(1, visibleCount);
 }
 
-export function ConversationList({ items, activeId, onSelect, isLoading = false, availableTags = [], collapsed = false, onResizeStart }: ConversationListProps) {
+export function ConversationList({ items, activeId, onSelect, isLoading = false, availableTags = [], collapsed = false, onResizeStart, onBulkAction }: ConversationListProps) {
   const [search, setSearch] = useState("");
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedConversationIds, setSelectedConversationIds] = useState<string[]>([]);
+  const [isBulkActionPending, setIsBulkActionPending] = useState(false);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -60,6 +65,30 @@ export function ConversationList({ items, activeId, onSelect, isLoading = false,
     setTagFilter(nextFilter);
     setIsFilterOpen(false);
   }
+
+  function closeSelectionMode() {
+    setIsSelectionMode(false);
+    setSelectedConversationIds([]);
+  }
+
+  async function runBulkAction(action: BulkConversationAction) {
+    if (!onBulkAction || !selectedConversationIds.length || isBulkActionPending) return;
+    setIsBulkActionPending(true);
+    try {
+      await onBulkAction(action, selectedConversationIds);
+      closeSelectionMode();
+    } catch {
+      return;
+    } finally {
+      setIsBulkActionPending(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!collapsed) return;
+    setIsSelectionMode(false);
+    setSelectedConversationIds([]);
+  }, [collapsed]);
 
   useEffect(() => {
     const sidebar = sidebarRef.current;
@@ -76,7 +105,15 @@ export function ConversationList({ items, activeId, onSelect, isLoading = false,
     <div className={`${collapsed ? "flex min-h-[66px] items-center justify-center p-3" : "conversation-toolbar grid grid-cols-[minmax(0,1fr)_82px_40px] gap-2 p-3 max-[680px]:grid-cols-[minmax(0,1fr)_40px]"}`}>
       {collapsed ? <span className="text-gray-400" title="Kéo để thay đổi kích thước danh sách hội thoại"><InboxIcon name="list" /></span> : <><label className="conversation-search flex h-10 min-w-0 items-center gap-2 rounded-lg border border-gray-200 px-2.5 text-gray-400 transition-shadow focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-600/10"><InboxIcon name="search" size={17} /><input className="w-full min-w-0 border-0 bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm tên, sđt..." aria-label="Tìm hội thoại" /></label><div className="relative max-[680px]:hidden"><button className="conversation-filter flex h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200  bg-white px-3 text-[13px] text-gray-600  hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 cursor-pointer" type="button" aria-haspopup="menu" aria-expanded={isFilterOpen} onClick={() => setIsFilterOpen((current) => !current)}><InboxIcon name="filter" size={16} /><span className="whitespace-nowrap">Lọc theo</span></button>{isFilterOpen && <div className="absolute right-0 top-full z-30 mt-1 grid min-w-max gap-1 rounded-lg border border-gray-200 bg-white p-2 shadow-lg" role="menu" aria-label="Lọc theo thẻ"><button className={`whitespace-nowrap rounded-full px-3 py-1.5 text-left text-xs font-semibold hover:bg-slate-50 ${tagFilter === null ? "ring-2 ring-blue-200" : "text-gray-700"} cursor-pointer`} type="button" role="menuitem" onClick={() => selectTagFilter(null)}>Tất cả</button>{availableTags.map((tag) => <button className={`whitespace-nowrap rounded-full px-3 py-1.5 text-left text-xs font-semibold text-white hover:brightness-95 ${tagFilter === tag.id ? "ring-2 ring-blue-200 ring-offset-1" : ""} cursor-pointer`} style={{ backgroundColor: tag.color }} type="button" role="menuitem" key={tag.id} onClick={() => selectTagFilter(tag.id)}>{tag.name}</button>)}<button className={`whitespace-nowrap rounded-full bg-slate-200 px-3 py-1.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-300 ${tagFilter === UNTAGGED_CONVERSATION_FILTER ? "ring-2 ring-blue-200 ring-offset-1" : ""} cursor-pointer`} type="button" role="menuitem" onClick={() => selectTagFilter(UNTAGGED_CONVERSATION_FILTER)}>Không gắn thẻ</button></div>}</div><button className="conversation-add grid h-10 place-items-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 cursor-pointer" type="button" aria-label="Thêm hội thoại"><InboxIcon name="plus" /></button></>}
     </div>
-    {!collapsed && <div className="conversation-list-header flex min-h-11 items-center justify-between border-y border-gray-200 px-3 text-sm font-semibold text-gray-600"><span>Tất cả hội thoại <b className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-500">{items.length}</b></span><button className="grid place-items-center text-gray-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 cursor-pointer transition-opacity hover:opacity-80" type="button" aria-label="Tùy chọn danh sách"><InboxIcon name="list" /></button></div>}
+    {!collapsed && (isSelectionMode ? <div className="conversation-list-bulk-toolbar flex min-h-11 items-center justify-between gap-2 border-y border-gray-200 px-3 text-xs" aria-label="Thao tác hàng loạt">
+      <label className="flex shrink-0 cursor-pointer items-center gap-2 font-semibold text-blue-600"><input type="checkbox" className="size-4 accent-blue-600" checked={filtered.length > 0 && filtered.every((item) => selectedConversationIds.includes(item.id))} onChange={(event) => setSelectedConversationIds((current) => toggleVisibleConversationSelection(current, filtered.map((item) => item.id), event.target.checked))} disabled={isBulkActionPending} />Chọn tất cả</label>
+      <div className="flex items-center gap-1">
+        <button className="grid size-8 place-items-center rounded-md text-gray-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer" type="button" title="Đánh dấu đã đọc" aria-label="Đánh dấu đã đọc" disabled={!selectedConversationIds.length || isBulkActionPending} onClick={() => void runBulkAction("read")}><InboxIcon name="mail-open" /></button>
+        <button className="grid size-8 place-items-center rounded-md text-gray-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer" type="button" title="Đánh dấu chưa đọc" aria-label="Đánh dấu chưa đọc" disabled={!selectedConversationIds.length || isBulkActionPending} onClick={() => void runBulkAction("unread")}><InboxIcon name="mail" /></button>
+        <button className="grid size-8 place-items-center rounded-md text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer" type="button" title="Xóa hội thoại" aria-label="Xóa hội thoại" disabled={!selectedConversationIds.length || isBulkActionPending} onClick={() => void runBulkAction("delete")}><InboxIcon name="trash" /></button>
+        <button className="grid size-8 place-items-center rounded-md text-gray-500 hover:bg-slate-100 cursor-pointer" type="button" aria-label="Thoát chế độ chọn" onClick={closeSelectionMode} disabled={isBulkActionPending}><InboxIcon name="close" /></button>
+      </div>
+    </div> : <div className="conversation-list-header flex min-h-11 items-center justify-between border-y border-gray-200 px-3 text-sm font-semibold text-gray-600"><span>Tất cả hội thoại <b className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-500">{items.length}</b></span><button className="grid place-items-center text-gray-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 cursor-pointer transition-opacity hover:opacity-80" type="button" aria-label="Chọn nhiều hội thoại" onClick={() => setIsSelectionMode(true)}><InboxIcon name="list" /></button></div>)}
     <div className={`conversation-items min-h-0 flex-1 overflow-y-auto scrollbar-none ${collapsed ? "py-2" : ""}`}>
       {isLoading ? <div aria-label="Đang tải danh sách hội thoại">{[1, 2, 3, 4, 5].map((row) => <div className={`flex min-h-[88px] items-start gap-3 border-b border-gray-100 px-3 py-3.5 ${collapsed ? "justify-center px-2" : ""}`} key={row}><span className={`size-[48px] shrink-0 rounded-full bg-gray-200 ${collapsed ? "size-[42px]" : ""} animate-pulse`} /><span className={`min-w-0 flex-1 space-y-2 pt-1 ${collapsed ? "hidden" : ""}`}><span className="block h-3 w-3/4 animate-pulse rounded bg-gray-200" /><span className="block h-3 w-full animate-pulse rounded bg-gray-100" /><span className="block h-3 w-1/2 animate-pulse rounded bg-gray-100" /></span></div>)}</div> : filtered.length === 0 ? <div className="conversation-list-empty px-4 py-10 text-center text-[13px] text-gray-400">{collapsed ? "" : "Chưa có hội thoại"}</div> : filtered.map((item) => {
         const name = conversationDisplayName(item);
@@ -88,7 +125,8 @@ export function ConversationList({ items, activeId, onSelect, isLoading = false,
         const hiddenTags = tags.slice(visibleTags.length);
         const hiddenCount = hiddenTags.length;
         return <div className={`conversation-item relative flex min-h-[88px] w-full border-b border-gray-100 text-gray-800 transition-colors hover:bg-slate-50 ${item.id === activeId ? "bg-blue-50" : "bg-white"}`} key={item.id}>
-          <button className={`flex min-w-0 flex-1 items-start gap-3 border-0 bg-transparent text-left transition-colors hover:bg-slate-100 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 ${collapsed ? "justify-center px-2 py-3" : "px-3 py-3.5"} cursor-pointer`} type="button" onClick={() => onSelect(item.id)} aria-current={item.id === activeId} title={collapsed ? name : undefined}>
+          {isSelectionMode && !collapsed && <input type="checkbox" className="ml-3 mr-0 mt-7 size-4 shrink-0 cursor-pointer accent-blue-600" aria-label={`Chọn hội thoại ${name}`} checked={selectedConversationIds.includes(item.id)} onChange={(event) => setSelectedConversationIds((current) => toggleConversationSelection(current, item.id, event.target.checked))} disabled={isBulkActionPending} />}
+          <button className={`flex min-w-0 flex-1 items-start gap-3 border-0 bg-transparent text-left transition-colors hover:bg-slate-100 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 ${collapsed ? "justify-center px-2 py-3" : "px-3 py-3.5"} cursor-pointer`} type="button" onClick={() => isSelectionMode ? setSelectedConversationIds((current) => toggleConversationSelection(current, item.id, !current.includes(item.id))) : onSelect(item.id)} aria-current={item.id === activeId} title={collapsed ? name : undefined}>
             <span className="relative shrink-0">
               <ConversationAvatar name={name} avatarUrl={item.customerAvatarUrl} isGroup={item.conversationType === "group"} size={collapsed ? "size-[42px]" : "size-[48px]"} />
               {item.unreadCount > 0 && <span className="conversation-unread absolute -bottom-1 -right-1 grid size-5 place-items-center rounded-full border-2 border-white bg-red-500 text-[11px] font-bold text-white" aria-label={`${item.unreadCount > 99 ? "99+" : item.unreadCount} thông báo chưa đọc`}>{item.unreadCount > 99 ? "99+" : item.unreadCount}</span>}

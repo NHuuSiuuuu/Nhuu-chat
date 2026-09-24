@@ -5,6 +5,7 @@ import { resolveWorkspaceContext } from "../auth/workspace.middleware.js";
 import { inboxAccessRoles } from "../auth/inbox-access.js";
 import {
   listConversations,
+  bulkConversationActions,
   markConversationRead,
   updateAssignment,
   updateBotEnabled,
@@ -19,6 +20,7 @@ import { listConversationPins, pinConversationMessage, unpinConversationMessage 
 export const conversationRouter = Router();
 
 conversationRouter.get("/", requireRole(...inboxAccessRoles), resolveWorkspaceContext, listConversations);
+conversationRouter.post("/bulk", requireRole(...inboxAccessRoles), resolveWorkspaceContext, bulkConversationActions);
 conversationRouter.get("/:id/messages", requireRole(...inboxAccessRoles), resolveWorkspaceContext, listMessages);
 conversationRouter.get("/:conversationId/pins", requireRole(...inboxAccessRoles), resolveWorkspaceContext, listConversationPins);
 conversationRouter.post("/:conversationId/pins", requireRole(...inboxAccessRoles), resolveWorkspaceContext, pinConversationMessage);

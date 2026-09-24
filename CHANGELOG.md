@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm thao tác hàng loạt trong Inbox để chọn hội thoại, đánh dấu đã đọc/chưa đọc hoặc xóa cùng dữ liệu liên quan.
+
 - Gỡ tab Thành viên bị trùng, giữ quản lý thành viên trong tab Phân quyền và chuyển URL cũ sang tab này.
 
 - Chỉ hiển thị tên tài khoản trong Header Landing, ẩn email khỏi nút tài khoản và menu mobile.

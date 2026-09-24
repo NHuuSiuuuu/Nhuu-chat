@@ -15,6 +15,7 @@ Nhuu-chat hiện là MVP tập trung vào:
 - Nhận tin Messenger mới qua webhook đã xác minh chữ ký, lưu hội thoại riêng theo PSID, cập nhật Inbox realtime và trả lời văn bản qua Send API.
 - Workspace hỗ trợ owner/admin/staff, thành viên nhiều Workspace, quyền Inbox theo Facebook Page và nhiều Page trên một Workspace; xem [hướng dẫn Workspace/Page](workspace-page-access.md).
 - Quản lý hội thoại, unread count, avatar, tên khách hàng, nhóm và nền tảng gửi.
+- Chọn nhiều hội thoại để đánh dấu đã đọc/chưa đọc hoặc xóa; `POST /api/v1/conversations/bulk` giới hạn 100 ID và yêu cầu quyền truy cập với toàn bộ hội thoại trong lô.
 - Trợ lý RAG với dữ liệu knowledge dạng tài liệu/chính sách.
 - Trợ lý AI có cấu hình model Gemini, gợi ý trả lời và phát hiện cảm xúc.
 - Bot Pause và retry outbound có thời gian chờ cố định.

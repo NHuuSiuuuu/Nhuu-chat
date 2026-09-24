@@ -41,6 +41,12 @@ export const conversationTagsSchema = z.object({
   tagIds: z.array(z.string().min(1)).max(50)
 });
 
+export const conversationBulkActionSchema = z.object({
+  action: z.enum(["read", "unread", "delete"]),
+  conversationIds: z.array(z.string().regex(/^[a-f\d]{24}$/i)).min(1).max(100)
+    .refine((ids) => new Set(ids).size === ids.length)
+});
+
 export const aiSuggestionRequestSchema = z.object({
   trigger: z.enum(["manual", "conversation_open", "customer_message"]).default("manual")
 }).default({ trigger: "manual" });

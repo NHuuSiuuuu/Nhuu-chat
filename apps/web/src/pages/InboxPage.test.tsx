@@ -358,7 +358,7 @@ describe("Inbox Tailwind migration", () => {
     expect(source).toContain("selectedConversationId?: string | null");
     expect(source).toContain("handledRequestedConversationRef.current = selectedConversationRequest");
     expect(source).toContain("selectConversation(selectedConversationId, false)");
-    expect(source).not.toContain('params.delete("conversationId")');
+    expect(source).toContain("chatEvents.conversationDeleted");
     expect(source).toContain('params.set("conversationId", id)');
     expect(source).toContain('"nhuu-chat.inbox-list-open"');
   });
