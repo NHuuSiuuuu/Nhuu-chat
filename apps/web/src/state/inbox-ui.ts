@@ -44,3 +44,7 @@ export function isNearLatestMessage(metrics: { scrollTop: number; clientHeight: 
 export function markConversationRead<T extends { id: string; unreadCount: number }>(conversation: T): T {
   return { ...conversation, unreadCount: 0 };
 }
+
+export function isRequestedConversationAlreadyActive(requestedId: string | null | undefined, activeId: string | null): boolean {
+  return Boolean(requestedId && requestedId === activeId);
+}

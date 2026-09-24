@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { clampConversationListWidth, conversationAccountName, conversationDisplayName, conversationInitials, formatConversationTime, conversationPlatformLabel, isNearLatestMessage, markConversationRead } from "./inbox-ui.js";
+import { clampConversationListWidth, conversationAccountName, conversationDisplayName, conversationInitials, formatConversationTime, conversationPlatformLabel, isNearLatestMessage, isRequestedConversationAlreadyActive, markConversationRead } from "./inbox-ui.js";
 
 describe("inbox presentation", () => {
   it("builds a stable customer label and initials without extra API fields", () => {
@@ -33,6 +33,12 @@ describe("inbox presentation", () => {
 
   it("clears unread count when a conversation is opened", () => {
     expect(markConversationRead({ id: "conversation-1", unreadCount: 4 })).toEqual({ id: "conversation-1", unreadCount: 0 });
+  });
+
+  it("does not reselect a deep-linked conversation that is already active", () => {
+    expect(isRequestedConversationAlreadyActive("conversation-1", "conversation-1")).toBe(true);
+    expect(isRequestedConversationAlreadyActive("conversation-2", "conversation-1")).toBe(false);
+    expect(isRequestedConversationAlreadyActive(null, "conversation-1")).toBe(false);
   });
 
   it("keeps the draggable conversation list within desktop bounds", () => {

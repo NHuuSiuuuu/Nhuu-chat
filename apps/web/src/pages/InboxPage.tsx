@@ -14,7 +14,7 @@ import { ChatWindow } from "../components/conversations/ChatWindow.js";
 import type { ComposerSendPayload } from "../components/conversations/MessageComposer.js";
 import { appendUniqueMessage, mergeMessages, upsertConversation } from "../state/inbox-realtime.js";
 import { applyPinnedMessagesEvent, createPinnedMessagesRequestGuard, findPinnedMessage, getPinnedMessagesForConversation, replacePinnedMessages, type ConversationPinnedMessagesState } from "../state/inbox-pins.js";
-import { clampConversationListWidth, CONVERSATION_LIST_MAX_WIDTH, CONVERSATION_LIST_MIN_WIDTH, markConversationRead } from "../state/inbox-ui.js";
+import { clampConversationListWidth, CONVERSATION_LIST_MAX_WIDTH, CONVERSATION_LIST_MIN_WIDTH, isRequestedConversationAlreadyActive, markConversationRead } from "../state/inbox-ui.js";
 import { getNextUnreadConversationId, orderConversationsByUnread, shouldNotifyForIncomingMessage } from "../state/general-settings.js";
 import { loadGeneralSettings } from "../components/settings/general-settings.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
@@ -323,8 +323,9 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
     if (!selectedConversationId || selectedConversationRequest === undefined || isConversationListLoading || handledRequestedConversationRef.current === selectedConversationRequest) return;
     if (!conversations.some((conversation) => conversation.id === selectedConversationId)) return;
     handledRequestedConversationRef.current = selectedConversationRequest;
+    if (isRequestedConversationAlreadyActive(selectedConversationId, activeId)) return;
     selectConversation(selectedConversationId, false);
-  }, [conversations, isConversationListLoading, location.pathname, location.search, navigate, selectedConversationId, selectedConversationRequest]);
+  }, [activeId, conversations, isConversationListLoading, location.pathname, location.search, navigate, selectedConversationId, selectedConversationRequest]);
   useEffect(() => {
     let cancelled = false;
     void apiRequest<{ tags: ConversationTagContract[] }>(API_URL, CONVERSATION_TAGS_API_URL, token, {}, refresh)

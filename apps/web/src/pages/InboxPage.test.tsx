@@ -357,6 +357,7 @@ describe("Inbox Tailwind migration", () => {
 
     expect(source).toContain("selectedConversationId?: string | null");
     expect(source).toContain("handledRequestedConversationRef.current = selectedConversationRequest");
+    expect(source).toContain("isRequestedConversationAlreadyActive(selectedConversationId, activeId)");
     expect(source).toContain("selectConversation(selectedConversationId, false)");
     expect(source).toContain("chatEvents.conversationDeleted");
     expect(source).toContain('params.set("conversationId", id)');
