@@ -72,6 +72,7 @@ describe("Settings page", () => {
       expect(settingsModule.settingsPathForItem("Hỗ trợ trả lời")).toBe("/settings/quick-replies");
       expect(settingsModule.settingsPathForItem("Lịch sử")).toBe("/settings/history");
       expect(settingsModule.settingsItemFromPath("/settings/ai-assistant")).toBe("Trợ lý AI");
+      expect(settingsModule.settingsItemFromPath("/settings/members")).toBe("Phân quyền");
       expect(settingsModule.settingsItemFromPath("/settings/history")).toBe("Lịch sử");
       expect(settingsModule.settingsItemFromPath("/settings/unknown")).toBe("Giới thiệu");
     }
@@ -470,7 +471,7 @@ describe("Settings page", () => {
     const settingsSource = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
     const topbarSource = readFileSync(new URL("../components/dashboard/DashboardTopbar.tsx", import.meta.url), "utf8");
 
-    expect(settingsModule.mobileSettingsItems).toEqual(["Giới thiệu", "Cài đặt chung", "Thành viên", "Trợ lý AI", "Hỗ trợ trả lời", "Phân quyền", "Giao diện"]);
+    expect(settingsModule.mobileSettingsItems).toEqual(["Giới thiệu", "Cài đặt chung", "Trợ lý AI", "Hỗ trợ trả lời", "Phân quyền", "Giao diện"]);
     expect(settingsSource).toContain("settingsSubmenuItems={mobileSettingsItems}");
     expect(settingsSource).toContain("onSettingsSubmenuNavigate={handleTabChange}");
     expect(topbarSource).toContain('aria-controls="mobile-settings-submenu"');
@@ -505,7 +506,7 @@ describe("Settings page", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("function SettingsLayout");
-    expect(source.match(/<SettingsLayout/g)?.length).toBe(10);
+    expect(source.match(/<SettingsLayout/g)?.length).toBe(9);
     expect(source).not.toContain('if (activeTab === "Trợ lý AI") return <main');
     expect(source).not.toContain('if (activeTab === "Hỗ trợ trả lời") return <main');
   });

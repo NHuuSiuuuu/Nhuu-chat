@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Gỡ tab Thành viên bị trùng, giữ quản lý thành viên trong tab Phân quyền và chuyển URL cũ sang tab này.
+
 - Chỉ hiển thị tên tài khoản trong Header Landing, ẩn email khỏi nút tài khoản và menu mobile.
 
 - Thêm Cài đặt → Giao diện với Sáng/Tối/Theo thiết bị, màu nhấn, mật độ, cỡ chữ tin nhắn, xem trước và khôi phục mặc định theo tài khoản.

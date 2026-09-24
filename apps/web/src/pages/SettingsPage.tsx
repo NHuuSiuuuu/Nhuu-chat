@@ -33,7 +33,6 @@ const pickerColors = ["#9ca3af", "#ef4444", "#f97316", "#eab308", "#22c55e", "#1
 const settingsMenuItems = [
   { item: "Giới thiệu", isComingSoon: false },
   { item: "Cài đặt chung", isComingSoon: false },
-  { item: "Thành viên", isComingSoon: false },
   { item: "Thẻ hội thoại", isComingSoon: false },
   { item: "Trợ lý AI", isComingSoon: false },
   { item: "Hỗ trợ trả lời", isComingSoon: false },
@@ -42,10 +41,9 @@ const settingsMenuItems = [
   { item: "Lịch sử", isComingSoon: false }
 ] as const;
 const settingsItems = settingsMenuItems.map(({ item }) => item);
-export const mobileSettingsItems = ["Giới thiệu", "Cài đặt chung", "Thành viên", "Trợ lý AI", "Hỗ trợ trả lời", "Phân quyền", "Giao diện"] as const;
+export const mobileSettingsItems = ["Giới thiệu", "Cài đặt chung", "Trợ lý AI", "Hỗ trợ trả lời", "Phân quyền", "Giao diện"] as const;
 const settingsIconByItem = {
   "Cài đặt chung": "settings",
-  "Thành viên": "users",
   "Thẻ hội thoại": "tag",
   "Trợ lý AI": "sparkles",
   "Hỗ trợ trả lời": "chat",
@@ -72,7 +70,6 @@ export function isSettingsPlaceholderTab(item: SettingsItem): boolean {
 
 const settingsSlugByItem: Record<SettingsItem, string> = {
   "Cài đặt chung": "general",
-  "Thành viên": "members",
   "Thẻ hội thoại": "conversation-tags",
   "Trợ lý AI": "ai-assistant",
   "Hỗ trợ trả lời": "quick-replies",
@@ -92,7 +89,9 @@ export function settingsPathForItem(item: SettingsItem): string {
 }
 
 export function settingsItemFromPath(pathname: string): SettingsItem {
-  return settingsItemBySlug[pathname.replace(/^\/settings\/?/, "")] ?? settingsItems[0] as SettingsItem;
+  const slug = pathname.replace(/^\/settings\/?/, "");
+  if (slug === "members") return "Phân quyền";
+  return settingsItemBySlug[slug] ?? settingsItems[0] as SettingsItem;
 }
 
 export function publicationButtonLabel(enabled: boolean): { button: string; status: string } {
@@ -1278,7 +1277,6 @@ export function SettingsPage({ token, refresh, onLogoClick, onNavigate, user, on
   }
 
   if (activeTab === "Giới thiệu") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><AboutSectionContext.Provider value={{ activeSection: activeAboutSection, onSectionChange: setActiveAboutSection }}><AboutSettings /></AboutSectionContext.Provider></SettingsLayout>;
-  if (activeTab === "Thành viên") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><WorkspaceMembersPanel token={token} refresh={refresh} /></SettingsLayout>;
   if (activeTab === "Phân quyền") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><WorkspaceMembersPanel token={token} refresh={refresh} /></SettingsLayout>;
   if (activeTab === "Cài đặt chung") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><GeneralSettingsPanel apiUrl={API_URL} token={token} refresh={refresh} /></SettingsLayout>;
   if (activeTab === "Giao diện") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><AppearanceSettingsPanel apiUrl={API_URL} token={token} refresh={refresh} /></SettingsLayout>;
