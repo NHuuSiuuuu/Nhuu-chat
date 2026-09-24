@@ -26,6 +26,7 @@ import { getActiveWorkspaceIdForUser, setActiveWorkspaceSelection, setActiveWork
 import { WorkspacePickerProvider, type WorkspaceOption, type WorkspacePickerState } from "./components/dashboard/workspace-picker-context.js";
 import { playNotificationSound, unlockNotificationSound } from "./state/notification-sound.js";
 import { GENERAL_SETTINGS_UPDATED_EVENT } from "./state/general-settings.js";
+import { applyAppearanceSettings, resetAppearanceSettings } from "./state/appearance-settings.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 const AUTH_REQUEST_TIMEOUT_MS = 8_000;
@@ -228,6 +229,19 @@ export function App() {
     return "cookie-session";
   }, []);
 
+  useEffect(() => {
+    if (!authReady) return;
+    if (!auth) {
+      resetAppearanceSettings();
+      return;
+    }
+    let active = true;
+    void loadGeneralSettings({ apiUrl: API_URL, token: "cookie-session", refresh }).then((settings) => {
+      if (active) applyAppearanceSettings(settings);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [auth, authReady, refresh]);
+
   const loadSession = useCallback(async (signal?: AbortSignal): Promise<boolean> => {
     const { response: sessionResponse, body: sessionBody } = await fetchJsonWithTimeout<AuthResponse>(`${API_URL}/api/v1/auth/session`, { method: "POST", credentials: "include" }, AUTH_REQUEST_TIMEOUT_MS, signal);
     if (sessionResponse.ok) {
@@ -309,7 +323,10 @@ export function App() {
     const stopSocketWhileHidden = pauseSocketWhenHidden(socket, document);
     const handleSettingsUpdated = (event: Event) => {
       const updatedSettings = (event as CustomEvent<GeneralSettingsContract>).detail;
-      if (updatedSettings) notificationSettings = updatedSettings;
+      if (updatedSettings) {
+        notificationSettings = updatedSettings;
+        applyAppearanceSettings(updatedSettings);
+      }
     };
     const handleIncomingMessage = (message: ChatMessageContract) => {
       if (message.senderType !== "customer" || !notificationSettings?.browserNotificationsEnabled || seenMessageIds.has(message.id)) return;
@@ -329,6 +346,7 @@ export function App() {
     socket.on(chatEvents.incomingMessage, handleIncomingMessage);
     void loadGeneralSettings({ apiUrl: API_URL, token: "cookie-session", refresh }).then((settings) => {
       notificationSettings = settings;
+      applyAppearanceSettings(settings);
     }).catch(() => undefined);
     return () => {
       window.removeEventListener(GENERAL_SETTINGS_UPDATED_EVENT, handleSettingsUpdated);
@@ -339,6 +357,7 @@ export function App() {
   }, [auth, authReady, activeWorkspaceId, location.pathname, navigateToIncomingConversation, refresh]);
   const logout = useCallback(() => {
     persistInboxPlatform(undefined);
+    resetAppearanceSettings();
     void fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).finally(() => {
       clearAuth();
       setAuth(null);

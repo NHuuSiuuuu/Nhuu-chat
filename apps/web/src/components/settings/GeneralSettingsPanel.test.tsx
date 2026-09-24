@@ -16,7 +16,11 @@ const settings: GeneralSettingsContract = {
   browserNotificationsEnabled: false,
   notificationSound: "default",
   moveUnreadConversationsToTop: true,
-  openNextUnreadConversation: false
+  openNextUnreadConversation: false,
+  themeMode: "light",
+  accentColor: "blue",
+  interfaceDensity: "comfortable",
+  messageFontSize: "medium"
 };
 
 function textContent(value: unknown): string {

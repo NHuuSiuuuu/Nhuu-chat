@@ -39,7 +39,7 @@
 
   body {
     margin: 0;
-    background: #f0f2f7;
+    background: var(--page-background, #f0f2f7);
     color: #273348;
     font-family: Arial, Helvetica, sans-serif;
   }
@@ -52,6 +52,58 @@
   *::-webkit-scrollbar {
     display: none;
   }
+}
+
+@layer utilities {
+  html { --accent-color: #2563eb; --accent-soft: #eff6ff; --surface-color: #fff; --page-background: #f0f2f7; --message-font-size: 0.875rem; }
+  html[data-accent="cyan"] { --accent-color: #0891b2; --accent-soft: #ecfeff; }
+  html[data-accent="violet"] { --accent-color: #7c3aed; --accent-soft: #f5f3ff; }
+  html[data-accent="emerald"] { --accent-color: #059669; --accent-soft: #ecfdf5; }
+  html[data-accent="rose"] { --accent-color: #e11d48; --accent-soft: #fff1f2; }
+  html[data-message-size="small"] { --message-font-size: 0.75rem; }
+  html[data-message-size="large"] { --message-font-size: 1rem; }
+  html[data-theme="dark"] { --surface-color: #1e293b; --page-background: #0f172a; color-scheme: dark; }
+  html[data-theme="light"] { color-scheme: light; }
+  html[data-theme="dark"] body { color: #e2e8f0; }
+
+  html[data-theme="dark"] [class~="bg-white"],
+  html[data-theme="dark"] [class~="bg-gray-50"],
+  html[data-theme="dark"] [class~="bg-gray-100"],
+  html[data-theme="dark"] [class~="bg-slate-50"],
+  html[data-theme="dark"] [class~="bg-slate-100"] { background-color: #1e293b; }
+  html[data-theme="dark"] [class~="bg-blue-50"],
+  html[data-theme="dark"] [class~="bg-sky-50"],
+  html[data-theme="dark"] [class~="bg-blue-100"] { background-color: #263952; }
+  html[data-theme="dark"] [class~="text-gray-900"],
+  html[data-theme="dark"] [class~="text-gray-800"],
+  html[data-theme="dark"] [class~="text-gray-700"],
+  html[data-theme="dark"] [class~="text-slate-800"] { color: #e2e8f0; }
+  html[data-theme="dark"] [class~="text-gray-600"],
+  html[data-theme="dark"] [class~="text-gray-500"],
+  html[data-theme="dark"] [class~="text-gray-400"],
+  html[data-theme="dark"] [class~="text-slate-600"] { color: #94a3b8; }
+  html[data-theme="dark"] [class~="border-gray-100"],
+  html[data-theme="dark"] [class~="border-gray-200"],
+  html[data-theme="dark"] [class~="border-slate-200"] { border-color: #334155; }
+  html[data-theme="dark"] [class~="bg-blue-600"],
+  html[data-theme="dark"] [class~="bg-sky-600"] { background-color: var(--accent-color); }
+  html[data-theme="dark"] [class~="text-blue-700"],
+  html[data-theme="dark"] [class~="text-sky-700"] { color: #7dd3fc; }
+
+  html[data-accent]:not([data-accent="blue"]) [class~="bg-blue-600"],
+  html[data-accent]:not([data-accent="blue"]) [class~="bg-sky-600"] { background-color: var(--accent-color); }
+  html[data-accent]:not([data-accent="blue"]) [class~="text-blue-600"],
+  html[data-accent]:not([data-accent="blue"]) [class~="text-blue-700"],
+  html[data-accent]:not([data-accent="blue"]) [class~="text-sky-600"],
+  html[data-accent]:not([data-accent="blue"]) [class~="text-sky-700"] { color: var(--accent-color); }
+
+  html[data-density="compact"] .conversation-item { min-height: 68px; }
+  html[data-density="compact"] .conversation-item > button { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+  html[data-density="compact"] .conversation-list-header { min-height: 2.5rem; }
+  html[data-density="compact"] .conversation-items > [aria-label="Đang tải danh sách hội thoại"] > div { min-height: 68px; padding-top: 0.5rem; padding-bottom: 0.5rem; }
+  html[data-message-size="small"] .message-content { font-size: 0.75rem; }
+  html[data-message-size="medium"] .message-content { font-size: 0.875rem; }
+  html[data-message-size="large"] .message-content { font-size: 1rem; }
 }
 
 @layer utilities {

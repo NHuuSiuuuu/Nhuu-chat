@@ -252,7 +252,8 @@ describe("Settings page", () => {
     expect(typeof settingsModule.isSettingsPlaceholderTab).toBe("function");
 
     expect(source).toContain('item: "Hỗ trợ trả lời", isComingSoon: false');
-    expect(source).toContain('item: "Giao diện", isComingSoon: true');
+    expect(source).toContain('item: "Giao diện", isComingSoon: false');
+    expect(source).toContain('<AppearanceSettingsPanel apiUrl={API_URL} token={token} refresh={refresh} />');
     expect(source).toContain('item: "Phân quyền", isComingSoon: false');
     expect(source).toContain('disabled={isComingSoon}');
     expect(source).toContain('>Sắp có</small>');
@@ -264,7 +265,6 @@ describe("Settings page", () => {
 
     if (typeof settingsModule.isSettingsPlaceholderTab === "function") {
       expect([
-        "Giao diện",
         "Cuộc gọi",
         "Chế độ xoay vòng",
         "Đồng bộ",
@@ -505,7 +505,7 @@ describe("Settings page", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("function SettingsLayout");
-    expect(source.match(/<SettingsLayout/g)?.length).toBe(9);
+    expect(source.match(/<SettingsLayout/g)?.length).toBe(10);
     expect(source).not.toContain('if (activeTab === "Trợ lý AI") return <main');
     expect(source).not.toContain('if (activeTab === "Hỗ trợ trả lời") return <main');
   });

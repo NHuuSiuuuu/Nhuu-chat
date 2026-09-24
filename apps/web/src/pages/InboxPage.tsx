@@ -33,7 +33,7 @@ const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 const CONVERSATION_TAGS_API_URL = "/api/v1/conversation-tags";
 const AI_SETTINGS_API_URL = "/api/v1/ai-settings";
 const QUICK_REPLIES_API_URL = "/api/v1/quick-replies";
-const DEFAULT_GENERAL_SETTINGS: GeneralSettingsContract = { browserNotificationsEnabled: true, notificationSound: "default", moveUnreadConversationsToTop: true, openNextUnreadConversation: false };
+const DEFAULT_GENERAL_SETTINGS: GeneralSettingsContract = { browserNotificationsEnabled: true, notificationSound: "default", moveUnreadConversationsToTop: true, openNextUnreadConversation: false, themeMode: "light", accentColor: "blue", interfaceDensity: "comfortable", messageFontSize: "medium" };
 const DEFAULT_AI_SETTINGS: AiSettingsContract = { modelTier: "smart", enabled: true, suggestionsEnabled: true, sentimentEnabled: true, suggestionMode: "on_open", sentimentWindow: 3 };
 
 function platformIconProvider(platform: ChatMessageContract["platform"]): ConnectionProviderId {

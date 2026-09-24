@@ -62,12 +62,20 @@ export interface AiSettingsContract {
 }
 
 export type NotificationSound = "off" | "default" | "tri-tone" | "clubhouse";
+export type ThemeMode = "light" | "dark" | "system";
+export type AccentColor = "blue" | "cyan" | "violet" | "emerald" | "rose";
+export type InterfaceDensity = "comfortable" | "compact";
+export type MessageFontSize = "small" | "medium" | "large";
 
 export interface GeneralSettingsContract {
   browserNotificationsEnabled: boolean;
   notificationSound: NotificationSound;
   moveUnreadConversationsToTop: boolean;
   openNextUnreadConversation: boolean;
+  themeMode: ThemeMode;
+  accentColor: AccentColor;
+  interfaceDensity: InterfaceDensity;
+  messageFontSize: MessageFontSize;
 }
 
 export type ChatPlatform = "facebook" | "instagram" | "zalo" | "zalo_personal" | "telegram" | "telegram_personal";

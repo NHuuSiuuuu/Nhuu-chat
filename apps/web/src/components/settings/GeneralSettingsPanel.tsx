@@ -11,7 +11,11 @@ const DEFAULT_SETTINGS: GeneralSettingsContract = {
   browserNotificationsEnabled: true,
   notificationSound: "default",
   moveUnreadConversationsToTop: true,
-  openNextUnreadConversation: false
+  openNextUnreadConversation: false,
+  themeMode: "light",
+  accentColor: "blue",
+  interfaceDensity: "comfortable",
+  messageFontSize: "medium"
 };
 
 const soundOptions: Array<{ value: NotificationSound; label: string }> = [

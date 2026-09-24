@@ -51,6 +51,7 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
 - Bot Pause 30 phút và retry outbound theo các mốc `0s`, `1s`, `4s`.
 - Cấu hình Trợ lý AI được lưu theo tài khoản qua `GET/PATCH /api/v1/ai-settings`.
 - Trang `Cài đặt > Lịch sử` và API đọc lịch sử đã hoạt động cho thay đổi Cài đặt AI cùng kết nối/ngắt kết nối Facebook Page.
+- Cài đặt `Giao diện` lưu theo tài khoản, hỗ trợ Sáng/Tối/Theo thiết bị, màu nhấn, mật độ hội thoại, cỡ chữ tin nhắn, xem trước và khôi phục mặc định.
 - Mô hình Gemini có ba tier: `smart`, `balanced` và `economy`, tương ứng với model thông minh nhất, cân bằng và tiết kiệm.
 - Gợi ý trả lời hỗ trợ các chế độ thủ công, khi mở hội thoại và khi khách nhắn tin; chế độ thủ công không tự gọi API khi mở hội thoại.
 - Gợi ý dùng 6 tin nhắn cuối của cả khách hàng và nhân viên theo thứ tự thời gian, trả tối đa 3 câu và có fallback khi Gemini không khả dụng.
@@ -211,6 +212,8 @@ Retry chỉ là thao tác thủ công trên bài `failed`. Timeout Meta là kế
 ### Lịch sử hoạt động cài đặt
 
 Người dùng mở `Cài đặt > Lịch sử` (`/settings/history`) để xem Timeline gồm giá trị cũ/mới, người thực hiện, thời gian và mã phiên bản. Phạm vi hiện tại gồm cập nhật Cài đặt AI, kết nối Facebook Page qua OAuth hoặc nhập thủ công, và ngắt kết nối Facebook Page. Giao diện dùng các bộ lọc `Tất cả`, `Cài đặt AI`, `Kết nối Facebook`, tải 20 bản ghi mỗi trang và có nút chuyển trang; thao tác ngắt kết nối hiện nằm trong `Tất cả`.
+
+Người dùng mở `Cài đặt > Giao diện` (`/settings/appearance`) để chọn theme Sáng/Tối/Theo thiết bị, một trong năm màu nhấn, mật độ hội thoại và cỡ chữ tin nhắn. Tuỳ chọn được lưu trong `generalSettings` của tài khoản qua API hiện có; không cần collection hoặc migration riêng. Giao diện áp dụng ngay, có vùng xem trước và khôi phục về Sáng, xanh dương, thoải mái, cỡ chữ vừa.
 
 Route `GET /api/v1/setting-histories` yêu cầu xác thực với role `admin` hoặc `agent`, dùng access token trong HttpOnly cookie hoặc Bearer token tương thích client cũ. Backend lấy user từ phiên xác thực, không nhận `userId` trong query/body và không trả dữ liệu của người dùng khác. Query hỗ trợ:
 

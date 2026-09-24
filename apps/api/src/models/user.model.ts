@@ -2,7 +2,11 @@ import mongoose, { model, Schema, type InferSchemaType } from "mongoose";
 
 import {
   DEFAULT_GENERAL_SETTINGS,
-  notificationSounds
+  notificationSounds,
+  themeModes,
+  accentColors,
+  interfaceDensities,
+  messageFontSizes
 } from "../general-settings/general-settings.js";
 
 const aiSettingsSchema = new Schema(
@@ -22,7 +26,11 @@ const generalSettingsSchema = new Schema(
     browserNotificationsEnabled: { type: Boolean, default: DEFAULT_GENERAL_SETTINGS.browserNotificationsEnabled },
     notificationSound: { type: String, enum: notificationSounds, default: DEFAULT_GENERAL_SETTINGS.notificationSound },
     moveUnreadConversationsToTop: { type: Boolean, default: DEFAULT_GENERAL_SETTINGS.moveUnreadConversationsToTop },
-    openNextUnreadConversation: { type: Boolean, default: DEFAULT_GENERAL_SETTINGS.openNextUnreadConversation }
+    openNextUnreadConversation: { type: Boolean, default: DEFAULT_GENERAL_SETTINGS.openNextUnreadConversation },
+    themeMode: { type: String, enum: themeModes, default: DEFAULT_GENERAL_SETTINGS.themeMode },
+    accentColor: { type: String, enum: accentColors, default: DEFAULT_GENERAL_SETTINGS.accentColor },
+    interfaceDensity: { type: String, enum: interfaceDensities, default: DEFAULT_GENERAL_SETTINGS.interfaceDensity },
+    messageFontSize: { type: String, enum: messageFontSizes, default: DEFAULT_GENERAL_SETTINGS.messageFontSize }
   },
   { _id: false }
 );

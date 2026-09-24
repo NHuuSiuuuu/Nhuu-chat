@@ -49,7 +49,8 @@ describe("general settings routes", () => {
       browserNotificationsEnabled: true,
       notificationSound: userId === "user-1" ? "tri-tone" : "off",
       moveUnreadConversationsToTop: true,
-      openNextUnreadConversation: false
+      openNextUnreadConversation: false,
+      themeMode: "light" as const, accentColor: "blue" as const, interfaceDensity: "comfortable" as const, messageFontSize: "medium" as const
     }));
 
     const first = await request(createRouteApp())
@@ -70,7 +71,8 @@ describe("general settings routes", () => {
       browserNotificationsEnabled: false,
       notificationSound: "default",
       moveUnreadConversationsToTop: true,
-      openNextUnreadConversation: false
+      openNextUnreadConversation: false,
+      themeMode: "light", accentColor: "blue", interfaceDensity: "comfortable", messageFontSize: "medium"
     });
 
     const invalid = await request(createRouteApp())

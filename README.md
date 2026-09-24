@@ -24,6 +24,7 @@ MVP quản lý inbox chăm sóc khách hàng Facebook Messenger và Telegram cù
 - Ghim tối đa 10 tin nhắn trong mỗi hội thoại, có thanh tin đã ghim và đồng bộ realtime cho admin/agent.
 - Ghi chú nội bộ theo từng hội thoại; agent/admin có thể tạo, sửa, xóa và ghim ghi chú trong sidebar Thông tin.
 - Trang `Cài đặt > Lịch sử` hiển thị Timeline thay đổi Cài đặt AI và kết nối/ngắt kết nối Facebook Page theo từng người dùng.
+- Cài đặt `Giao diện` lưu riêng theo tài khoản, hỗ trợ Sáng/Tối/Theo thiết bị, 5 màu nhấn, mật độ hội thoại, cỡ chữ tin nhắn, xem trước trực tiếp và khôi phục mặc định.
 - Security headers, request ID và rate limit auth.
 
 ## Chạy local
@@ -142,6 +143,8 @@ Bài `failed` có thể retry thủ công; không có retry tự động cho l�
 ### Lịch sử hoạt động cài đặt
 
 Mở `Cài đặt > Lịch sử` hoặc `/settings/history` để xem Timeline thay đổi, giá trị cũ/mới, người thực hiện, thời gian và mã phiên bản. Bản hiện tại ghi nhận các thay đổi Cài đặt AI và thao tác kết nối/ngắt kết nối Facebook Page, gồm cả kết nối OAuth và nhập thủ công. Timeline có bộ lọc `Tất cả`, `Cài đặt AI`, `Kết nối Facebook` và phân trang 20 bản ghi; thao tác ngắt kết nối hiện nằm trong `Tất cả`.
+
+Mở `Cài đặt > Giao diện` hoặc `/settings/appearance` để chọn chế độ màu, màu nhấn, mật độ hội thoại và cỡ chữ tin nhắn. Tuỳ chọn được lưu theo tài khoản qua API general settings hiện có; `Theo thiết bị` bám theo cấu hình sáng/tối của hệ điều hành. Khu vực xem trước phản ánh lựa chọn ngay khi thay đổi; nút `Khôi phục mặc định` đưa giao diện về Sáng, xanh dương, thoải mái và cỡ chữ vừa.
 
 API đọc lịch sử là `GET /api/v1/setting-histories?page=1&pageSize=20&actionType=UPDATE_AI_SETTINGS`. Route yêu cầu phiên đăng nhập hợp lệ với role `admin` hoặc `agent`, ưu tiên access token trong HttpOnly cookie và vẫn hỗ trợ Bearer token cho client cũ. API không nhận `userId`; backend luôn lấy người dùng từ thông tin xác thực và chỉ trả lịch sử của người đó. `page` mặc định là `1`, `pageSize` mặc định là `20` và được giới hạn tối đa `50`; `actionType` tùy chọn nhận `UPDATE_AI_SETTINGS`, `CONNECT_FACEBOOK_PAGE` hoặc `DISCONNECT_FACEBOOK_PAGE`. Kết quả mới nhất đứng trước và có dạng `{ items, pagination: { page, pageSize, total, totalPages, hasNextPage } }`.
 

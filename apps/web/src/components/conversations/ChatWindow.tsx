@@ -203,7 +203,7 @@ export function ChatWindow({ conversation, messages, isLoadingMessages = false, 
                 {message.senderType === "customer" && <ConversationAvatar name={senderName} avatarUrl={conversation.customerAvatarUrl} isGroup={conversation.conversationType === "group"} size="size-10" />}
                 <div className={`flex min-w-0 items-end gap-2 ${message.senderType === "customer" ? "flex-row" : "flex-row-reverse"}`}>
                   <div className={`flex min-w-0 max-w-[min(560px,75%)] flex-col ${message.senderType === "customer" ? "items-start" : "items-end"}`}>
-                    <div className={`relative max-w-full rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${message.senderType === "customer" ? "bg-white text-gray-900" : "bg-blue-100 text-gray-900"}`}><div className="space-y-2">{renderMessageAttachments(message)}{message.content && <p className="m-0 whitespace-pre-wrap">{renderMessageContent(message.content)}</p>}</div></div>
+                    <div className={`relative max-w-full rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${message.senderType === "customer" ? "bg-white text-gray-900" : "bg-blue-100 text-gray-900"}`}><div className="space-y-2">{renderMessageAttachments(message)}{message.content && <p className="message-content m-0 whitespace-pre-wrap">{renderMessageContent(message.content)}</p>}</div></div>
                     {messageIsPinned && <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-gray-500" aria-label="Tin nhắn đã ghim"><InboxIcon name="pin" size={12} />Đã ghim</span>}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1 text-right">

@@ -17,7 +17,11 @@ const expectedDefaults = {
   browserNotificationsEnabled: true,
   notificationSound: "default",
   moveUnreadConversationsToTop: true,
-  openNextUnreadConversation: false
+  openNextUnreadConversation: false,
+  themeMode: "light",
+  accentColor: "blue",
+  interfaceDensity: "comfortable",
+  messageFontSize: "medium"
 } satisfies GeneralSettingsContract;
 
 describe("general settings", () => {
@@ -36,12 +40,17 @@ describe("general settings", () => {
       browserNotificationsEnabled: false,
       notificationSound: "unsupported",
       moveUnreadConversationsToTop: "yes",
-      openNextUnreadConversation: true
+      openNextUnreadConversation: true,
+      themeMode: "light",
+      accentColor: "blue",
+      interfaceDensity: "comfortable",
+      messageFontSize: "medium"
     })).toEqual({
       browserNotificationsEnabled: false,
       notificationSound: "default",
       moveUnreadConversationsToTop: true,
-      openNextUnreadConversation: true
+      openNextUnreadConversation: true,
+      themeMode: "light", accentColor: "blue", interfaceDensity: "comfortable", messageFontSize: "medium"
     });
   });
 
@@ -59,7 +68,20 @@ describe("general settings", () => {
       browserNotificationsEnabled: false,
       notificationSound: "tri-tone",
       moveUnreadConversationsToTop: false,
-      openNextUnreadConversation: true
+      openNextUnreadConversation: true,
+      themeMode: "light",
+      accentColor: "blue",
+      interfaceDensity: "comfortable",
+      messageFontSize: "medium"
+    });
+  });
+
+  it("normalizes valid appearance options and falls back independently", () => {
+    expect(normalizeGeneralSettings({ themeMode: "system", accentColor: "violet", interfaceDensity: "compact", messageFontSize: "large" })).toMatchObject({
+      themeMode: "system", accentColor: "violet", interfaceDensity: "compact", messageFontSize: "large"
+    });
+    expect(normalizeGeneralSettings({ themeMode: "bad", accentColor: "bad", interfaceDensity: "bad", messageFontSize: "bad" })).toMatchObject({
+      themeMode: "light", accentColor: "blue", interfaceDensity: "comfortable", messageFontSize: "medium"
     });
   });
 
@@ -83,5 +105,10 @@ describe("general settings", () => {
     });
 
     await expect(invalidUser.validate()).rejects.toThrow(/notificationSound/);
+    const invalidAppearanceUser = new UserModel({
+      email: "invalid-appearance@example.com", name: "Invalid Appearance", passwordHash: "hash", role: "agent",
+      generalSettings: { themeMode: "bad" }
+    });
+    await expect(invalidAppearanceUser.validate()).rejects.toThrow(/themeMode/);
   });
 });

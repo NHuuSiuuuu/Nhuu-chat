@@ -28,7 +28,8 @@ describe("general settings controller", () => {
       browserNotificationsEnabled: true,
       notificationSound: "default",
       moveUnreadConversationsToTop: true,
-      openNextUnreadConversation: false
+      openNextUnreadConversation: false,
+      themeMode: "light", accentColor: "blue", interfaceDensity: "comfortable", messageFontSize: "medium"
     };
     serviceMocks.getGeneralSettings.mockResolvedValue(expected);
     const { response, state } = responseRecorder();
@@ -46,7 +47,8 @@ describe("general settings controller", () => {
       browserNotificationsEnabled: true,
       notificationSound: "off",
       moveUnreadConversationsToTop: true,
-      openNextUnreadConversation: false
+      openNextUnreadConversation: false,
+      themeMode: "light", accentColor: "blue", interfaceDensity: "comfortable", messageFontSize: "medium"
     };
     serviceMocks.updateGeneralSettings.mockResolvedValue(expected);
     const { response, state } = responseRecorder();

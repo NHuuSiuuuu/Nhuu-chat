@@ -23,7 +23,8 @@ describe("general settings service", () => {
       browserNotificationsEnabled: true,
       notificationSound: "default",
       moveUnreadConversationsToTop: true,
-      openNextUnreadConversation: false
+      openNextUnreadConversation: false,
+      themeMode: "light", accentColor: "blue", interfaceDensity: "comfortable", messageFontSize: "medium"
     });
     expect(userModelMocks.findById).toHaveBeenCalledWith("user-1");
   });
@@ -35,24 +36,30 @@ describe("general settings service", () => {
         browserNotificationsEnabled: true,
         notificationSound: "default",
         moveUnreadConversationsToTop: true,
-        openNextUnreadConversation: false
+        openNextUnreadConversation: false,
+        themeMode: "light", accentColor: "blue", interfaceDensity: "comfortable", messageFontSize: "medium"
       }
     }));
 
     await expect(updateGeneralSettings("user-1", {
       notificationSound: "clubhouse",
-      openNextUnreadConversation: true
+      openNextUnreadConversation: true,
+      themeMode: "dark",
+      accentColor: "cyan"
     })).resolves.toEqual({
       browserNotificationsEnabled: true,
       notificationSound: "clubhouse",
       moveUnreadConversationsToTop: true,
-      openNextUnreadConversation: true
+      openNextUnreadConversation: true,
+      themeMode: "dark", accentColor: "cyan", interfaceDensity: "comfortable", messageFontSize: "medium"
     });
     expect(userModelMocks.findByIdAndUpdate).toHaveBeenCalledWith(
       "user-1",
       { $set: {
         "generalSettings.notificationSound": "clubhouse",
-        "generalSettings.openNextUnreadConversation": true
+        "generalSettings.openNextUnreadConversation": true,
+        "generalSettings.themeMode": "dark",
+        "generalSettings.accentColor": "cyan"
       } },
       { returnDocument: "before" }
     );

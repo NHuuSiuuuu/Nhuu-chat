@@ -6,6 +6,7 @@ import { InboxIcon } from "../components/conversations/InboxIcon.js";
 import { PlatformIcon } from "../components/dashboard/PlatformIcon.js";
 import { AutomationTemplateImportModal } from "../components/settings/AutomationTemplateImportModal.js";
 import { GeneralSettingsPanel } from "../components/settings/GeneralSettingsPanel.js";
+import { AppearanceSettingsPanel } from "../components/settings/AppearanceSettingsPanel.js";
 import { SettingHistoryTimeline } from "../components/settings/SettingHistoryTimeline.js";
 import { apiRequest } from "../lib/api.js";
 import { resolveApiBaseUrl } from "../lib/api-url.js";
@@ -36,7 +37,7 @@ const settingsMenuItems = [
   { item: "Thẻ hội thoại", isComingSoon: false },
   { item: "Trợ lý AI", isComingSoon: false },
   { item: "Hỗ trợ trả lời", isComingSoon: false },
-  { item: "Giao diện", isComingSoon: true },
+  { item: "Giao diện", isComingSoon: false },
   { item: "Phân quyền", isComingSoon: false },
   { item: "Lịch sử", isComingSoon: false }
 ] as const;
@@ -59,7 +60,6 @@ const settingsIconByItem = {
 } as const;
 type SettingsItem = typeof settingsMenuItems[number]["item"] | "Cuộc gọi" | "Chế độ xoay vòng" | "Đồng bộ" | "Công cụ";
 const placeholderSettingsItems = new Set<SettingsItem>([
-  "Giao diện",
   "Cuộc gọi",
   "Chế độ xoay vòng",
   "Đồng bộ",
@@ -1281,6 +1281,7 @@ export function SettingsPage({ token, refresh, onLogoClick, onNavigate, user, on
   if (activeTab === "Thành viên") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><WorkspaceMembersPanel token={token} refresh={refresh} /></SettingsLayout>;
   if (activeTab === "Phân quyền") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><WorkspaceMembersPanel token={token} refresh={refresh} /></SettingsLayout>;
   if (activeTab === "Cài đặt chung") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><GeneralSettingsPanel apiUrl={API_URL} token={token} refresh={refresh} /></SettingsLayout>;
+  if (activeTab === "Giao diện") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><AppearanceSettingsPanel apiUrl={API_URL} token={token} refresh={refresh} /></SettingsLayout>;
   if (activeTab === "Trợ lý AI") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><AiAssistantSettings token={token} refresh={refresh} ownerKey={user?.email} /></SettingsLayout>;
   if (activeTab === "Hỗ trợ trả lời") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><QuickReplySettings token={token} refresh={refresh} /></SettingsLayout>;
   if (activeTab === "Lịch sử") return <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab} onAboutSectionChange={setActiveAboutSection} token={token} refresh={refresh} onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile}><SettingHistoryTimeline token={token} refresh={refresh} apiUrl={API_URL} /></SettingsLayout>;
