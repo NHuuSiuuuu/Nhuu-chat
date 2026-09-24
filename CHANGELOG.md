@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Hiển thị vai trò Chủ sở hữu thành badge tĩnh trong danh sách thành viên, không có thao tác sửa hoặc xóa.
 - Khôi phục trạng thái Inbox và menu mobile qua sessionStorage, giữ conversationId trên URL, đổi Workspace không tải lại toàn trang và thêm thành viên qua modal đa kênh.
 - Phân quyền thành viên Workspace theo cặp nền tảng/ID kênh, nhóm bộ chọn đa kênh và áp dụng cùng giới hạn cho API, Inbox, gửi tin và realtime.
 - Mở tab Phân quyền Workspace và Hỗ trợ trả lời trên desktop/mobile, nối tới giao diện quản lý thành viên và trả lời nhanh đã hoàn thiện.

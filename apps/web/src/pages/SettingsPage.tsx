@@ -1135,7 +1135,7 @@ function WorkspaceMembersPanel({ token, refresh }: { token: string; refresh?: ()
       <div className="grid gap-3">{members.map((member) => <div key={member.userId} className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 py-3">
         <div><p className="font-semibold text-slate-800">{member.name || member.email}</p><p className="text-sm text-slate-500">{member.email}{member.allowedChannels.length ? ` · ${member.allowedChannels.map((channel) => `${workspaceChannelLabel(channel.platform)}: ${channels.find((available) => available.platform === channel.platform && available.channelId === channel.channelId)?.displayId ?? channel.channelId}`).join(", ")}` : " · Tất cả kênh"}</p></div>
         <div className="flex items-center gap-2">
-          <select aria-label={`Vai trò của ${member.email}`} disabled={!canManage || member.role === "owner" || busy} value={member.role} className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50" onChange={async (event) => {
+          {member.role === "owner" ? <span className="rounded-md bg-gray-100 px-3 py-1 text-sm font-medium text-gray-500">Chủ sở hữu</span> : <select aria-label={`Vai trò của ${member.email}`} disabled={!canManage || busy} value={member.role} className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50" onChange={async (event) => {
             const nextRole = event.target.value as "admin" | "staff";
             setBusy(true);
             try {
@@ -1143,7 +1143,7 @@ function WorkspaceMembersPanel({ token, refresh }: { token: string; refresh?: ()
               await load(workspaceId);
             } catch (failure) { setError(failure instanceof Error ? failure.message : "Không thể cập nhật vai trò."); }
             finally { setBusy(false); }
-          }}><option value="owner">Chủ sở hữu</option><option value="admin">Quản trị viên</option><option value="staff">Nhân viên</option></select>
+          }}><option value="admin">Quản trị viên</option><option value="staff">Nhân viên</option></select>}
           {canManage && member.role !== "owner" && <button type="button" disabled={busy} className="rounded-lg px-3 py-2 text-sm text-rose-600 hover:bg-rose-50 cursor-pointer disabled:cursor-not-allowed" onClick={async () => {
             if (!window.confirm(`Xóa ${member.email} khỏi Workspace?`)) return;
             setBusy(true);

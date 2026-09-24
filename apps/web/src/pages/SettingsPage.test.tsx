@@ -300,6 +300,18 @@ describe("Settings page", () => {
     expect(source).toContain('>Hủy</button>');
   });
 
+  it("renders the Workspace owner as a static badge without edit or delete controls", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const memberControls = source.split("{members.map((member) =>")[1]?.split("{canManage && member.role === \"staff\"")[0] ?? "";
+
+    expect(memberControls).toContain('member.role === "owner" ? <span');
+    expect(memberControls).toContain(">Chủ sở hữu</span> : <select");
+    expect(memberControls).toContain('<option value="admin">Quản trị viên</option>');
+    expect(memberControls).toContain('<option value="staff">Nhân viên</option>');
+    expect(memberControls).toContain("{canManage && member.role !== \"owner\" && <button");
+    expect(memberControls).not.toContain('<option value="owner">');
+  });
+
   it("maps each settings option to its corresponding icon", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
