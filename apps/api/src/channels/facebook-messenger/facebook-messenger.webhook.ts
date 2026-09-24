@@ -8,7 +8,7 @@ import { MessageModel } from "../../models/message.model.js";
 import { emitChatEvent, emitInboxEventToRecipients } from "../../realtime/socket.js";
 import { toConversation } from "../../services/conversation.service.js";
 import { toMessage } from "../../services/message.service.js";
-import { normalizeMessengerWebhook, type MessengerTextEvent } from "./facebook-messenger.normalizer.js";
+import { normalizeMessengerWebhook, type MessengerInboundEvent } from "./facebook-messenger.normalizer.js";
 
 function isDuplicateKey(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === 11000;
@@ -27,9 +27,15 @@ async function resolveOwner(pageId: string) {
 }
 
 // Ghi tin và unread trong cùng giao dịch; webhook retry chỉ thấy external ID đã tồn tại.
-async function persistMessengerText(event: MessengerTextEvent, ownerId: mongoose.Types.ObjectId): Promise<void> {
+async function persistMessengerMessage(event: MessengerInboundEvent, ownerId: mongoose.Types.ObjectId): Promise<void> {
   const session = await mongoose.startSession();
   let emitted: { conversationId: string; message: ReturnType<typeof toMessage>; conversation: ReturnType<typeof toConversation>; recipients: string[] } | undefined;
+  const messageType = event.stickerId || event.attachments.some((attachment) => attachment.fileType.startsWith("image/"))
+    ? "image"
+    : event.attachments.some((attachment) => attachment.fileType.startsWith("video/")) ? "video"
+      : event.attachments.some((attachment) => attachment.fileType.startsWith("audio/")) ? "audio"
+        : event.attachments.length ? "file" : "text";
+  const preview = event.content || (event.stickerId ? "Sticker" : event.attachments.length ? "Đã gửi tệp đính kèm" : "");
   try {
     await session.withTransaction(async () => {
       const existing = await MessageModel.exists({ platform: "facebook", externalMessageId: event.externalMessageId }).session(session);
@@ -43,7 +49,7 @@ async function persistMessengerText(event: MessengerTextEvent, ownerId: mongoose
       );
       const conversation = await ConversationModel.findOneAndUpdate(
         { platform: "facebook", channelId: event.pageId, ownerId, customerId: customer._id },
-        { $setOnInsert: { platform: "facebook", channelId: event.pageId, ownerId, customerId: customer._id, botEnabled: false, lastMessageAt: event.sentAt, lastMessageSnippet: event.content } },
+        { $setOnInsert: { platform: "facebook", channelId: event.pageId, ownerId, customerId: customer._id, botEnabled: false, lastMessageAt: event.sentAt, lastMessageSnippet: preview } },
         { upsert: true, returnDocument: "after", session }
       );
       const result = await MessageModel.updateOne(
@@ -56,8 +62,10 @@ async function persistMessengerText(event: MessengerTextEvent, ownerId: mongoose
           updatedAt: new Date(),
           senderType: event.echo ? "agent" : "customer",
           senderId: event.senderId,
-          type: "text",
+          type: messageType,
           content: event.content,
+          attachments: event.attachments,
+          metadata: { ...(event.stickerId ? { stickerId: event.stickerId } : {}) },
           deliveryStatus: event.echo ? "sent" : "delivered"
         } },
         { upsert: true, session, timestamps: false }
@@ -66,7 +74,7 @@ async function persistMessengerText(event: MessengerTextEvent, ownerId: mongoose
 
       const update = {
         ...(event.sentAt.getTime() >= conversation.lastMessageAt.getTime()
-          ? { $set: { lastMessageAt: event.sentAt, lastMessageSnippet: event.content } }
+          ? { $set: { lastMessageAt: event.sentAt, lastMessageSnippet: preview } }
           : {}),
         ...(event.echo ? {} : { $inc: { unreadCount: 1 } })
       };
@@ -105,6 +113,6 @@ export async function processMessengerWebhook(payload: unknown): Promise<void> {
     if (!owners.has(event.pageId)) owners.set(event.pageId, await resolveOwner(event.pageId));
     const ownerId = owners.get(event.pageId);
     if (!ownerId) continue;
-    await persistMessengerText(event, ownerId);
+    await persistMessengerMessage(event, ownerId);
   }
 }

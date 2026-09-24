@@ -116,6 +116,7 @@ export interface ChatMessageContract {
   type: "text" | "image" | "video" | "audio" | "file" | "template";
   content: string;
   attachments?: MessageAttachmentContract[];
+  stickerId?: string;
   deliveryStatus: "pending" | "sent" | "delivered" | "failed";
   createdAt: string;
 }

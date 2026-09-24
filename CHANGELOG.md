@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Nhận và hiển thị ảnh/sticker Facebook inbound; lưu attachment và sticker ID để phát lại qua Socket.IO.
+
 - Sửa định tuyến Socket thông báo tin mới để dùng `conversationId`, giúp Toast toàn cục hoạt động ngoài phòng chat đang mở.
 
 - Tách điều kiện phát âm thanh tin nhắn khỏi quyền thông báo trên trình duyệt.

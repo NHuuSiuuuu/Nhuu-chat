@@ -43,4 +43,25 @@ describe("message pagination ordering", () => {
       metadata: { clientMessageId: "client-1" }
     })).toMatchObject({ clientMessageId: "client-1" });
   });
+
+  it("maps inbound attachments and Facebook sticker metadata to the chat contract", () => {
+    expect(toMessage({
+      _id: "message-1",
+      conversationId: "conversation-1",
+      platform: "facebook",
+      senderType: "customer",
+      senderId: "psid-1",
+      type: "image",
+      content: "",
+      attachments: [{ url: "https://cdn.example/sticker.png", fileType: "image/jpeg" }],
+      deliveryStatus: "delivered",
+      createdAt: "2026-09-24T16:00:00.000Z",
+      metadata: { stickerId: "sticker-1" }
+    })).toMatchObject({
+      type: "image",
+      content: "",
+      attachments: [{ url: "https://cdn.example/sticker.png", mimeType: "image/jpeg" }],
+      stickerId: "sticker-1"
+    });
+  });
 });

@@ -46,6 +46,29 @@ describe("processMessengerWebhook persistence", () => {
     expect(socket.emitInboxEventToRecipients).toHaveBeenCalledWith("chat:conversation_updated", [String(ownerId)], expect.objectContaining({ id: String(conversation?._id), unreadCount: 1 }));
   });
 
+  it("persists image-only attachments and sticker metadata and includes them in the Socket payload", async () => {
+    await connectPage();
+    const imageUrl = "https://cdn.example/sticker.png";
+
+    await processMessengerWebhook(payload({
+      mid: "sticker-mid",
+      attachments: [{ type: "image", payload: { url: imageUrl } }],
+      sticker_id: "sticker-42"
+    }));
+
+    const message = await MessageModel.findOne({ externalMessageId: "facebook:page-1:sticker-mid" }).lean();
+    expect(message).toMatchObject({
+      type: "image",
+      content: "",
+      attachments: [{ url: imageUrl, fileType: "image/jpeg" }],
+      metadata: { stickerId: "sticker-42" }
+    });
+    expect(socket.emitChatEvent).toHaveBeenCalledWith("chat:message_received", String(message?.conversationId), expect.objectContaining({
+      attachments: [{ url: imageUrl, mimeType: "image/jpeg" }],
+      stickerId: "sticker-42"
+    }));
+  });
+
   it("does not add a message or unread count on duplicate delivery", async () => {
     await connectPage();
     await processMessengerWebhook(payload());

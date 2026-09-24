@@ -41,7 +41,7 @@ type MessageAuth = AuthUser & {
 type PersistedAttachment = {
   url: string;
   fileType: string;
-  fileName: string;
+  fileName?: string;
 };
 
 type OutboundMediaService = Pick<
@@ -94,6 +94,7 @@ export function toMessage(row: any) {
     id: String(row._id), conversationId: String(row.conversationId), platform: row.platform,
     senderType: row.senderType, senderId: row.senderId, ...(row.metadata?.senderName ? { senderName: row.metadata.senderName } : {}), type: row.type, content: row.content,
     ...(row.attachments?.length ? { attachments: row.attachments.map((attachment: PersistedAttachment) => ({ url: attachment.url, fileName: attachment.fileName, mimeType: attachment.fileType })) } : {}),
+    ...(typeof row.metadata?.stickerId === "string" ? { stickerId: row.metadata.stickerId } : {}),
     ...(row.metadata?.clientMessageId ? { clientMessageId: row.metadata.clientMessageId } : {}),
     deliveryStatus: row.deliveryStatus, createdAt: new Date(row.createdAt).toISOString()
   };

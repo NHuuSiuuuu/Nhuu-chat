@@ -35,7 +35,7 @@ function MessageDeliveryIndicator({ message, onRetry }: { message: ChatMessageCo
 
 function renderMessageAttachments(message: ChatMessageContract): React.ReactNode {
   return message.attachments?.map((attachment) => attachment.mimeType.startsWith("image/")
-    ? <div className="relative mb-2 rounded-lg" key={attachment.url}><a className="block overflow-hidden rounded-lg cursor-pointer transition-opacity hover:opacity-80" href={attachment.url} target="_blank" rel="noreferrer" aria-label={`Mở hình ảnh ${attachment.fileName ?? "đính kèm"}`}><img className="max-h-72 max-w-full object-contain" src={attachment.url} alt={attachment.fileName ?? "Hình ảnh đính kèm"} /></a></div>
+    ? <div className="relative mb-2 rounded-lg" key={attachment.url}><a className="block overflow-hidden rounded-lg cursor-pointer transition-opacity hover:opacity-80" href={attachment.url} target="_blank" rel="noreferrer" aria-label={`Mở hình ảnh ${attachment.fileName ?? "đính kèm"}`}><img className="max-h-72 max-w-[200px] rounded-lg object-cover" src={attachment.url} alt={attachment.fileName ?? "Hình ảnh đính kèm"} loading="lazy" decoding="async" /></a></div>
     : <div className="relative mb-2" key={attachment.url}><a className="flex items-center gap-2 rounded-lg border border-sky-200 text-gray-900  px-3 py-2 text-gray-900underline cursor-pointer transition-opacity hover:opacity-80" href={attachment.url} target="_blank" rel="noreferrer" aria-label={`Tải tệp đính kèm ${attachment.fileName ?? ""}`}><InboxIcon name="file" size={17} /><span className="min-w-0 truncate">{attachment.fileName ?? "Tệp đính kèm"}</span></a></div>);
 }
 
@@ -196,6 +196,8 @@ export function ChatWindow({ conversation, messages, isLoadingMessages = false, 
         <div ref={messagesRef} onScroll={handleScroll} className="chat-messages relative min-h-0 flex-1 overflow-y-auto bg-transparent p-6">
           {isLoadingMessages ? <div className="grid h-full place-items-center" role="status" aria-label="Đang tải tin nhắn"><img className="size-8 object-contain" src="/message-loading-v2.png" alt="" aria-hidden="true" /></div> : messages.length === 0 ? <p className="chat-no-messages text-center text-gray-400">Chưa có tin nhắn</p> : messages.map((message) => {
             const senderName = messageSenderName(message, conversation, name);
+            const hasImageAttachment = message.attachments?.some((attachment) => attachment.mimeType.startsWith("image/")) ?? false;
+            const isVisualOnlyMessage = !message.content.trim() && (hasImageAttachment || Boolean(message.stickerId));
             const messageIsPinned = isPinned(message.id);
             const pinLimitReached = pinnedMessages.length >= 10 && !messageIsPinned;
             return <article id={getMessageDomId(message.id)} data-message-id={message.id} className={`group relative my-4 flex scroll-mt-24 items-start gap-3 ${message.senderType === "customer" ? "justify-start" : "justify-end"} ${message.senderType === "agent" ? "pr-5" : ""}`} key={message.id}>
@@ -203,7 +205,7 @@ export function ChatWindow({ conversation, messages, isLoadingMessages = false, 
                 {message.senderType === "customer" && <ConversationAvatar name={senderName} avatarUrl={conversation.customerAvatarUrl} isGroup={conversation.conversationType === "group"} size="size-10" />}
                 <div className={`flex min-w-0 items-end gap-2 ${message.senderType === "customer" ? "flex-row" : "flex-row-reverse"}`}>
                   <div className={`flex min-w-0 max-w-[min(560px,75%)] flex-col ${message.senderType === "customer" ? "items-start" : "items-end"}`}>
-                    <div className={`relative max-w-full rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${message.senderType === "customer" ? "bg-white text-gray-900" : "bg-blue-100 text-gray-900"}`}><div className="space-y-2">{renderMessageAttachments(message)}{message.content && <p className="message-content m-0 whitespace-pre-wrap">{renderMessageContent(message.content)}</p>}</div></div>
+                    <div className={`relative max-w-full text-sm leading-6 ${isVisualOnlyMessage ? "rounded-lg bg-transparent p-0 shadow-none" : `rounded-2xl px-4 py-3 shadow-sm ${message.senderType === "customer" ? "bg-white" : "bg-blue-100"} text-gray-900`}`}><div className="space-y-2">{renderMessageAttachments(message)}{message.stickerId && !hasImageAttachment && <span className="inline-flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-amber-800" role="img" aria-label={`Sticker Facebook ${message.stickerId}`}><InboxIcon name="smile" size={22} />Sticker Facebook</span>}{message.content && <p className="message-content m-0 whitespace-pre-wrap">{renderMessageContent(message.content)}</p>}</div></div>
                     {messageIsPinned && <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-gray-500" aria-label="Tin nhắn đã ghim"><InboxIcon name="pin" size={12} />Đã ghim</span>}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1 text-right">

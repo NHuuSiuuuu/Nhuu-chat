@@ -101,6 +101,39 @@ describe("ChatWindow delivery indicator", () => {
     expect(source).toContain("MessageDeliveryIndicator");
     expect(source).toContain("message.attachments");
   });
+
+  it("renders inbound image-only messages without a colored bubble and keeps sticker ids visible", () => {
+    const imageHtml = renderChat([], [{
+      id: "image-1",
+      conversationId: conversation.id,
+      platform: "facebook",
+      senderType: "customer",
+      senderId: "customer-1",
+      type: "image",
+      content: "",
+      attachments: [{ url: "https://cdn.example/photo.jpg", mimeType: "image/jpeg" }],
+      deliveryStatus: "delivered",
+      createdAt: "2026-09-24T16:00:00.000Z"
+    }]);
+    const stickerHtml = renderChat([], [{
+      id: "sticker-1",
+      conversationId: conversation.id,
+      platform: "facebook",
+      senderType: "customer",
+      senderId: "customer-1",
+      type: "image",
+      content: "",
+      stickerId: "sticker-42",
+      deliveryStatus: "delivered",
+      createdAt: "2026-09-24T16:00:00.000Z"
+    }]);
+
+    expect(imageHtml).toContain('loading="lazy"');
+    expect(imageHtml).toContain("max-w-[200px]");
+    expect(imageHtml).not.toContain("bg-white text-gray-900");
+    expect(stickerHtml).toContain("Sticker Facebook");
+    expect(stickerHtml).toContain('aria-label="Sticker Facebook sticker-42"');
+  });
 });
 
 describe("ChatWindow recovery state", () => {
