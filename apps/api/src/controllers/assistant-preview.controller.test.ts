@@ -225,7 +225,7 @@ describe("assistant preview controller and service", () => {
     expect(response.status).toBe(200);
     expect(dependencies.vectorSearch).toHaveBeenCalledWith([1, 0], 5, {
       ownerId,
-      query: "Bạn có muốn em tư vấn học phí và lịch học không ạ?\ncó"
+      query: "mất gốc\nBạn có muốn em tư vấn học phí và lịch học không ạ?\ncó"
     });
   });
 

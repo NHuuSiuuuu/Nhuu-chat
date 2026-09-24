@@ -54,7 +54,7 @@ describe("setting history with MongoDB", () => {
     expect((await UserModel.findById(userId).lean())?.aiSettings).toMatchObject({ enabled: false, sentimentEnabled: false });
   });
 
-  it("audits one successful connect when concurrent Page claims use compare-and-swap", async () => {
+  it("audits one successful connect when concurrent claims target the same Page", async () => {
     const userId = String(new mongoose.Types.ObjectId());
     let signalSubscriptionStarted!: () => void;
     let releaseSubscription!: () => void;
@@ -65,8 +65,11 @@ describe("setting history with MongoDB", () => {
       unsubscribePage: async () => undefined
     });
     const firstConnect = pages.connect(userId, { pageId: "page-a", pageAccessToken: "test-secret-a" });
-    await subscriptionStarted;
-    await expect(pages.connect(userId, { pageId: "page-b", pageAccessToken: "test-secret-b" }))
+    await Promise.race([
+      subscriptionStarted,
+      firstConnect.then(() => Promise.reject(new Error("Page connection completed before subscription started")))
+    ]);
+    await expect(pages.connect(userId, { pageId: "page-a", pageAccessToken: "test-secret-b" }))
       .rejects.toMatchObject({ code: "FACEBOOK_PAGE_CONNECTION_BUSY" });
     releaseSubscription();
     const results = [await firstConnect];
@@ -85,7 +88,7 @@ describe("setting history with MongoDB", () => {
       avatarUrl: null, status: "connected", lastValidatedAt: saved?.lastValidatedAt.toISOString(),
       lastErrorCode: null, createdAt: saved?.createdAt.toISOString(), updatedAt: saved?.updatedAt.toISOString()
     });
-    expect(results[0]?.pageName).toMatch(/^page-[ab]$/);
+    expect(results[0]?.pageName).toBe("page-a");
     expect(JSON.stringify(rows)).not.toMatch(/ciphertext|test-secret/);
   });
 

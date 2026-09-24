@@ -21,6 +21,7 @@ export type ResolveBotAdapter = (input: {
   ownerId: string;
   platform: string;
   channelId: string;
+  conversationType?: "private" | "group";
 }) => ChannelBotAdapter | undefined | Promise<ChannelBotAdapter | undefined>;
 
 // Giới hạn thời gian chờ; kết quả đến muộn không được kích hoạt lần gửi thứ hai.

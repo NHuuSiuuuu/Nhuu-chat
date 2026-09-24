@@ -167,7 +167,7 @@ describe("LandingPage", () => {
 
     try {
       Object.defineProperty(scrollWindow, "scrollY", { configurable: true, value: 11 });
-      act(() => scrollWindow.dispatchEvent(new Event("scroll")));
+      act(() => { scrollWindow.dispatchEvent(new Event("scroll")); });
 
       const header = renderer.root.findByType("header");
       expect(header.props.className).toContain("w-full fixed top-0 left-0 z-50 bg-white/95 backdrop-blur-md shadow-md py-3 px-6 md:px-12 flex justify-between items-center");

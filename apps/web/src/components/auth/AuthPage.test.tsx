@@ -42,7 +42,7 @@ describe("AuthPage presentation", () => {
       renderer = TestRenderer.create(<AuthRoutePage route="login" onNavigateAuth={vi.fn()} onAuthenticated={vi.fn()} />);
     });
 
-    expect(renderer.root.findAllByProps({ src: "/nhuu-logo-landing.svg" })).toHaveLength(1);
+    expect(renderer.root.findAllByProps({ src: "/nhuu-logo-landing.svg" })).toHaveLength(2);
   });
 
   it("submits a forgot-password request and shows a generic confirmation", async () => {
@@ -177,7 +177,7 @@ describe("AuthPage presentation", () => {
     await act(async () => renderer.root.findByType("form").props.onSubmit({ preventDefault: vi.fn() }));
 
     expect(toast.success).toHaveBeenCalledWith("Đăng nhập thành công!");
-    expect(toast.success.mock.invocationCallOrder[0]).toBeLessThan(onAuthenticated.mock.invocationCallOrder[0]);
+    expect(vi.mocked(toast.success).mock.invocationCallOrder[0]).toBeLessThan(onAuthenticated.mock.invocationCallOrder[0]);
   });
 
   it("rejects mismatched registration passwords before calling the API", async () => {

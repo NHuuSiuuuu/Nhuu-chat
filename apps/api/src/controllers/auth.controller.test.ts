@@ -25,7 +25,7 @@ function createTestApp() {
   return app;
 }
 
-const endpoints = [
+const endpoints: readonly (readonly [string, string])[] = [
   ["register", "Name, email and a password of at least 8 characters are required"],
   ["login", "Email and password are required"]
 ] as const;

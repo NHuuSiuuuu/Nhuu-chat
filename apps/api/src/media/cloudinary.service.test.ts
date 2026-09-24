@@ -103,6 +103,35 @@ describe("CloudinaryMediaService", () => {
     );
   });
 
+  it("rejects a non-image asset returned from an image upload", async () => {
+    stubEnvironment();
+    const { CloudinaryMediaService } = await importService();
+    const uploader = createUploader();
+    uploader.upload_stream.mockImplementation((_options, callback) => new Writable({
+      write(_chunk, _encoding, done) { done(); },
+      final(done) {
+        callback(null, {
+          secure_url: "https://res.cloudinary.com/example/raw/upload/sample.png",
+          public_id: "nhuu-chat/quick-replies/user-1/sample",
+          resource_type: "raw",
+          bytes: 12_345,
+          width: 800,
+          height: 600
+        });
+        done();
+      }
+    }));
+    const service = new CloudinaryMediaService({ uploader });
+
+    await expect(service.uploadImage({
+      buffer: Buffer.from("image"),
+      filename: "sample.png",
+      mimeType: "image/png",
+      userId: "user-1",
+      folder: "nhuu-chat/quick-replies"
+    })).rejects.toThrow("Cloudinary image upload returned a non-image asset");
+  });
+
   it("uploads a generic outbound file with raw Cloudinary storage", async () => {
     stubEnvironment();
     const { CloudinaryMediaService } = await importService();

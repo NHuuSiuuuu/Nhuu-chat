@@ -35,11 +35,11 @@ const defaultClient: FacebookPublishingClient = { getConnection: getFacebookPage
 
 export interface FacebookPublishingPageProps {
   onBack?: () => void;
-  onLogoClick?: React.ComponentProps<typeof DashboardTopbar>["onLogoClick"];
-  onNavigate?: React.ComponentProps<typeof DashboardTopbar>["onNavigate"];
-  user?: React.ComponentProps<typeof DashboardTopbar>["user"];
-  onLogout?: React.ComponentProps<typeof DashboardTopbar>["onLogout"];
-  onProfile?: React.ComponentProps<typeof DashboardTopbar>["onProfile"];
+  onLogoClick?: NonNullable<React.ComponentProps<typeof DashboardTopbar>>["onLogoClick"];
+  onNavigate?: NonNullable<React.ComponentProps<typeof DashboardTopbar>>["onNavigate"];
+  user?: NonNullable<React.ComponentProps<typeof DashboardTopbar>>["user"];
+  onLogout?: NonNullable<React.ComponentProps<typeof DashboardTopbar>>["onLogout"];
+  onProfile?: NonNullable<React.ComponentProps<typeof DashboardTopbar>>["onProfile"];
   client?: FacebookPublishingClient;
   initialConnection?: FacebookPageConnectionResponse | null;
   availablePages?: FacebookPageConnectionResponse[];

@@ -93,7 +93,7 @@ export async function parseAutomationTemplateFile(file: File): Promise<Automatio
       continue;
     }
     names.add(normalizedHeader(name));
-    rows.push({ name, keywords, responseTemplate, enabled });
+    rows.push({ name, keywords, responseTemplate, enabled: enabled ?? false });
   }
   return errors.length > 0 ? { rows: [], errors } : { rows, errors };
 }

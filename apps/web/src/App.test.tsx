@@ -17,7 +17,8 @@ describe("App navigation", () => {
     expect(source).toContain('if (pathname === "/") return "landing"');
     expect(source).toContain('page === "landing"');
     expect(source).toContain("<LandingPage");
-    expect(source).toContain("showAuthForm && <div className=\"fixed inset-0");
+    expect(source).toContain('import { AuthRoutePage } from "./components/auth/AuthRoutePage.js";');
+    expect(source).toContain("<AuthRoutePage route={authRoute}");
     expect(source).toContain('onDashboard={() => navigate("dashboard")}');
     expect(source).not.toContain('if (!auth) return navigate("dashboard")');
   });
@@ -133,7 +134,7 @@ describe("App navigation", () => {
   it("configures the global Sonner toaster for NhuuChat", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain('import { Toaster } from "sonner";');
+    expect(source).toContain('import { toast, Toaster } from "sonner";');
     expect(source).toContain('position="top-right"');
     expect(source).toContain("richColors");
     expect(source).toContain("closeButton");

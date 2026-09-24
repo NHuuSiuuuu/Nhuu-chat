@@ -18,7 +18,8 @@ describe("Dashboard Tailwind migration", () => {
     expect(icon).toContain(">?</span>");
     expect(icon).not.toContain("provider.slice");
     expect(app).toContain("bg-slate-100");
-    expect(app).toContain("focus:border-sky-500");
+    expect(page).toContain('aria-label="Tìm kiếm tài khoản"');
+    expect(page).toContain("outline-none placeholder:text-[#a0abbb]");
   });
 
   it("uses the full Zalo wordmark for the plain platform identity", () => {

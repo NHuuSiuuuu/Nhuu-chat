@@ -339,6 +339,7 @@ export function App() {
     <Toaster
       position="top-right"
       richColors
+      closeButton
     />
     {shouldRenderIntro(showIntro, page) && <NetflixIntro ready={introReady} onComplete={() => setShowIntro(false)} />}
   </>;

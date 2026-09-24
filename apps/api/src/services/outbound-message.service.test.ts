@@ -206,6 +206,7 @@ describe("sendOutboundMessage", () => {
         platform: "telegram",
         channelId: "chat-42",
         assignedAgentId: "agent-1",
+        botEnabled: true,
         unreadCount: 2,
         status: "open",
         lastMessageAt: "2026-09-10T04:30:00.000Z",

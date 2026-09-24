@@ -97,7 +97,7 @@ describe("Telegram channel routes", () => {
     expect(fetchMock).toHaveBeenCalledExactlyOnceWith("https://api.telegram.org/bot123:test-encrypted-bot-token/sendMessage", expect.objectContaining({ body: JSON.stringify({ chat_id: "456", text: "Chào bạn từ cửa hàng" }) }));
   });
 
-  it("acknowledges connector failure and replay while retaining the customer and failed handoff", async () => {
+  it("acknowledges connector failure and replay while retaining the customer and failure status", async () => {
     const { conversation, fetchMock } = await enableBot();
     fetchMock.mockRejectedValue(new Error("private connector failure"));
     const app = createApp();
@@ -105,7 +105,7 @@ describe("Telegram channel routes", () => {
     expect((await request(app).post(path).send(textUpdate)).status).toBe(204);
     expect((await request(app).post(path).send(textUpdate)).status).toBe(204);
     expect(await MessageModel.countDocuments({ senderType: "customer", deliveryStatus: "delivered" })).toBe(1);
-    expect(await MessageModel.findOne({ senderType: "bot" }).lean()).toMatchObject({ deliveryStatus: "failed", metadata: { handoff: true, errorCode: "DELIVERY_FAILED" } });
+    expect(await MessageModel.findOne({ senderType: "bot" }).lean()).toMatchObject({ deliveryStatus: "failed", metadata: { handoff: false, errorCode: "DELIVERY_FAILED" } });
     expect(await BotProcessingModel.findOne().lean()).toMatchObject({ status: "failed", errorCode: "DELIVERY_FAILED" });
     expect(await ConversationModel.findById(conversation._id).lean()).toMatchObject({ status: "open", botPausedUntil: null });
     expect(fetchMock).toHaveBeenCalledOnce();
