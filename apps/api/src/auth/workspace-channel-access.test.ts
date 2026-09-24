@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { effectiveAllowedChannels, workspaceChannelAccessFilter } from "./workspace-channel-access.js";
+import { effectiveAllowedChannels, isWorkspaceChannelPlatform, workspaceChannelAccessFilter } from "./workspace-channel-access.js";
 
 describe("workspace channel access", () => {
   it("normalizes legacy Facebook Page permissions without granting a matching ID on another platform", () => {
@@ -23,7 +23,7 @@ describe("workspace channel access", () => {
   it("uses the empty selection as all shared Workspace channels", () => {
     expect(workspaceChannelAccessFilter("owner-1", [])).toEqual({
       ownerId: "owner-1",
-      platform: { $in: ["facebook", "instagram", "zalo", "telegram"] }
+      platform: { $in: ["facebook", "instagram", "zalo", "telegram", "zalo_personal", "telegram_personal"] }
     });
   });
 
@@ -37,9 +37,21 @@ describe("workspace channel access", () => {
     ] });
   });
 
-  it("never makes personal platforms Workspace channels", () => {
+  it("recognizes personal Zalo and Telegram sessions as Workspace channels", () => {
     expect(effectiveAllowedChannels({ allowedChannels: [
-      { platform: "zalo_personal" as never, channelId: "personal-id" }
-    ] })).toEqual([]);
+      { platform: "zalo_personal", channelId: "owner-1" },
+      { platform: "telegram_personal", channelId: "owner-1" }
+    ] })).toEqual([
+      { platform: "zalo_personal", channelId: "owner-1" },
+      { platform: "telegram_personal", channelId: "owner-1" }
+    ]);
+    expect(isWorkspaceChannelPlatform("zalo_personal")).toBe(true);
+    expect(isWorkspaceChannelPlatform("telegram_personal")).toBe(true);
+  });
+
+  it("scopes personal session access to conversations owned by that Workspace owner", () => {
+    expect(workspaceChannelAccessFilter("owner-1", [
+      { platform: "telegram_personal", channelId: "owner-1" }
+    ])).toEqual({ ownerId: "owner-1", platform: "telegram_personal" });
   });
 });

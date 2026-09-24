@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { WorkspaceMemberService, type WorkspaceChannelView, type WorkspaceMemberDependencies, type WorkspaceMembership, type WorkspaceMemberView } from "./workspace-member.service.js";
+import { personalSessionWorkspaceChannels, WorkspaceMemberService, type WorkspaceChannelView, type WorkspaceMemberDependencies, type WorkspaceMembership, type WorkspaceMemberView } from "./workspace-member.service.js";
 
 function fixture() {
   const memberships = new Map<string, WorkspaceMembership>([
@@ -11,7 +11,9 @@ function fixture() {
   const views: WorkspaceMemberView[] = [];
   const channels: WorkspaceChannelView[] = [
     { platform: "facebook", channelId: "page-1", name: "Page Một" },
-    { platform: "telegram", channelId: "chat-1", name: "Nhóm Telegram" }
+    { platform: "telegram", channelId: "chat-1", name: "Nhóm Telegram" },
+    { platform: "zalo_personal", channelId: "owner-1", name: "Chủ Zalo", displayId: "zalo-account-1" },
+    { platform: "telegram_personal", channelId: "owner-1", name: "Chủ Telegram", displayId: "telegram-account-1" }
   ];
   const dependencies: WorkspaceMemberDependencies = {
     users: {
@@ -48,6 +50,17 @@ function fixture() {
 }
 
 describe("WorkspaceMemberService", () => {
+  it("lists connected personal accounts with safe display identities and owner-bound access keys", () => {
+    expect(personalSessionWorkspaceChannels("owner-1", {
+      zalo: { zaloUserId: "zalo-id", displayName: "Zalo Owner", avatarUrl: "https://cdn.test/zalo.png" },
+      telegram: { telegramUserId: "telegram-id", displayName: "Telegram Owner", username: "owner", avatarUrl: null }
+    })).toEqual([
+      { platform: "zalo_personal", channelId: "owner-1", name: "Zalo Owner", displayId: "zalo-id", avatarUrl: "https://cdn.test/zalo.png" },
+      { platform: "telegram_personal", channelId: "owner-1", name: "Telegram Owner", displayId: "telegram-id" }
+    ]);
+    expect(personalSessionWorkspaceChannels("owner-1", {})).toEqual([]);
+  });
+
   it("requires an existing account and accepts a user who has another Workspace membership", async () => {
     const { service, memberships } = fixture();
     await expect(service.addMember("workspace-1", "owner-1", {
@@ -71,6 +84,13 @@ describe("WorkspaceMemberService", () => {
     })).rejects.toMatchObject({ statusCode: 400, code: "WORKSPACE_CHANNEL_ACCESS_INVALID" });
   });
 
+  it("allows assigning a connected personal account by Workspace owner identity", async () => {
+    const { service } = fixture();
+    await expect(service.addMember("workspace-1", "owner-1", {
+      email: "staff@example.com", role: "staff", allowedChannels: [{ platform: "zalo_personal", channelId: "owner-1" }]
+    })).resolves.toMatchObject({ member: { allowedChannels: [{ platform: "zalo_personal", channelId: "owner-1" }] } });
+  });
+
   it("keeps the owner immutable and gives admins unrestricted Page access", async () => {
     const { service } = fixture();
     await expect(service.removeMember("workspace-1", "owner-1", "owner-1"))
@@ -84,7 +104,9 @@ describe("WorkspaceMemberService", () => {
     const { service } = fixture();
     await expect(service.listChannels("workspace-1", "owner-1")).resolves.toMatchObject({ channels: [
       { platform: "facebook", channelId: "page-1" },
-      { platform: "telegram", channelId: "chat-1" }
+      { platform: "telegram", channelId: "chat-1" },
+      { platform: "zalo_personal", channelId: "owner-1", displayId: "zalo-account-1" },
+      { platform: "telegram_personal", channelId: "owner-1", displayId: "telegram-account-1" }
     ] });
     const fixtureWithRestrictedMember = fixture();
     await fixtureWithRestrictedMember.service.addMember("workspace-1", "owner-1", {

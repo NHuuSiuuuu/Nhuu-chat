@@ -285,8 +285,8 @@ describe("Settings page", () => {
     expect(source).toContain("/api/v1/workspaces/${id}/channels");
     expect(source).toContain("WorkspaceChannelRef");
     expect(source).toContain("allowedChannels");
-    expect(source).toContain("channel.platform === platform");
-    expect(source).toContain("<PlatformIcon provider={platform}");
+    expect(source).toContain("Object.entries(groupWorkspaceChannels(channels))");
+    expect(source).toContain("<PlatformIcon provider={workspaceChannelIconProvider(platform)}");
     expect(source).toContain("allowedChannels: role === \"staff\" ? allowedChannels : []");
   });
 
@@ -674,5 +674,16 @@ describe("Settings page", () => {
 
     expect(templateHeader).toContain("+ Thêm mẫu chào");
     expect(templateHeader).toContain("Import kịch bản");
+  });
+
+  it("groups every Workspace permission channel platform dynamically", () => {
+    expect(typeof settingsModule.groupWorkspaceChannels).toBe("function");
+    if (typeof settingsModule.groupWorkspaceChannels !== "function") return;
+    const grouped = settingsModule.groupWorkspaceChannels([
+      { platform: "facebook", channelId: "page-1", name: "Page" },
+      { platform: "zalo_personal", channelId: "owner-1", name: "Zalo cá nhân" },
+      { platform: "telegram_personal", channelId: "owner-1", name: "Telegram cá nhân" }
+    ] as never);
+    expect(Object.keys(grouped)).toEqual(["facebook", "zalo_personal", "telegram_personal"]);
   });
 });

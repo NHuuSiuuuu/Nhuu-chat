@@ -71,7 +71,7 @@ export interface GeneralSettingsContract {
 }
 
 export type ChatPlatform = "facebook" | "instagram" | "zalo" | "zalo_personal" | "telegram" | "telegram_personal";
-export type WorkspaceChannelPlatform = Exclude<ChatPlatform, "zalo_personal" | "telegram_personal">;
+export type WorkspaceChannelPlatform = ChatPlatform;
 export interface WorkspaceChannelRef {
   platform: WorkspaceChannelPlatform;
   channelId: string;

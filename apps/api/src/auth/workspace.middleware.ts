@@ -13,7 +13,7 @@ export interface WorkspaceContext {
   ownerUserId: string;
   role: "owner" | "admin" | "staff";
   allowedPages: string[] | null;
-  allowedChannels: Array<{ platform: "facebook" | "instagram" | "zalo" | "telegram"; channelId: string }>;
+  allowedChannels: Array<{ platform: "facebook" | "instagram" | "zalo" | "telegram" | "zalo_personal" | "telegram_personal"; channelId: string }>;
 }
 
 export const resolveWorkspaceContext: RequestHandler = async (request, _response, next) => {

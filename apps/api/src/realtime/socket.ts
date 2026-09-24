@@ -136,6 +136,7 @@ export function emitInboxEvent(event: string, ownerId: string | null, payload: u
   if (ownerId) activeServer.to(`inbox:${ownerId}`).emit(event, payload);
 }
 
+// Phát tin vào Inbox theo quyền channel Workspace; kênh cá nhân không đi qua phòng admin chung.
 export function emitInboxEventToRecipients(event: string, recipientIds: string[], payload: unknown): void {
   if (!activeServer) return;
   const payloadRecord = payload && typeof payload === "object" ? payload as Record<string, unknown> : null;
@@ -147,7 +148,8 @@ export function emitInboxEventToRecipients(event: string, recipientIds: string[]
       if (!conversation?.ownerId || !conversation.channelId || !isWorkspaceChannelPlatform(conversation.platform)) return;
       const workspace = await WorkspaceModel.findOne({ ownerUserId: conversation.ownerId }).select("_id").lean();
       if (!workspace) {
-        const rooms = ["inbox:admins", ...new Set(recipientIds.filter(Boolean).map((recipientId) => `inbox:${recipientId}`))];
+        const personalPlatform = conversation.platform === "zalo_personal" || conversation.platform === "telegram_personal";
+        const rooms = [...(personalPlatform ? [] : ["inbox:admins"]), ...new Set(recipientIds.filter(Boolean).map((recipientId) => `inbox:${recipientId}`))];
         server.to(rooms).emit(event, payload);
         return;
       }
@@ -155,7 +157,10 @@ export function emitInboxEventToRecipients(event: string, recipientIds: string[]
       const authorizedRecipients = memberships.filter((membership) => {
         if (membership.role === "owner" || membership.role === "admin") return true;
         const allowed = effectiveAllowedChannels(membership);
-        return allowed.length === 0 || allowed.some((channel) => channel.platform === conversation.platform && channel.channelId === conversation.channelId);
+        return allowed.length === 0 || allowed.some((channel) => channel.platform === conversation.platform
+          && (conversation.platform === "zalo_personal" || conversation.platform === "telegram_personal"
+            ? channel.channelId === String(conversation.ownerId)
+            : channel.channelId === conversation.channelId));
       }).map((membership) => String(membership.userId));
       if (authorizedRecipients.length) server.to([...new Set(authorizedRecipients)].map((id) => `inbox:${id}`)).emit(event, payload);
     }).catch(() => undefined);

@@ -302,3 +302,4 @@ Các ghi chú nâng cấp được viết rõ ràng để cả team dễ theo d�
 - Khi bấm tài khoản Telegram đã kết nối trên Dashboard, chuyển vào trang Hội thoại với bố cục Livechat mới; thêm composer và header hội thoại theo presentation layer hiện có.
 - Giữ header NhuuChat dùng chung khi chuyển từ Dashboard sang trang Hội thoại; layout inbox nằm bên dưới header và tự chiếm phần chiều cao còn lại.
 - Thêm `DEVELOPMENT_PROMPT.md` ở thư mục gốc để lưu prompt và handoff dài; agent chỉ đọc file khi người dùng yêu cầu trực tiếp.
+- Cho phép cấp quyền Workspace cho phiên Zalo/Telegram cá nhân của chủ; giới hạn Inbox, realtime và gửi tin theo platform đã gán.

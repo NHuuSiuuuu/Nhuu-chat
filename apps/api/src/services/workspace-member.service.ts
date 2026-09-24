@@ -1,8 +1,10 @@
 import { AppError } from "../common/errors.js";
 import type { WorkspaceChannelPlatform, WorkspaceChannelRef } from "@nhuu-chat/contracts";
-import { effectiveAllowedChannels, isWorkspaceChannelPlatform } from "../auth/workspace-channel-access.js";
+import { effectiveAllowedChannels, isWorkspaceChannelPlatform, workspaceChannelPlatforms } from "../auth/workspace-channel-access.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { FacebookPageConnectionModel } from "../models/facebook-page-connection.model.js";
+import { TelegramPersonalSessionModel } from "../channels/telegram-personal/telegram-personal.model.js";
+import { ZaloPersonalSessionModel } from "../channels/zalo-personal/zalo-personal.model.js";
 import { UserModel } from "../models/user.model.js";
 import { WorkspaceMemberModel, type WorkspaceRole } from "../models/workspace-member.model.js";
 import { WorkspaceModel } from "../models/workspace.model.js";
@@ -23,6 +25,27 @@ export interface WorkspaceMemberView extends WorkspaceMembership {
 export interface WorkspaceChannelView extends WorkspaceChannelRef {
   name: string;
   avatarUrl?: string;
+  displayId?: string;
+}
+
+// Chuyển phiên đăng nhập cá nhân thành kênh Workspace gắn cố định với chủ sở hữu phiên.
+export function personalSessionWorkspaceChannels(ownerUserId: string, sessions: {
+  telegram?: { telegramUserId: string; displayName: string; username?: string | null; avatarUrl?: string | null } | null;
+  zalo?: { zaloUserId: string; displayName?: string | null; avatarUrl?: string | null } | null;
+}): WorkspaceChannelView[] {
+  const channels: WorkspaceChannelView[] = [];
+  if (sessions.zalo) channels.push({
+    platform: "zalo_personal", channelId: ownerUserId,
+    name: sessions.zalo.displayName?.trim() || "Zalo cá nhân", displayId: sessions.zalo.zaloUserId,
+    ...(sessions.zalo.avatarUrl ? { avatarUrl: sessions.zalo.avatarUrl } : {})
+  });
+  if (sessions.telegram) channels.push({
+    platform: "telegram_personal", channelId: ownerUserId,
+    name: sessions.telegram.displayName?.trim() || sessions.telegram.username?.trim() || "Telegram cá nhân",
+    displayId: sessions.telegram.telegramUserId,
+    ...(sessions.telegram.avatarUrl ? { avatarUrl: sessions.telegram.avatarUrl } : {})
+  });
+  return channels;
 }
 
 export interface WorkspaceMemberDependencies {
@@ -95,14 +118,18 @@ const defaultDependencies: WorkspaceMemberDependencies = {
     }
   },
   channels: {
+    // Liệt kê mọi nguồn kênh dùng chung và các phiên cá nhân đang hoạt động của chủ Workspace.
     async listOwned(ownerUserId) {
-      const [pageRows, conversationRows] = await Promise.all([
+      const sharedPlatforms = workspaceChannelPlatforms.filter((platform) => platform !== "zalo_personal" && platform !== "telegram_personal");
+      const [pageRows, conversationRows, telegramSession, zaloSession] = await Promise.all([
         FacebookPageConnectionModel.find({ userId: ownerUserId, status: "connected" }).select("pageId pageName avatarUrl").lean(),
         ConversationModel.aggregate<{ _id: { platform: string; channelId: string }; name?: string }>([
-          { $match: { ownerId: ownerUserId, platform: { $in: ["instagram", "zalo", "telegram"] } } },
+          { $match: { ownerId: ownerUserId, platform: { $in: sharedPlatforms.filter((platform) => platform !== "facebook") } } },
           { $sort: { updatedAt: 1 } },
           { $group: { _id: { platform: "$platform", channelId: "$channelId" }, name: { $last: "$conversationName" } } }
-        ])
+        ]),
+        TelegramPersonalSessionModel.findOne({ userId: ownerUserId, status: "active" }).select("telegramUserId displayName username avatarUrl").lean(),
+        ZaloPersonalSessionModel.findOne({ ownerId: ownerUserId, status: "connected", lastErrorCode: null }).select("zaloUserId displayName avatarUrl").lean()
       ]);
       const channels = new Map<string, WorkspaceChannelView>();
       for (const page of pageRows) channels.set(`facebook:${page.pageId}`, {
@@ -115,6 +142,9 @@ const defaultDependencies: WorkspaceMemberDependencies = {
           platform: row._id.platform as WorkspaceChannelPlatform,
           channelId: row._id.channelId, name: row.name?.trim() || row._id.channelId
         });
+      }
+      for (const sessionChannel of personalSessionWorkspaceChannels(ownerUserId, { telegram: telegramSession, zalo: zaloSession })) {
+        channels.set(`${sessionChannel.platform}:${sessionChannel.channelId}`, sessionChannel);
       }
       return [...channels.values()].sort((left, right) => left.platform.localeCompare(right.platform) || left.name.localeCompare(right.name));
     },

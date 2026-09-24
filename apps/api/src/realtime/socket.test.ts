@@ -49,11 +49,18 @@ describe("inbox realtime recipients", () => {
 
   it("broadcasts Zalo personal updates only to the owner and assigned recipient rooms", () => {
     const payload = { id: "conversation-1", platform: "zalo_personal" };
+    conversationMocks.findById.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({
+      ownerId: "owner-1", platform: "zalo_personal", channelId: "target-chat"
+    }) }) });
+    workspaceMocks.findOne.mockReturnValue({ select: () => ({ lean: () => Promise.resolve(null) }) });
 
     emitInboxEventToRecipients("chat:conversation_updated", ["owner-1", "agent-1"], payload);
 
-    expect(socketMocks.to).toHaveBeenCalledWith(["inbox:owner-1", "inbox:agent-1"]);
-    expect(socketMocks.emit).toHaveBeenCalledWith("chat:conversation_updated", payload);
+    return vi.waitFor(() => {
+      expect(socketMocks.to).toHaveBeenCalledWith(["inbox:owner-1", "inbox:agent-1"]);
+      expect(socketMocks.to).not.toHaveBeenCalledWith(["inbox:admins", "inbox:owner-1", "inbox:agent-1"]);
+      expect(socketMocks.emit).toHaveBeenCalledWith("chat:conversation_updated", payload);
+    });
   });
 
   it("keeps the shared admin broadcast for shared channels without a Workspace", async () => {
@@ -88,6 +95,25 @@ describe("inbox realtime recipients", () => {
     expect(socketMocks.emit).toHaveBeenCalledWith("chat:conversation_updated", {
       id: "conversation-1", platform: "telegram", channelId: "chat-1"
     });
+  });
+
+  it("broadcasts personal-account updates only to staff assigned that Workspace owner session", async () => {
+    conversationMocks.findById.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({
+      ownerId: "owner-1", platform: "telegram_personal", channelId: "target-chat"
+    }) }) });
+    workspaceMocks.findOne.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({ _id: "workspace-1" }) }) });
+    workspaceMemberMocks.find.mockReturnValue({ select: () => ({ lean: () => Promise.resolve([
+      { userId: "owner-1", role: "owner", allowedPages: [] },
+      { userId: "staff-allowed", role: "staff", allowedChannels: [{ platform: "telegram_personal", channelId: "owner-1" }], allowedPages: [] },
+      { userId: "staff-denied", role: "staff", allowedChannels: [{ platform: "zalo_personal", channelId: "owner-1" }], allowedPages: [] }
+    ]) }) });
+
+    const payload = { id: "conversation-1", platform: "telegram_personal", channelId: "target-chat" };
+    emitInboxEventToRecipients("chat:conversation_updated", ["owner-1", "staff-allowed", "staff-denied"], payload);
+
+    await vi.waitFor(() => expect(socketMocks.to).toHaveBeenCalledWith(["inbox:owner-1", "inbox:staff-allowed"]));
+    expect(socketMocks.to).not.toHaveBeenCalledWith(["inbox:owner-1", "inbox:staff-allowed", "inbox:staff-denied"]);
+    expect(socketMocks.to).not.toHaveBeenCalledWith(["inbox:admins", "inbox:owner-1", "inbox:staff-allowed"]);
   });
 
   it("does not leak a shared-channel update to an assigned member without channel access", async () => {

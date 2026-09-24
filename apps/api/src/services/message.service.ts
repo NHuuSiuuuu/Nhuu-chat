@@ -10,6 +10,7 @@ import { MessageModel } from "../models/message.model.js";
 import { FacebookPageConnectionModel } from "../models/facebook-page-connection.model.js";
 import { pauseBot } from "../orchestration/bot-pause.service.js";
 import { canJoinConversation } from "../realtime/access.js";
+import type { WorkspaceChannelRef } from "@nhuu-chat/contracts";
 import type { AuthUser } from "./auth.service.js";
 import { toConversation } from "./conversation.service.js";
 import { readProviderSecretByName } from "./provider-secret.service.js";
@@ -31,6 +32,10 @@ export type UploadedOutboundFile = {
   originalname: string;
   mimetype: string;
   size: number;
+};
+
+type MessageAuth = AuthUser & {
+  workspace?: { ownerUserId: string; allowedPages?: string[] | null; allowedChannels?: WorkspaceChannelRef[] };
 };
 
 type PersistedAttachment = {
@@ -118,7 +123,7 @@ async function persistZaloOutboundMessage(input: { conversationId: string; platf
 // Kiểm tra quyền, gửi qua đúng connector và luôn lưu trạng thái truy vết của lần gửi Zalo cá nhân.
 export async function sendOutboundMessage(
   input: { conversationId: string; content: string; clientMessageId?: string; attachment?: UploadedOutboundFile },
-  auth?: AuthUser
+  auth?: MessageAuth
 ) {
   const { conversationId, content } = input;
   const conversation = await ConversationModel.findById(conversationId)
@@ -131,8 +136,10 @@ export async function sendOutboundMessage(
     throw new AppError(403, "FORBIDDEN", "You do not have access to this conversation");
   }
 
-  // Kết nối cá nhân chỉ owner mới được gửi để không dùng chéo session giữa các tài khoản.
-  if ((conversation.platform === "telegram_personal" || conversation.platform === "zalo_personal") && String(conversation.ownerId) !== auth.id) {
+  const personalPlatform = conversation.platform === "telegram_personal" || conversation.platform === "zalo_personal";
+  const sessionOwnerId = auth.workspace?.ownerUserId ?? auth.id;
+  // Chỉ dùng session cá nhân của chủ Workspace sau khi quyền Workspace đã được kiểm tra.
+  if (personalPlatform && String(conversation.ownerId) !== sessionOwnerId) {
     throw new AppError(
       403,
       "FORBIDDEN",
@@ -202,7 +209,7 @@ export async function sendOutboundMessage(
     });
     externalMessageId = `facebook:${conversation.channelId}:${delivery.externalMessageId}`;
   } else if (conversation.platform === "telegram_personal") {
-    const userId = auth.id;
+    const userId = sessionOwnerId;
     // Connector cá nhân dùng toMessage cho tin đến; chỉ nạp khi gửi để tránh import vòng.
     const { getActivePersonalClient } = await import("./telegram-personal.service.js");
     const client = await getActivePersonalClient(userId);
@@ -221,7 +228,7 @@ export async function sendOutboundMessage(
     // Chỉ gọi API Zalo qua session manager để credentials runtime không đi vào outbound flow.
     const { getActiveZaloPersonalClient } = await import("./zalo-personal.service.js");
     try {
-      const client = await getActiveZaloPersonalClient(auth.id);
+      const client = await getActiveZaloPersonalClient(sessionOwnerId);
       if (!client) {
         throw new AppError(409, "ZALO_PERSONAL_DISCONNECTED", "Zalo personal session is not active");
       }

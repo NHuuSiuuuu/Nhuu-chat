@@ -61,7 +61,7 @@ describe("conversation realtime access", () => {
     expect(canJoinConversation(staff, { platform: "facebook", ownerId: "owner-2", channelId: "page-a" })).toBe(false);
     expect(conversationAccessFilter(staff)).toEqual({ $or: [
       { platform: "facebook", ownerId: "owner-1", channelId: "page-a" },
-      { platform: { $nin: ["facebook", "instagram", "zalo", "telegram"] }, ownerId: "staff-1" }
+      { platform: { $nin: ["facebook", "instagram", "zalo", "telegram", "zalo_personal", "telegram_personal"] }, ownerId: "staff-1" }
     ] });
   });
 
@@ -75,8 +75,27 @@ describe("conversation realtime access", () => {
     expect(canJoinConversation(staff, { platform: "zalo_personal", ownerId: "owner-1", channelId: "same-id" })).toBe(false);
     expect(conversationAccessFilter(staff)).toEqual({ $or: [
       { ownerId: "owner-1", platform: "telegram", channelId: "same-id" },
-      { platform: { $nin: ["facebook", "instagram", "zalo", "telegram"] }, ownerId: "staff-1" }
+      { platform: { $nin: ["facebook", "instagram", "zalo", "telegram", "zalo_personal", "telegram_personal"] }, ownerId: "staff-1" }
     ] });
+  });
+
+  it("allows assigned staff into only the Workspace owner's assigned personal account platform", () => {
+    const staff = { id: "staff-1", role: "customer", workspace: {
+      ownerUserId: "owner-1", allowedPages: [], allowedChannels: [{ platform: "telegram_personal", channelId: "owner-1" }]
+    } };
+    expect(canJoinConversation(staff, { platform: "telegram_personal", ownerId: "owner-1", channelId: "target-chat" })).toBe(true);
+    expect(canJoinConversation(staff, { platform: "zalo_personal", ownerId: "owner-1", channelId: "target-chat" })).toBe(false);
+    expect(canJoinConversation(staff, { platform: "telegram_personal", ownerId: "owner-2", channelId: "target-chat" })).toBe(false);
+    expect(conversationAccessFilter(staff)).toEqual({ $or: [
+      { ownerId: "owner-1", platform: "telegram_personal" },
+      { platform: { $nin: ["facebook", "instagram", "zalo", "telegram", "zalo_personal", "telegram_personal"] }, ownerId: "staff-1" }
+    ] });
+  });
+
+  it("treats an empty Workspace channel assignment as all owner channels, including personal accounts", () => {
+    const owner = { id: "owner-1", role: "customer", workspace: { ownerUserId: "owner-1", allowedChannels: [] } };
+    expect(canJoinConversation(owner, { platform: "zalo_personal", ownerId: "owner-1", channelId: "thread-1" })).toBe(true);
+    expect(canJoinConversation(owner, { platform: "telegram_personal", ownerId: "other-owner", channelId: "thread-1" })).toBe(false);
   });
 
   it("treats an empty Page list as all Workspace Facebook Pages without widening another Workspace", () => {

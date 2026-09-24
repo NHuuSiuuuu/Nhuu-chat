@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { AutomationTemplateImportRow } from "../lib/automation-template-import.js";
 import { getActiveWorkspaceId } from "../lib/api.js";
+import type { ConnectionProviderId } from "../state/dashboard-ui.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 const TAGS_API_PATH = "/api/v1/conversation-tags";
@@ -1009,10 +1010,24 @@ function SettingsDevelopmentPlaceholder({ title }: { title: string }) {
   return <div className="grid min-h-[520px] place-items-center p-6 text-center"><div><div className="mx-auto grid size-16 place-items-center rounded-full text-gray-900  text-3xl text-sky-500">⋯</div><h2 className="mt-5 text-2xl font-bold text-gray-900">{title}</h2><p className="mt-2 text-sm text-gray-500">Chức năng đang được phát triển</p></div></div>;
 }
 
-type WorkspaceChannelView = WorkspaceChannelRef & { name: string; avatarUrl?: string };
+type WorkspaceChannelView = WorkspaceChannelRef & { name: string; avatarUrl?: string; displayId?: string };
 type WorkspaceMemberView = { userId: string; email: string; name: string; role: "owner" | "admin" | "staff"; allowedPages: string[]; allowedChannels: WorkspaceChannelRef[] };
-const workspaceChannelLabels: Record<WorkspaceChannelPlatform, string> = { facebook: "Facebook", instagram: "Instagram", zalo: "Zalo", telegram: "Telegram" };
-const workspaceChannelPlatforms: WorkspaceChannelPlatform[] = ["facebook", "instagram", "zalo", "telegram"];
+const workspaceChannelLabels: Partial<Record<WorkspaceChannelPlatform, string>> = { facebook: "Facebook", instagram: "Instagram", zalo: "Zalo", telegram: "Telegram", zalo_personal: "Zalo cá nhân", telegram_personal: "Telegram cá nhân" };
+
+export function groupWorkspaceChannels(channels: WorkspaceChannelView[]): Record<string, WorkspaceChannelView[]> {
+  return channels.reduce<Record<string, WorkspaceChannelView[]>>((groups, channel) => {
+    (groups[channel.platform] ??= []).push(channel);
+    return groups;
+  }, {});
+}
+
+function workspaceChannelLabel(platform: WorkspaceChannelPlatform): string {
+  return workspaceChannelLabels[platform] ?? platform.replaceAll("_", " ");
+}
+
+function workspaceChannelIconProvider(platform: WorkspaceChannelPlatform): ConnectionProviderId {
+  return platform.replace(/_personal$/, "") as ConnectionProviderId;
+}
 
 function hasWorkspaceChannel(channels: readonly WorkspaceChannelRef[], target: WorkspaceChannelRef): boolean {
   return channels.some((channel) => channel.platform === target.platform && channel.channelId === target.channelId);
@@ -1023,14 +1038,13 @@ function WorkspaceChannelCheckboxGroups({ channels, selected, onToggle }: {
   selected: WorkspaceChannelRef[];
   onToggle: (channel: WorkspaceChannelRef, enabled: boolean) => void;
 }) {
-  return <div className="grid gap-4">{workspaceChannelPlatforms.map((platform) => {
-    const platformChannels = channels.filter((channel) => channel.platform === platform);
-    if (!platformChannels.length) return null;
+  return <div className="grid gap-4">{Object.entries(groupWorkspaceChannels(channels)).map(([platformKey, platformChannels]) => {
+    const platform = platformKey as WorkspaceChannelPlatform;
     return <fieldset className="grid gap-2" key={platform}>
-      <legend className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700"><PlatformIcon provider={platform} size={18} />{workspaceChannelLabels[platform]}</legend>
+      <legend className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700"><PlatformIcon provider={workspaceChannelIconProvider(platform)} size={18} />{workspaceChannelLabel(platform)}</legend>
       {platformChannels.map((channel) => <label key={`${channel.platform}:${channel.channelId}`} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
         <input className="cursor-pointer" type="checkbox" checked={hasWorkspaceChannel(selected, channel)} onChange={(event) => onToggle(channel, event.target.checked)} />
-        <span className="min-w-0 flex-1 truncate">{channel.name}</span><span className="truncate text-xs text-slate-400">{channel.channelId}</span>
+        <span className="min-w-0 flex-1 truncate">{channel.name}</span><span className="truncate text-xs text-slate-400">{channel.displayId ?? channel.channelId}</span>
       </label>)}
     </fieldset>;
   })}</div>;
@@ -1110,7 +1124,7 @@ function WorkspaceMembersPanel({ token, refresh }: { token: string; refresh?: ()
     {error && <p className="mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</p>}
     <div className="rounded-2xl bg-white p-5 shadow-sm">
       <div className="grid gap-3">{members.map((member) => <div key={member.userId} className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 py-3">
-        <div><p className="font-semibold text-slate-800">{member.name || member.email}</p><p className="text-sm text-slate-500">{member.email}{member.allowedChannels.length ? ` · ${member.allowedChannels.map((channel) => `${workspaceChannelLabels[channel.platform]}: ${channel.channelId}`).join(", ")}` : " · Tất cả kênh"}</p></div>
+        <div><p className="font-semibold text-slate-800">{member.name || member.email}</p><p className="text-sm text-slate-500">{member.email}{member.allowedChannels.length ? ` · ${member.allowedChannels.map((channel) => `${workspaceChannelLabel(channel.platform)}: ${channels.find((available) => available.platform === channel.platform && available.channelId === channel.channelId)?.displayId ?? channel.channelId}`).join(", ")}` : " · Tất cả kênh"}</p></div>
         <div className="flex items-center gap-2">
           <select aria-label={`Vai trò của ${member.email}`} disabled={!canManage || member.role === "owner" || busy} value={member.role} className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50" onChange={async (event) => {
             const nextRole = event.target.value as "admin" | "staff";

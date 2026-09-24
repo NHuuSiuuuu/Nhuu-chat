@@ -1,6 +1,6 @@
 import type { WorkspaceChannelPlatform, WorkspaceChannelRef } from "@nhuu-chat/contracts";
 
-export const workspaceChannelPlatforms: readonly WorkspaceChannelPlatform[] = ["facebook", "instagram", "zalo", "telegram"];
+export const workspaceChannelPlatforms: readonly WorkspaceChannelPlatform[] = ["facebook", "instagram", "zalo", "telegram", "zalo_personal", "telegram_personal"];
 
 type PermissionSource = {
   allowedChannels?: readonly { platform?: unknown; channelId?: unknown }[] | null;
@@ -25,7 +25,9 @@ export function effectiveAllowedChannels(source: PermissionSource): WorkspaceCha
 // Tạo scope theo owner Workspace; ID kênh luôn ghép với platform để tránh va chạm.
 export function workspaceChannelAccessFilter(ownerUserId: string, allowedChannels: readonly WorkspaceChannelRef[]): Record<string, unknown> {
   if (allowedChannels.length === 0) return { ownerId: ownerUserId, platform: { $in: workspaceChannelPlatforms } };
-  const channels = allowedChannels.map(({ platform, channelId }) => ({ ownerId: ownerUserId, platform, channelId }));
+  const channels = allowedChannels.map(({ platform, channelId }) => platform === "zalo_personal" || platform === "telegram_personal"
+    ? { ownerId: ownerUserId, platform }
+    : { ownerId: ownerUserId, platform, channelId });
   return channels.length === 1 ? channels[0]! : { $or: channels };
 }
 

@@ -271,6 +271,22 @@ describe("sendOutboundMessage", () => {
     expect(result.recipients).toEqual(["customer-1", ""]);
   });
 
+  it("delivers an assigned Workspace reply through the owner's Telegram personal session", async () => {
+    arrangeConversation(conversation({ platform: "telegram_personal", assignedAgentId: null }));
+    const personalClient = { getEntity: vi.fn().mockResolvedValue("peer-42"), sendMessage: dependencyMocks.personalSendMessage };
+    dependencyMocks.getActivePersonalClient.mockResolvedValue(personalClient);
+    dependencyMocks.personalSendMessage.mockResolvedValue({ id: 8124 });
+    arrangeStoredMessage();
+
+    await sendOutboundMessage({ conversationId: "conversation-1", content: "Workspace reply" }, {
+      id: "staff-1", email: "staff@example.com", role: "customer",
+      workspace: { ownerUserId: "customer-1", allowedChannels: [{ platform: "telegram_personal", channelId: "customer-1" }] }
+    });
+
+    expect(dependencyMocks.getActivePersonalClient).toHaveBeenCalledWith("customer-1");
+    expect(dependencyMocks.personalSendMessage).toHaveBeenCalledWith("peer-42", { message: "Workspace reply" });
+  });
+
   it("sends a Telegram personal attachment with a caption and persists its URL", async () => {
     arrangeConversation(conversation({ platform: "telegram_personal", assignedAgentId: null }));
     const personalClient = {
@@ -365,6 +381,24 @@ describe("sendOutboundMessage", () => {
       content: "Hello from Zalo support",
       deliveryStatus: "sent"
     });
+  });
+
+  it("delivers an assigned Workspace reply through the owner's Zalo personal session", async () => {
+    arrangeConversation(conversation({ platform: "zalo_personal", assignedAgentId: null, zaloAccountId: "zalo-account-1" }));
+    dependencyMocks.getActiveZaloPersonalClient.mockResolvedValue({
+      getAccountInfo: vi.fn().mockResolvedValue({ id: "zalo-account-1" }),
+      sendMessage: dependencyMocks.zaloPersonalSendMessage
+    });
+    dependencyMocks.zaloPersonalSendMessage.mockResolvedValue({ id: "zalo-message-1" });
+    arrangeStoredMessage();
+
+    await sendOutboundMessage({ conversationId: "conversation-1", content: "Workspace Zalo reply" }, {
+      id: "staff-1", email: "staff@example.com", role: "customer",
+      workspace: { ownerUserId: "customer-1", allowedChannels: [{ platform: "zalo_personal", channelId: "customer-1" }] }
+    });
+
+    expect(dependencyMocks.getActiveZaloPersonalClient).toHaveBeenCalledWith("customer-1");
+    expect(dependencyMocks.zaloPersonalSendMessage).toHaveBeenCalledWith("chat-42", "Workspace Zalo reply", "private");
   });
 
   it("rejects a Zalo conversation owned by a different logged-in account", async () => {
@@ -581,7 +615,7 @@ describe("sendOutboundMessage", () => {
     });
   });
 
-  it.each([agentAuth, { id: "admin-1", email: "admin@example.com", role: "admin" as const }])(
+  it.each([{ ...agentAuth, workspace: { ownerUserId: "other-owner", allowedChannels: [] } }, { id: "admin-1", email: "admin@example.com", role: "admin" as const }])(
     "denies a non-owner %j from using a Zalo personal connection", async (auth) => {
       arrangeConversation(conversation({ platform: "zalo_personal" }));
 
@@ -774,7 +808,7 @@ describe("sendOutboundMessage", () => {
   });
 
   it("denies conversation access before delivery or persistence", async () => {
-    arrangeConversation(conversation({ assignedAgentId: "agent-2" }));
+    arrangeConversation(conversation({ ownerId: "other-owner", assignedAgentId: "agent-2" }));
 
     await expect(sendOutboundMessage(
       { conversationId: "conversation-1", content: "Hello from support" },
@@ -821,7 +855,7 @@ describe("sendOutboundMessage", () => {
     "propagates %s failures without persistence", async (stage) => {
       arrangeConversation(conversation({
         platform: stage === "personal delivery" ? "telegram_personal" : "telegram",
-        ownerId: "agent-1"
+        ownerId: stage === "personal delivery" ? "agent-1" : "customer-1"
       }));
       const failure = new Error(`${stage} failed`);
       dependencyMocks.readProviderSecretByName.mockResolvedValue("test-token");
@@ -835,7 +869,9 @@ describe("sendOutboundMessage", () => {
       failingDependency.mockRejectedValue(failure);
 
       await expect(sendOutboundMessage(
-        { conversationId: "conversation-1", content: "Hello" }, agentAuth
+        { conversationId: "conversation-1", content: "Hello" }, stage === "personal delivery"
+          ? { id: "agent-1", email: "agent@example.com", role: "agent" }
+          : agentAuth
       )).rejects.toBe(failure);
 
       expect(dependencyMocks.createMessage).not.toHaveBeenCalled();
@@ -871,7 +907,7 @@ describe("sendOutboundMessage", () => {
     expect(dependencyMocks.createMessage).toHaveBeenCalledTimes(1);
   });
 
-  it.each([agentAuth, { id: "admin-1", email: "admin@example.com", role: "admin" as const }])(
+  it.each([{ ...agentAuth, workspace: { ownerUserId: "other-owner", allowedChannels: [] } }, { id: "admin-1", email: "admin@example.com", role: "admin" as const }])(
     "denies a non-owner %j from using a Telegram personal connection", async (auth) => {
     arrangeConversation(conversation({ platform: "telegram_personal" }));
 
