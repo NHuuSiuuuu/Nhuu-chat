@@ -195,6 +195,37 @@ export interface FacebookPageConnectionResponse {
   updatedAt: string;
 }
 
+export interface InstagramConnectionResponse {
+  id: string;
+  instagramUserId: string;
+  username: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  status: "connected" | "invalid" | "disconnected";
+  tokenExpiresAt: string | null;
+  subscribedAt: string | null;
+  lastValidatedAt: string | null;
+  lastErrorCode: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InstagramOAuthStartResponse {
+  authorizationUrl: string;
+}
+
+export interface InstagramOAuthCallbackResponse {
+  connection: InstagramConnectionResponse;
+}
+
+export interface InstagramConnectionListResponse {
+  connections: InstagramConnectionResponse[];
+}
+
+export interface InstagramDisconnectResponse {
+  disconnected: boolean;
+}
+
 export interface FacebookPostResponse {
   id: string;
   connectionId: string;

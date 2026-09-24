@@ -68,6 +68,23 @@ describe("domain idempotency indexes", () => {
     await expect(ConversationModel.create({ ...first, customerId: new mongoose.Types.ObjectId() })).rejects.toMatchObject({ code: 11000 });
   });
 
+  it("allows different Instagram customers on one account and rejects a duplicate DM", async () => {
+    const ownerId = new mongoose.Types.ObjectId();
+    const first = { platform: "instagram", channelId: "ig-account-1", ownerId, customerId: new mongoose.Types.ObjectId() };
+    await ConversationModel.create(first);
+    await ConversationModel.create({ ...first, customerId: new mongoose.Types.ObjectId() });
+    await expect(ConversationModel.create(first)).rejects.toMatchObject({ code: 11000 });
+    expect(await ConversationModel.countDocuments({ platform: "instagram", channelId: "ig-account-1" })).toBe(2);
+  });
+
+  it.each(["zalo", "telegram", "zalo_personal", "telegram_personal"])(
+    "retains %s uniqueness across customers", async (platform) => {
+      const first = { platform, channelId: "channel-1", ownerId: new mongoose.Types.ObjectId(), customerId: new mongoose.Types.ObjectId() };
+      await ConversationModel.create(first);
+      await expect(ConversationModel.create({ ...first, customerId: new mongoose.Types.ObjectId() })).rejects.toMatchObject({ code: 11000 });
+    }
+  );
+
   it("deduplicates Facebook message IDs within a Page namespace", async () => {
     const message = {
       conversationId: new mongoose.Types.ObjectId(), platform: "facebook",

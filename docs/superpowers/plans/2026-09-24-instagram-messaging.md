@@ -37,10 +37,10 @@
 - Replace the current combined non-Facebook unique conversation index with explicit partial indexes so Instagram uniqueness includes `customerId`, while Telegram/Zalo and personal-platform uniqueness retain existing semantics.
 - Migration inspects existing index definitions and duplicate Instagram tuples before changes; on conflicts it reports IDs and exits without dropping data. Safe rerun is required.
 
-- [ ] Add failing tests for token exclusion, account-ID global uniqueness, multiple DMs under one Instagram account, and unchanged Facebook/Zalo/Telegram uniqueness.
-- [ ] Run the model/migration focused tests and confirm they fail for the intended missing behavior.
-- [ ] Implement the model and migration with duplicate preflight and no destructive record rewrite.
-- [ ] Verify migration against an isolated Mongo fixture containing Facebook, non-Facebook, duplicate, and empty collections.
+- [x] Add failing tests for token exclusion, account-ID global uniqueness, multiple DMs under one Instagram account, and unchanged Facebook/Zalo/Telegram uniqueness.
+- [x] Run the model/migration focused tests and confirm they fail for the intended missing behavior.
+- [x] Implement the model and migration with duplicate preflight and no destructive record rewrite.
+- [x] Verify migration against an isolated Mongo fixture containing Facebook, non-Facebook, duplicate, and empty collections.
 
 ### Task 2: Isolated Instagram OAuth and connection lifecycle
 

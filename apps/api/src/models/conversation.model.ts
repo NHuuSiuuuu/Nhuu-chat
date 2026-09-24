@@ -41,7 +41,11 @@ conversationSchema.index(
 );
 conversationSchema.index(
   { platform: 1, channelId: 1, ownerId: 1 },
-  { name: "platform_1_channelId_1_ownerId_1_non_facebook", unique: true, partialFilterExpression: { platform: { $in: ["instagram", "zalo", "telegram", "telegram_personal", "zalo_personal"] } } }
+  { name: "platform_1_channelId_1_ownerId_1_other", unique: true, partialFilterExpression: { platform: { $in: ["zalo", "telegram", "telegram_personal", "zalo_personal"] } } }
+);
+conversationSchema.index(
+  { platform: 1, channelId: 1, ownerId: 1, customerId: 1 },
+  { name: "platform_1_channelId_1_ownerId_1_customerId_1_instagram", unique: true, partialFilterExpression: { platform: "instagram" } }
 );
 export const ConversationModel =
   mongoose.models.Conversation ?? model<Conversation>("Conversation", conversationSchema);
