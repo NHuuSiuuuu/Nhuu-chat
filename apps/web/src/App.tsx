@@ -22,6 +22,7 @@ import { LandingPage } from "./components/landing/LandingPage.js";
 import { AuthRoutePage } from "./components/auth/AuthRoutePage.js";
 import { authRouteFromPath, authenticatedAuthRedirect, type AuthRoute } from "./components/auth/auth-route.js";
 import { getActiveWorkspaceIdForUser, setActiveWorkspaceSelection, setActiveWorkspaceUser } from "./lib/api.js";
+import { WorkspacePickerProvider, type WorkspaceOption, type WorkspacePickerState } from "./components/dashboard/workspace-picker-context.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 const AUTH_REQUEST_TIMEOUT_MS = 8_000;
@@ -34,7 +35,6 @@ type AppPage = "landing" | "dashboard" | "telegram" | "inbox" | "settings" | "pr
 type RoutePage = AppPage | "posts" | AuthRoute;
 type InboxPlatform = "telegram_personal" | "zalo_personal" | `facebook:${string}` | undefined;
 type HeaderNavItem = "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt";
-type WorkspaceOption = { id: string; name: string; role: "owner" | "admin" | "staff" };
 const INBOX_PLATFORM_STORAGE_KEY = "nhuu-chat.inbox-platform";
 
 export function pageFromPath(pathname: string): RoutePage {
@@ -137,6 +137,8 @@ export function App() {
   const [sessionRetryCount, setSessionRetryCount] = useState(0);
   const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState("");
+  const [workspacesLoaded, setWorkspacesLoaded] = useState(false);
+  const [workspaceLoadFailed, setWorkspaceLoadFailed] = useState(false);
   const page = pageFromPath(location.pathname);
   const developmentSection = developmentSectionFromPath(location.pathname);
   const [inboxPlatform, setInboxPlatform] = useState<InboxPlatform>(() => inboxPlatformFromLocation(location.search));
@@ -247,8 +249,12 @@ export function App() {
     if (!authReady || !auth) {
       setWorkspaces([]);
       setActiveWorkspaceId("");
+      setWorkspacesLoaded(false);
+      setWorkspaceLoadFailed(false);
       return;
     }
+    setWorkspacesLoaded(false);
+    setWorkspaceLoadFailed(false);
     setActiveWorkspaceUser(auth.user.id);
     const savedWorkspaceId = getActiveWorkspaceIdForUser(auth.user.id);
     let cancelled = false;
@@ -257,14 +263,27 @@ export function App() {
       .then(({ workspaces: items }) => {
         if (cancelled) return;
         setWorkspaces(items);
+        setWorkspacesLoaded(true);
         const current = items.some((item) => item.id === savedWorkspaceId)
           ? savedWorkspaceId!
           : items.find((item) => item.role === "owner")?.id ?? items[0]?.id ?? "";
         setActiveWorkspaceId(current);
         if (current) setActiveWorkspaceSelection(auth.user.id, current);
-      }).catch(() => { if (!cancelled) setWorkspaces([]); });
+      }).catch(() => {
+        if (!cancelled) {
+          setWorkspaces([]);
+          setWorkspaceLoadFailed(true);
+          setWorkspacesLoaded(true);
+        }
+      });
     return () => { cancelled = true; };
   }, [authReady, auth]);
+  const selectWorkspace = useCallback((workspaceId: string) => {
+    if (!auth || workspaceId === activeWorkspaceId) return;
+    setActiveWorkspaceSelection(auth.user.id, workspaceId);
+    setActiveWorkspaceId(workspaceId);
+    window.location.reload();
+  }, [activeWorkspaceId, auth]);
   useEffect(() => {
     if (!authReady || !auth || !canAccessInbox(auth.user.role)) return;
     let settingsLoaded = false;
@@ -347,7 +366,13 @@ export function App() {
     privatePage = page === "dashboard" ? <DashboardPage {...topbarProps} token="" refresh={refresh} onOpenInbox={(platform) => navigate("inbox", platform)} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} settingsSubmenuItems={mobileSettingsItems} nestedSettingsSubmenuItems={{ "Giới thiệu": mobileAboutSections }} onSettingsSubmenuNavigate={navigateFromMobileSettings} onNestedSettingsSubmenuNavigate={navigateFromMobileAbout} /> : page === "telegram" ? <TelegramPersonalPage token="" refresh={refresh} onBack={() => navigate("dashboard")} /> : page === "settings" ? <SettingsPage {...topbarProps} token="" refresh={refresh} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "profile" ? <ProfilePage {...topbarProps} token="" onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "posts" ? <FacebookPublishingPage {...topbarProps} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : page === "development" ? <DevelopmentPage {...topbarProps} section={developmentSection} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} /> : <InboxPage {...topbarProps} token="" platform={inboxConversationPlatform} channelId={inboxChannelId} selectedConversationId={requestedConversation?.id} selectedConversationRequest={requestedConversation?.request} refresh={refresh} onBack={() => navigate("dashboard")} onLogoClick={() => navigate("dashboard")} onNavigate={navigateFromHeader} />;
   }
   return <>
-    {authReady && auth && workspaces.length > 1 && <div className="flex justify-end border-b border-slate-100 bg-white px-4 py-2"><label className="flex items-center gap-2 text-xs text-slate-600">Workspace<select aria-label="Workspace đang dùng" className="max-w-44 rounded-lg border border-slate-200 bg-white px-2 py-1.5 font-semibold text-slate-800 outline-none cursor-pointer" value={activeWorkspaceId} onChange={(event) => { const next = event.target.value; setActiveWorkspaceSelection(auth.user.id, next); setActiveWorkspaceId(next); window.location.reload(); }}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name} · {workspace.role}</option>)}</select></label></div>}
+    <WorkspacePickerProvider value={authReady && auth ? {
+      workspaces,
+      activeWorkspaceId,
+      loading: !workspacesLoaded,
+      error: workspaceLoadFailed,
+      onSelectWorkspace: selectWorkspace
+    } satisfies WorkspacePickerState : null}>
     <Suspense fallback={<PageSkeleton />}>
       <ApplicationRoutes
         isAuthenticated={Boolean(auth)}
@@ -358,6 +383,7 @@ export function App() {
         privatePage={privatePage}
       />
     </Suspense>
+    </WorkspacePickerProvider>
     <Toaster
       position="top-right"
       richColors

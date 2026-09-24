@@ -2,6 +2,7 @@ import * as React from "react";
 import { useState } from "react";
 import { dashboardNavItems } from "../../state/dashboard-ui.js";
 import { InboxIcon } from "../conversations/InboxIcon.js";
+import { useWorkspacePicker } from "./workspace-picker-context.js";
 
 export interface DashboardAccount {
   email: string;
@@ -28,6 +29,8 @@ const fallbackAccount: DashboardAccount = { email: "", role: "OWNER", username: 
 
 export function DashboardTopbar({ onLogoClick, onNavigate, user, onLogout, onProfile, settingsSubmenuItems, nestedSettingsSubmenuItems, activeSettingsSubmenuItem, onSettingsSubmenuNavigate, onNestedSettingsSubmenuNavigate }: DashboardTopbarProps = {}) {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
+  const [workspaceSearch, setWorkspaceSearch] = useState("");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobileSettingsOpen, setIsMobileSettingsOpen] = useState(false);
   const [isMobileNestedSettingsOpen, setIsMobileNestedSettingsOpen] = useState<string | null>(null);
@@ -36,9 +39,18 @@ export function DashboardTopbar({ onLogoClick, onNavigate, user, onLogout, onPro
   const accountName = isLoading ? "Đang tải..." : account.displayName ?? account.username ?? account.email.split("@")[0] ?? "Tài khoản";
   const accountInitial = accountName.slice(0, 1).toUpperCase();
   const role = account.role.toUpperCase();
+  const workspacePicker = useWorkspacePicker();
+  const activeWorkspace = workspacePicker?.workspaces.find((workspace) => workspace.id === workspacePicker.activeWorkspaceId);
+  const visibleWorkspaces = workspacePicker?.workspaces.filter((workspace) => `${workspace.name} ${workspace.role}`.toLowerCase().includes(workspaceSearch.trim().toLowerCase())) ?? [];
 
   function toggleAccountMenu() {
     if (!isLoading) setIsAccountMenuOpen((current) => !current);
+  }
+
+  function selectWorkspace(workspaceId: string) {
+    setIsWorkspaceMenuOpen(false);
+    setWorkspaceSearch("");
+    workspacePicker?.onSelectWorkspace(workspaceId);
   }
 
   function logout() {
@@ -82,9 +94,27 @@ export function DashboardTopbar({ onLogoClick, onNavigate, user, onLogout, onPro
     </div>
     <nav className="flex flex-1 items-center justify-center gap-[30px] max-[900px]:gap-4 max-[767px]:hidden" aria-label="Điều hướng chính">{dashboardNavItems.map((item) => <a className="whitespace-nowrap text-[15px] font-semibold text-white/90 no-underline cursor-pointer transition-opacity hover:opacity-80" href={item === "Hộp thư" ? "/inbox" : "#"} key={item} onClick={(event) => { event.preventDefault(); onNavigate?.(item); }}>{item}</a>)}</nav>
     <div className="relative flex min-w-[190px] items-center justify-end gap-2.5 max-[767px]:min-w-0 max-[767px]:ml-auto">
-      <div className="grid min-w-0 text-right text-sm"><span className="truncate">{accountName}</span><small className="mt-[3px] text-[9px] tracking-[.08em] text-white/60">{role}</small></div>
+      {workspacePicker && <div className="relative min-w-0">
+        <button className="flex max-w-48 items-center gap-1.5 rounded-lg border-0 bg-white/10 px-2.5 py-1.5 text-left text-white transition hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white max-[767px]:max-w-36 max-[767px]:px-2 cursor-pointer" type="button" aria-label="Chọn Workspace" aria-expanded={isWorkspaceMenuOpen} onClick={() => { setIsWorkspaceMenuOpen((current) => !current); setIsAccountMenuOpen(false); }}>
+          <span className="grid min-w-0"><span className="truncate text-xs font-semibold">{activeWorkspace?.name ?? (workspacePicker.loading ? "Đang tải Workspace" : "Chọn Workspace")}</span><small className="mt-0.5 text-[9px] text-white/70">{activeWorkspace ? ({ owner: "Chủ sở hữu", admin: "Quản trị viên", staff: "Nhân viên" } as const)[activeWorkspace.role] : "Workspace"}</small></span>
+          <InboxIcon name={isWorkspaceMenuOpen ? "chevron-up" : "chevron-down"} size={14} />
+        </button>
+        {isWorkspaceMenuOpen && <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-[min(20rem,calc(100vw-1rem))] overflow-hidden rounded-xl bg-white text-left text-gray-700 shadow-lg ring-1 ring-black/5">
+          <div className="border-b border-gray-100 p-3"><label className="sr-only" htmlFor="workspace-picker-search">Tìm Workspace</label><input id="workspace-picker-search" aria-label="Tìm Workspace" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" placeholder="Tìm Workspace" value={workspaceSearch} onChange={(event) => setWorkspaceSearch(event.target.value)} /></div>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] border-b border-gray-100 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400"><span>Tên Workspace</span><span>Quyền</span></div>
+          {workspacePicker.loading ? <p className="m-0 px-4 py-5 text-center text-sm text-slate-500" role="status">Đang tải Workspace...</p>
+            : workspacePicker.error ? <p className="m-0 px-4 py-5 text-center text-sm text-rose-600" role="alert">Không tải được danh sách Workspace.</p>
+              : visibleWorkspaces.length ? <div className="max-h-64 overflow-y-auto p-1.5" role="listbox" aria-label="Danh sách Workspace">{visibleWorkspaces.map((workspace) => {
+                const selected = workspace.id === workspacePicker.activeWorkspaceId;
+                const workspaceRole = ({ owner: "Chủ sở hữu", admin: "Quản trị viên", staff: "Nhân viên" } as const)[workspace.role];
+                return <button className={`grid w-full grid-cols-[minmax(0,1fr)_auto_16px] items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm ${selected ? "bg-blue-50 text-blue-800" : "text-slate-700 hover:bg-slate-50"} cursor-pointer`} key={workspace.id} type="button" role="option" aria-selected={selected} onClick={() => selectWorkspace(workspace.id)}><span className="truncate font-medium">{workspace.name}</span><span className="text-xs text-slate-500">{workspaceRole}</span><span className="text-blue-600" aria-hidden="true">{selected ? "✓" : ""}</span></button>;
+              })}</div>
+                : <p className="m-0 px-4 py-5 text-center text-sm text-slate-500">{workspacePicker.workspaces.length ? "Không tìm thấy Workspace." : "Tài khoản chưa thuộc Workspace nào."}</p>}
+        </div>}
+      </div>}
+      {!workspacePicker && <div className="grid min-w-0 text-right text-sm"><span className="truncate">{accountName}</span><small className="mt-[3px] text-[9px] tracking-[.08em] text-white/60">{role}</small></div>}
       <button className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-full border border-white/70 bg-white/20 text-sm font-bold text-white transition hover:bg-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white cursor-pointer" type="button" aria-label="Mở menu tài khoản" aria-expanded={isAccountMenuOpen} onClick={toggleAccountMenu}>{account.avatarUrl ? <img className="size-full object-cover" src={account.avatarUrl} alt={`Avatar ${accountName}`} /> : accountInitial}</button>
-      <span className="text-sm text-white/80" aria-hidden="true">⌄</span>
+      {!workspacePicker && <span className="text-sm text-white/80" aria-hidden="true">⌄</span>}
       {isAccountMenuOpen && <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-72 origin-top-right animate-[composer-dialog-in_180ms_ease-out] rounded-xl bg-white text-left text-gray-700 shadow-lg ring-1 ring-black/5">
         <div className="border-b border-gray-100 px-4 py-3"><p className="text-base font-bold text-gray-900">{account.displayName ?? account.username ?? accountName}</p><p className="mt-1 text-sm text-gray-500">{account.email}</p></div>
         <div className="p-1.5"><button className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition hover:bg-gray-50 cursor-pointer" type="button" onClick={openProfile}><InboxIcon name="users" size={18} /> Hồ sơ</button><button className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition hover:bg-gray-50 cursor-pointer" type="button" onClick={logout}><InboxIcon name="reply" size={18} /> Đăng xuất</button></div>

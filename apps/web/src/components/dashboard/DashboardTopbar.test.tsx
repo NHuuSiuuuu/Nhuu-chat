@@ -39,6 +39,17 @@ describe("DashboardTopbar", () => {
     expect(source).toContain("Đang tải...");
   });
 
+  it("shows the active Workspace picker with searchable role choices in the shared header", () => {
+    const source = readFileSync(new URL("./DashboardTopbar.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("useWorkspacePicker");
+    expect(source).toContain('aria-label="Chọn Workspace"');
+    expect(source).toContain('aria-label="Tìm Workspace"');
+    expect(source).toContain("Tên Workspace");
+    expect(source).toContain("Quyền");
+    expect(source).toContain("onSelectWorkspace");
+  });
+
   it("adds a mobile hamburger that opens a sliding navigation drawer", () => {
     const source = readFileSync(new URL("./DashboardTopbar.tsx", import.meta.url), "utf8");
 

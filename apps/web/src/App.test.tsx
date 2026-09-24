@@ -51,10 +51,11 @@ describe("App navigation", () => {
     expect(source).toContain("selectedConversationId={requestedConversation?.id}");
   });
 
-  it("loads the active Workspace and passes its id to realtime", () => {
+  it("loads the active Workspace, exposes its picker in the shared header, and passes its id to realtime", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
     expect(source).toContain('fetch(`${API_URL}/api/v1/workspaces`');
-    expect(source).toContain('aria-label="Workspace đang dùng"');
+    expect(source).toContain("WorkspacePickerProvider");
+    expect(source).not.toContain("workspaces.length > 1");
     expect(source).toContain("createChatSocket(API_URL, undefined, activeWorkspaceId || undefined)");
   });
 
