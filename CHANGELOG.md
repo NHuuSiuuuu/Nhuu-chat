@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Chỉ hiển thị tên tài khoản trong Header Landing, ẩn email khỏi nút tài khoản và menu mobile.
+
 - Thêm Cài đặt → Giao diện với Sáng/Tối/Theo thiết bị, màu nhấn, mật độ, cỡ chữ tin nhắn, xem trước và khôi phục mặc định theo tài khoản.
 - Sửa màu nền nhấn ở giao diện tối để các lựa chọn đang bật và bong bóng xem trước không còn sáng trắng.
 - Ẩn nút đăng xuất khỏi Landing Header trên mobile và thêm nút gradient ở cuối menu hamburger.

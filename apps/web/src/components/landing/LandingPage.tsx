@@ -76,13 +76,13 @@ export function LandingPage({ user, onDashboard, onLogin, onRegister, onLogout }
   const [profile, setProfile] = React.useState<{ email: string; displayName: string } | null>(null);
   const reducedMotion = useReducedMotion();
   React.useEffect(() => {
-    if (!user || user.displayName?.trim() || !mobileMenuOpen || profile?.email === user.email) return;
+    if (!user || user.displayName?.trim() || profile?.email === user.email) return;
     let active = true;
     void apiRequest<{ email?: string; displayName?: string; name?: string }>(API_URL, "/api/v1/me", "").then((currentUser) => {
       if (active) setProfile({ email: currentUser.email ?? user.email, displayName: currentUser.displayName?.trim() || currentUser.name?.trim() || "" });
     }).catch(() => undefined);
     return () => { active = false; };
-  }, [mobileMenuOpen, profile?.email, user?.email, user?.displayName]);
+  }, [profile?.email, user?.email, user?.displayName]);
   return <div id="top" className="min-h-screen overflow-x-hidden bg-white font-sans text-slate-900">
     <LandingHeader user={user ? { ...user, displayName: profile?.email === user.email ? profile.displayName : user.displayName } : null} landingLinks={LANDING_PAGE_LINKS} mobileMenuOpen={mobileMenuOpen} onMobileMenuToggle={() => setMobileMenuOpen(open => !open)} onDashboard={onDashboard} onLogin={onLogin} onRegister={onRegister} onLogout={onLogout} onMobileLinkClick={() => setMobileMenuOpen(false)} />
     <main>
