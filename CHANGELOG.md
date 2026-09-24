@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm kế hoạch ưu tiên kiểm thử nghiệp vụ, nghiệm thu connector và chuẩn bị hồ sơ bảo vệ đồ án.
+
 ## 2026-09-24
 
 - Chuẩn hóa shortcode like `/-strong` thành 👍, lưu ảnh Zalo inbound vào attachment và hiển thị ảnh trong Inbox.
