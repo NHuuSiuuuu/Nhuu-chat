@@ -102,4 +102,38 @@ describe("Instagram account lifecycle", () => {
     expect(history).toHaveBeenCalledTimes(1);
     expect(history).toHaveBeenCalledWith(expect.objectContaining({ actionType: "DISCONNECT_CHANNEL" }));
   });
+
+  it.each(["throws", "returns null"] as const)("retries local deletion after unsubscribe succeeds and deletion %s", async (failure) => {
+    const { service, rows, model, meta, history, input } = fixture();
+    await service.connect("owner-1", input);
+    history.mockClear();
+    if (failure === "throws") model.findOneAndDelete.mockRejectedValueOnce(new Error("database unavailable"));
+    else model.findOneAndDelete.mockResolvedValueOnce(null);
+
+    await expect(service.disconnect("owner-1", "1")).rejects.toMatchObject({ code: "INSTAGRAM_DISCONNECT_FAILED" });
+    expect(rows[0].lastErrorCode).toBe("INSTAGRAM_REMOVE_UNSUBSCRIBED");
+    expect(history).not.toHaveBeenCalled();
+    await expect(service.disconnect("owner-1", "1")).resolves.toEqual({ disconnected: true });
+    expect(meta.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(history).toHaveBeenCalledTimes(1);
+    await expect(service.disconnect("owner-1", "1")).resolves.toEqual({ disconnected: false });
+    expect(history).toHaveBeenCalledTimes(1);
+  });
+
+  it("recovers a stale pending unsubscribe after the database cannot record provider success", async () => {
+    const { service, rows, model, meta, history, input } = fixture();
+    await service.connect("owner-1", input);
+    history.mockClear();
+    const update = model.findOneAndUpdate.getMockImplementation();
+    if (!update) throw new Error("fixture update missing");
+    model.findOneAndUpdate.mockImplementationOnce(update).mockRejectedValueOnce(new Error("database unavailable"));
+
+    await expect(service.disconnect("owner-1", "1")).rejects.toMatchObject({ code: "INSTAGRAM_DISCONNECT_FAILED" });
+    expect(rows[0].lastErrorCode).toBe("INSTAGRAM_REMOVE_PENDING");
+    expect(history).not.toHaveBeenCalled();
+    rows[0].updatedAt = new Date(Date.now() - 60_000);
+    await expect(service.disconnect("owner-1", "1")).resolves.toEqual({ disconnected: true });
+    expect(meta.unsubscribe).toHaveBeenCalledTimes(2);
+    expect(history).toHaveBeenCalledTimes(1);
+  });
 });

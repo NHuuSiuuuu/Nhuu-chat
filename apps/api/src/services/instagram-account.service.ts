@@ -8,6 +8,8 @@ import { recordSettingHistorySafely } from "./setting-history.service.js";
 
 const SUBSCRIBE_PENDING = "INSTAGRAM_SUBSCRIBE_PENDING";
 const REMOVE_PENDING = "INSTAGRAM_REMOVE_PENDING";
+const REMOVE_UNSUBSCRIBED = "INSTAGRAM_REMOVE_UNSUBSCRIBED";
+const REMOVE_LEASE_MS = 30_000;
 
 interface RecordShape {
   _id: unknown;
@@ -177,24 +179,56 @@ export class InstagramAccountService {
   async disconnect(ownerUserId: string, connectionId: string): Promise<InstagramDisconnectResponse> {
     const existing = await this.model.findOne({ _id: connectionId, ownerUserId }).select("+encryptedAccessToken").lean();
     if (!existing) return { disconnected: false };
-    if (existing.lastErrorCode === REMOVE_PENDING || existing.lastErrorCode === SUBSCRIBE_PENDING) {
+    if (existing.lastErrorCode === SUBSCRIBE_PENDING) {
       throw new AppError(409, "INSTAGRAM_CONNECTION_BUSY", "Instagram connection is being updated");
     }
-    const removing = await this.model.findOneAndUpdate(
-      { _id: existing._id, ownerUserId, status: existing.status, lastErrorCode: existing.lastErrorCode ?? null },
-      { $set: { status: "invalid", lastErrorCode: REMOVE_PENDING } },
-      { returnDocument: "after" }
-    );
-    if (!removing) throw new AppError(409, "INSTAGRAM_CONNECTION_BUSY", "Instagram connection is being updated");
-    if (existing.subscribedAt && existing.encryptedAccessToken) {
-      try {
-        await this.meta.unsubscribe(existing.instagramUserId, this.decrypt(existing.encryptedAccessToken));
-      } catch {
-        await this.model.findOneAndUpdate({ _id: existing._id, ownerUserId, lastErrorCode: REMOVE_PENDING }, { $set: { lastErrorCode: "INSTAGRAM_UNSUBSCRIBE_FAILED" } }, { returnDocument: "after" }).catch(() => undefined);
-        throw new AppError(502, "INSTAGRAM_UNSUBSCRIBE_FAILED", "Instagram unsubscribe failed");
+    if (existing.lastErrorCode !== REMOVE_UNSUBSCRIBED) {
+      // Chờ lease cũ hết hạn trước khi thử lại một unsubscribe có kết quả chưa được ghi nhận.
+      if (existing.lastErrorCode === REMOVE_PENDING && existing.updatedAt.getTime() > Date.now() - REMOVE_LEASE_MS) {
+        throw new AppError(409, "INSTAGRAM_CONNECTION_BUSY", "Instagram connection is being updated");
       }
+      const filter: Record<string, unknown> = {
+        _id: existing._id, ownerUserId, status: existing.status, lastErrorCode: existing.lastErrorCode ?? null
+      };
+      if (existing.lastErrorCode === REMOVE_PENDING) filter.updatedAt = existing.updatedAt;
+      let removing: RecordShape | null;
+      try {
+        removing = await this.model.findOneAndUpdate(
+          filter,
+          { $set: { status: "invalid", lastErrorCode: REMOVE_PENDING } },
+          { returnDocument: "after" }
+        );
+      } catch {
+        throw new AppError(503, "INSTAGRAM_DISCONNECT_FAILED", "Instagram disconnection could not be saved");
+      }
+      if (!removing) throw new AppError(409, "INSTAGRAM_CONNECTION_BUSY", "Instagram connection is being updated");
+      if (existing.subscribedAt && existing.encryptedAccessToken) {
+        try {
+          await this.meta.unsubscribe(existing.instagramUserId, this.decrypt(existing.encryptedAccessToken));
+        } catch {
+          await this.model.findOneAndUpdate({ _id: existing._id, ownerUserId, lastErrorCode: REMOVE_PENDING }, { $set: { lastErrorCode: "INSTAGRAM_UNSUBSCRIBE_FAILED" } }, { returnDocument: "after" }).catch(() => undefined);
+          throw new AppError(502, "INSTAGRAM_UNSUBSCRIBE_FAILED", "Instagram unsubscribe failed");
+        }
+      }
+      // Ghi nhận kết quả Meta trước khi xóa để retry chỉ thực hiện thao tác cục bộ.
+      let recorded: RecordShape | null;
+      try {
+        recorded = await this.model.findOneAndUpdate(
+          { _id: existing._id, ownerUserId, lastErrorCode: REMOVE_PENDING },
+          { $set: { lastErrorCode: REMOVE_UNSUBSCRIBED } },
+          { returnDocument: "after" }
+        );
+      } catch {
+        recorded = null;
+      }
+      if (!recorded) throw new AppError(503, "INSTAGRAM_DISCONNECT_FAILED", "Instagram disconnection could not be saved");
     }
-    const deleted = await this.model.findOneAndDelete({ _id: existing._id, ownerUserId, lastErrorCode: REMOVE_PENDING });
+    let deleted: RecordShape | null;
+    try {
+      deleted = await this.model.findOneAndDelete({ _id: existing._id, ownerUserId, lastErrorCode: REMOVE_UNSUBSCRIBED });
+    } catch {
+      deleted = null;
+    }
     if (!deleted) throw new AppError(503, "INSTAGRAM_DISCONNECT_FAILED", "Instagram disconnection could not be saved");
     this.recordHistory({ userId: ownerUserId, actionType: "DISCONNECT_CHANNEL", actionTitle: "Ngắt kết nối Instagram", oldValue: historyMetadata(existing), newValue: {} });
     return { disconnected: true };

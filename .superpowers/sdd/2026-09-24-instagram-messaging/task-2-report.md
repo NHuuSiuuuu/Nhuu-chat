@@ -37,3 +37,10 @@
 - `refreshLongToken` and `InstagramAccountService.refresh` are implemented; scheduling refresh before expiry is a later integration concern. A failed unsubscribe leaves the connection for retry.
 - Root `tsc --noEmit --project tsconfig.base.json` reports errors in untouched realtime/outbound message tests and two Web tests. The initial run also caught a Task 2 test mock typing error, which was corrected. No unrelated test files were edited.
 - An initial `pnpm --filter api test -- ...` invocation unexpectedly launched the full API suite; it was interrupted. It had already shown an unrelated Workspace schema test failure. Subsequent commands used direct focused Vitest paths.
+
+## Reviewer fix: disconnect recovery
+
+- Finding: after Meta unsubscribe succeeded, a throwing or null local `findOneAndDelete` left `INSTAGRAM_REMOVE_PENDING`. Every later disconnect returned `INSTAGRAM_CONNECTION_BUSY`, so the credential and global account claim could remain indefinitely.
+- RED: `pnpm exec vitest run src/services/instagram-account.service.test.ts` produced 3 failures out of 11 tests. The throwing delete leaked `database unavailable`, the null delete retained `INSTAGRAM_REMOVE_PENDING`, and the simulated failed recovery write did not follow the intended retry path.
+- GREEN: the same command passed 11/11. The service now records `INSTAGRAM_REMOVE_UNSUBSCRIBED` after Meta success and before local deletion; a retry in that state only retries the local delete. History is written once, after successful deletion, and no subscription call occurs during recovery.
+- When the database cannot record Meta success, the row remains `INSTAGRAM_REMOVE_PENDING`. Its 30-second lease prevents concurrent retries, then a stale request retries unsubscribe and records the result. A repeated Meta unsubscribe may be needed because the external success could not be durably recorded; this still needs live Meta idempotency validation. The service never re-subscribes during disconnect recovery.
