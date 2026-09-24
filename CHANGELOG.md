@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Hoàn thiện trạng thái con trỏ của nút thoát thao tác hàng loạt trong Inbox và dùng phần tử tĩnh cho hội thoại xem trước giao diện.
 - Thêm kế hoạch ưu tiên kiểm thử nghiệp vụ, nghiệm thu connector và chuẩn bị hồ sơ bảo vệ đồ án.
 
 ## 2026-09-24

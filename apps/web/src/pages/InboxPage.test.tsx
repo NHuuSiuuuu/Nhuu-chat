@@ -120,7 +120,8 @@ describe("Inbox Tailwind migration", () => {
     expect(source).toContain('aria-label="Thanh điều hướng"');
     expect(list).toContain('${item.id === activeId ? "bg-blue-50" : "bg-white"}');
     expect(chat).toContain("rounded-2xl");
-    expect(chat).toContain("px-4 py-3 text-sm leading-6");
+    expect(chat).toContain("text-sm leading-6");
+    expect(chat).toContain("px-4 py-3");
     expect(chat).not.toContain("px-4 py-3 text-base leading-6");
     expect(list).not.toContain('bg-white px-3 py-3.5 text-left text-gray-800');
     expect(chat).not.toContain('rounded-lg bg-white px-3 py-2.5 ${message.senderType === "customer" ? "" : "bg-blue-100"}');

@@ -32,6 +32,13 @@ describe("AppearanceSettingsPanel", () => {
     expect(text(renderer.root)).toContain("Tin nhắn xem trước");
   });
 
+  it("renders the conversation preview as static content instead of an inactive button", async () => {
+    const { renderer } = await render();
+    const previewName = renderer.root.find((node) => node.type === "strong" && text(node.props.children) === "An Nguyễn");
+
+    expect(previewName.parent?.parent?.type).toBe("div");
+  });
+
   it("applies and saves a selection immediately and restores defaults", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(response(defaults));
     const { renderer } = await render(fetchMock);
