@@ -3,6 +3,19 @@ import { describe, expect, it } from "vitest";
 import * as settingsModule from "./SettingsPage";
 
 describe("Settings page", () => {
+  it("opens the workspace member form inside an accessible modal while preserving the permissions fields", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+    const panel = source.split("function WorkspaceMembersPanel(")[1]?.split("export function SettingsPage(")[0] ?? "";
+
+    expect(panel).toContain("const [isModalOpen, setIsModalOpen] = useState(false)");
+    expect(panel).toContain("setError(\"\"); setIsModalOpen(true)");
+    expect(panel).toContain('role="dialog"');
+    expect(panel).toContain('aria-modal="true"');
+    expect(panel).toContain("setIsModalOpen(false)");
+    expect(panel).toContain("allowedPages: role === \"staff\" ? allowedPages : []");
+    expect(panel).toContain("Page được phép truy cập");
+  });
+
   it("colors AI settings switches blue when enabled and gray when disabled", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
     const toggle = source.split("function AiToggle(")[1]?.split("function AiSelect(")[0] ?? "";

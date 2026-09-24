@@ -5,6 +5,7 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Chuyển form thêm nhân viên trong Cài đặt → Thành viên thành modal responsive, giữ nguyên phân quyền Page và trạng thái lỗi khi thêm thất bại.
 - Khôi phục hội thoại và trạng thái sidebar mobile qua URL/sessionStorage; đổi Workspace không còn tải lại toàn trang và tự dọn state/socket cũ.
 - Sửa luồng chatbot để dùng câu dự phòng an toàn khi provider yêu cầu bàn giao hoặc trả nội dung rỗng, bỏ gọi AI khi khách chủ động yêu cầu nhân viên; đồng bộ kiểu media Cloudinary, môi trường test MongoDB/env và các kiểu TypeScript, đồng thời sửa cursor disabled và bật nút đóng thông báo.
 - Thêm Workspace owner/admin/staff, quản lý thành viên và giới hạn quyền Inbox Facebook theo Page; hỗ trợ kết nối nhiều Facebook Page, chọn Page để đăng bài và migration có dry-run riêng cho dữ liệu Workspace cùng index Page.
