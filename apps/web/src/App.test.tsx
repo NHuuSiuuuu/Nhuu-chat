@@ -58,6 +58,19 @@ describe("App navigation", () => {
     expect(source).toContain("selectedConversationId={requestedConversation?.id}");
   });
 
+  it("plays the saved notification sound from the global incoming-message listener", () => {
+    const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("playNotificationSound(notificationSettings.notificationSound)");
+    expect(source).toContain("notificationSettings.notificationSound !== \"off\"");
+    expect(source).toContain('document.addEventListener("pointerdown", unlockAudio');
+    expect(source).toContain('document.addEventListener("keydown", unlockAudio');
+    expect(source).toContain("window.addEventListener(GENERAL_SETTINGS_UPDATED_EVENT, handleSettingsUpdated)");
+    expect(source.indexOf("playNotificationSound(notificationSettings.notificationSound)")).toBeLessThan(
+      source.indexOf('if (location.pathname === "/inbox" && activeConversationId === message.conversationId) return')
+    );
+  });
+
   it("loads the active Workspace, exposes its picker in the shared header, and passes its id to realtime", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
     expect(source).toContain('fetch(`${API_URL}/api/v1/workspaces`');

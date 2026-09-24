@@ -3,7 +3,12 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from "rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { GeneralSettingsContract } from "@nhuu-chat/contracts";
+import { playNotificationSound } from "../../state/notification-sound.js";
 import { GeneralSettingsPanel } from "./GeneralSettingsPanel.js";
+
+vi.mock("../../state/notification-sound.js", () => ({
+  playNotificationSound: vi.fn().mockResolvedValue(true)
+}));
 
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -74,6 +79,29 @@ describe("GeneralSettingsPanel", () => {
     expect(findControl(loaded.renderer.root, "Âm thanh thông báo")).toBeTruthy();
     expect(findControl(loaded.renderer.root, "Đẩy hội thoại chưa đọc lên đầu danh sách")).toBeTruthy();
     expect(findControl(loaded.renderer.root, "Chuyển sang hội thoại chưa đọc kế tiếp")).toBeTruthy();
+  });
+
+  it("plays a user-triggered preview of the selected notification sound", async () => {
+    const { renderer } = await renderLoaded();
+
+    await act(async () => {
+      findControl(renderer.root, "Thử âm thanh thông báo").props.onClick();
+      await Promise.resolve();
+    });
+
+    expect(playNotificationSound).toHaveBeenCalledWith("default");
+  });
+
+  it("explains when the browser cannot start the notification sound preview", async () => {
+    vi.mocked(playNotificationSound).mockResolvedValueOnce(false);
+    const { renderer } = await renderLoaded();
+
+    await act(async () => {
+      findControl(renderer.root, "Thử âm thanh thông báo").props.onClick();
+      await Promise.resolve();
+    });
+
+    expect(textContent(renderer.root)).toContain("Trình duyệt chưa phát được âm thanh");
   });
 
   it("optimistically patches one setting and keeps the server response", async () => {

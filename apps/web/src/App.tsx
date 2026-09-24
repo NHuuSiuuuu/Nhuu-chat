@@ -2,7 +2,7 @@ import * as React from "react";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { toast, Toaster } from "sonner";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { chatEvents, type ChatMessageContract } from "@nhuu-chat/contracts";
+import { chatEvents, type ChatMessageContract, type GeneralSettingsContract } from "@nhuu-chat/contracts";
 import { createChatSocket } from "./lib/socket.js";
 import { loadGeneralSettings } from "./components/settings/general-settings.js";
 import { InboxPage } from "./pages/InboxPage.js";
@@ -23,6 +23,8 @@ import { AuthRoutePage } from "./components/auth/AuthRoutePage.js";
 import { authRouteFromPath, authenticatedAuthRedirect, type AuthRoute } from "./components/auth/auth-route.js";
 import { getActiveWorkspaceIdForUser, setActiveWorkspaceSelection, setActiveWorkspaceUser } from "./lib/api.js";
 import { WorkspacePickerProvider, type WorkspaceOption, type WorkspacePickerState } from "./components/dashboard/workspace-picker-context.js";
+import { playNotificationSound, unlockNotificationSound } from "./state/notification-sound.js";
+import { GENERAL_SETTINGS_UPDATED_EVENT } from "./state/general-settings.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 const AUTH_REQUEST_TIMEOUT_MS = 8_000;
@@ -149,6 +151,15 @@ export function App() {
   });
   const incomingNavigationRequestRef = useRef(0);
   const [showIntro, setShowIntro] = useState(true);
+  useEffect(() => {
+    const unlockAudio = () => { void unlockNotificationSound(); };
+    document.addEventListener("pointerdown", unlockAudio, { once: true, passive: true });
+    document.addEventListener("keydown", unlockAudio, { once: true });
+    return () => {
+      document.removeEventListener("pointerdown", unlockAudio);
+      document.removeEventListener("keydown", unlockAudio);
+    };
+  }, []);
   const [introDependenciesReady, setIntroDependenciesReady] = useState(false);
   const introReady = introDependenciesReady && authReady;
   const navigate = useCallback((nextPage: RoutePage, platform?: InboxPlatform, nextDevelopmentSection?: DevelopmentSection) => {
@@ -291,14 +302,18 @@ export function App() {
   }, [activeWorkspaceId, auth, location.pathname, routerNavigate]);
   useEffect(() => {
     if (!authReady || !auth || !canAccessInbox(auth.user.role)) return;
-    let settingsLoaded = false;
-    let notificationsEnabled = false;
+    let notificationSettings: GeneralSettingsContract | null = null;
     const seenMessageIds = new Set<string>();
     const socket = createChatSocket(API_URL, undefined, activeWorkspaceId || undefined);
+    const handleSettingsUpdated = (event: Event) => {
+      const updatedSettings = (event as CustomEvent<GeneralSettingsContract>).detail;
+      if (updatedSettings) notificationSettings = updatedSettings;
+    };
     const handleIncomingMessage = (message: ChatMessageContract) => {
-      if (message.senderType !== "customer" || !settingsLoaded || !notificationsEnabled || seenMessageIds.has(message.id)) return;
+      if (message.senderType !== "customer" || !notificationSettings?.browserNotificationsEnabled || seenMessageIds.has(message.id)) return;
       seenMessageIds.add(message.id);
       if (seenMessageIds.size > 100) seenMessageIds.delete(seenMessageIds.values().next().value as string);
+      if (notificationSettings.notificationSound !== "off") void playNotificationSound(notificationSettings.notificationSound);
       const activeConversationId = (globalThis as typeof globalThis & { __nhuuChatConversationContext?: { id: string | null } }).__nhuuChatConversationContext?.id;
       if (location.pathname === "/inbox" && activeConversationId === message.conversationId) return;
       const senderName = message.senderName?.trim() || "Khách hàng";
@@ -308,12 +323,13 @@ export function App() {
         <span className="min-w-0 flex-1"><strong className="block truncate text-sm">{senderName}</strong><span className="mt-1 block truncate text-xs text-slate-600">{preview}</span></span>
       </button>, { id: `incoming-${message.id}`, duration: 5000 });
     };
+    window.addEventListener(GENERAL_SETTINGS_UPDATED_EVENT, handleSettingsUpdated);
     socket.on(chatEvents.incomingMessage, handleIncomingMessage);
     void loadGeneralSettings({ apiUrl: API_URL, token: "cookie-session", refresh }).then((settings) => {
-      settingsLoaded = true;
-      notificationsEnabled = settings.browserNotificationsEnabled;
+      notificationSettings = settings;
     }).catch(() => undefined);
     return () => {
+      window.removeEventListener(GENERAL_SETTINGS_UPDATED_EVENT, handleSettingsUpdated);
       socket.off(chatEvents.incomingMessage, handleIncomingMessage);
       socket.disconnect();
     };

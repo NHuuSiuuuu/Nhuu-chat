@@ -1,4 +1,13 @@
 import type { NotificationSound } from "@nhuu-chat/contracts";
+import type { GeneralSettingsContract } from "@nhuu-chat/contracts";
+
+export const GENERAL_SETTINGS_UPDATED_EVENT = "nhuu-chat:general-settings-updated";
+
+export function publishGeneralSettingsUpdate(settings: GeneralSettingsContract): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(GENERAL_SETTINGS_UPDATED_EVENT, { detail: settings }));
+  }
+}
 
 export type InboxMessageSender = "customer" | "agent" | "bot";
 

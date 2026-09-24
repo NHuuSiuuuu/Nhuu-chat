@@ -363,13 +363,13 @@ describe("Inbox Tailwind migration", () => {
     expect(source).toContain('"nhuu-chat.inbox-list-open"');
   });
 
-  it("applies per-account general settings to inbox notifications and unread navigation", () => {
+  it("applies per-account notification and unread-navigation settings without a second sound path", () => {
     const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("loadGeneralSettings({ apiUrl: API_URL, token, refresh })");
     expect(source).toContain("hasCurrentGeneralSettings && shouldNotifyForIncomingMessage(generalSettings, message.senderType)");
     expect(source).toContain("new Notification(senderName");
-    expect(source).toContain("playIncomingNotificationSound(generalSettings.notificationSound)");
+    expect(source).not.toContain("playIncomingNotificationSound");
     expect(source).toContain("orderConversationsByUnread(conversations, hasCurrentGeneralSettings && generalSettings.moveUnreadConversationsToTop)");
     expect(source).toContain("generalSettings.openNextUnreadConversation");
     expect(source).toContain("getNextUnreadConversationId(unreadOrdered, activeId)");

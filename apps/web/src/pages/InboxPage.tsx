@@ -13,7 +13,7 @@ import type { ComposerSendPayload } from "../components/conversations/MessageCom
 import { appendUniqueMessage, mergeMessages, upsertConversation } from "../state/inbox-realtime.js";
 import { applyPinnedMessagesEvent, createPinnedMessagesRequestGuard, findPinnedMessage, getPinnedMessagesForConversation, replacePinnedMessages, type ConversationPinnedMessagesState } from "../state/inbox-pins.js";
 import { clampConversationListWidth, CONVERSATION_LIST_MAX_WIDTH, CONVERSATION_LIST_MIN_WIDTH, markConversationRead } from "../state/inbox-ui.js";
-import { getNextUnreadConversationId, getNotificationSoundTones, orderConversationsByUnread, shouldNotifyForIncomingMessage } from "../state/general-settings.js";
+import { getNextUnreadConversationId, orderConversationsByUnread, shouldNotifyForIncomingMessage } from "../state/general-settings.js";
 import { loadGeneralSettings } from "../components/settings/general-settings.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
 import { ConversationAvatar } from "../components/conversations/ConversationAvatar.js";
@@ -34,31 +34,6 @@ const AI_SETTINGS_API_URL = "/api/v1/ai-settings";
 const QUICK_REPLIES_API_URL = "/api/v1/quick-replies";
 const DEFAULT_GENERAL_SETTINGS: GeneralSettingsContract = { browserNotificationsEnabled: true, notificationSound: "default", moveUnreadConversationsToTop: true, openNextUnreadConversation: false };
 const DEFAULT_AI_SETTINGS: AiSettingsContract = { modelTier: "smart", enabled: true, suggestionsEnabled: true, sentimentEnabled: true, suggestionMode: "on_open", sentimentWindow: 3 };
-
-function playIncomingNotificationSound(sound: GeneralSettingsContract["notificationSound"]): void {
-  const tones = getNotificationSoundTones(sound);
-  if (!tones || typeof AudioContext === "undefined") return;
-  try {
-    const context = new AudioContext();
-    let startAt = context.currentTime;
-    for (const tone of tones) {
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      oscillator.frequency.value = tone.frequency;
-      gain.gain.setValueAtTime(0.0001, startAt);
-      gain.gain.exponentialRampToValueAtTime(0.12, startAt + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + tone.durationMs / 1000);
-      oscillator.connect(gain);
-      gain.connect(context.destination);
-      oscillator.start(startAt);
-      oscillator.stop(startAt + tone.durationMs / 1000);
-      startAt += tone.durationMs / 1000 + 0.07;
-    }
-    window.setTimeout(() => { void context.close().catch(() => undefined); }, Math.max(250, (startAt - context.currentTime) * 1000));
-  } catch {
-    // Autoplay restrictions must not interfere with realtime message handling.
-  }
-}
 
 function platformIconProvider(platform: ChatMessageContract["platform"]): ConnectionProviderId {
   return platform === "telegram_personal" ? "telegram" : platform === "zalo_personal" ? "zalo" : platform;
@@ -412,7 +387,6 @@ export function InboxPage({ token, refresh, platform, channelId, selectedConvers
         notifiedMessageIdsRef.current = [...notifiedMessageIdsRef.current, message.id].slice(-100);
         const conversation = conversationsRef.current.find((item) => item.id === message.conversationId);
         const senderName = message.senderName?.trim() || conversation?.customerName?.trim() || "Khách hàng";
-        if (generalSettings.notificationSound !== "off") playIncomingNotificationSound(generalSettings.notificationSound);
         if (typeof Notification !== "undefined" && Notification.permission === "granted") {
           try { new Notification(senderName, { body: message.content || "Đã gửi một tin nhắn mới" }); } catch { /* Browser notification is best effort. */ }
         }

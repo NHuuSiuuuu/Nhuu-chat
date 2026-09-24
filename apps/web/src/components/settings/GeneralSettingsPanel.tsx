@@ -5,6 +5,8 @@ import { toast } from "sonner";
 
 import { InboxIcon } from "../conversations/InboxIcon.js";
 import { loadGeneralSettings, patchGeneralSettings } from "./general-settings.js";
+import { playNotificationSound } from "../../state/notification-sound.js";
+import { publishGeneralSettingsUpdate } from "../../state/general-settings.js";
 const DEFAULT_SETTINGS: GeneralSettingsContract = {
   browserNotificationsEnabled: true,
   notificationSound: "default",
@@ -54,11 +56,13 @@ export function GeneralSettingsPanel({ apiUrl, token, refresh }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [notificationWarning, setNotificationWarning] = useState<string | null>(null);
+  const [soundWarning, setSoundWarning] = useState<string | null>(null);
 
   function updateLocalSettings(update: (current: GeneralSettingsContract) => GeneralSettingsContract) {
     const next = update(settingsRef.current);
     settingsRef.current = next;
     setSettings(next);
+    publishGeneralSettingsUpdate(next);
   }
 
   useEffect(() => {
@@ -122,6 +126,11 @@ export function GeneralSettingsPanel({ apiUrl, token, refresh }: Props) {
     await savePromise;
   }
 
+  async function previewNotificationSound() {
+    const played = await playNotificationSound(settingsRef.current.notificationSound);
+    setSoundWarning(played ? null : "Trình duyệt chưa phát được âm thanh. Hãy thử lại và kiểm tra âm lượng thiết bị.");
+  }
+
   if (isLoading) return <div className="grid min-h-[420px] place-items-center p-6 text-sm text-gray-500" role="status">Đang tải cài đặt chung...</div>;
 
   return <div className="min-w-0 p-5 sm:p-8">
@@ -135,12 +144,16 @@ export function GeneralSettingsPanel({ apiUrl, token, refresh }: Props) {
           <SettingToggle label="Thông báo khi có tin nhắn hoặc bình luận mới" checked={settings.browserNotificationsEnabled} onChange={(checked) => void changeBrowserNotifications(checked)} />
         </div>
         {notificationWarning && <p className="mt-2 text-sm text-amber-700" role="status">{notificationWarning}</p>}
-        <label className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 py-3 text-sm text-gray-700">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 py-3 text-sm text-gray-700">
           <span>Phát âm thanh khi có hội thoại mới</span>
-          <select aria-label="Âm thanh thông báo" className="min-w-32 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" value={settings.notificationSound} onChange={(event) => void changeSetting("notificationSound", event.target.value as NotificationSound)}>
-            {soundOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </label>
+          <span className="flex items-center gap-2">
+            <select aria-label="Âm thanh thông báo" className="min-w-32 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" value={settings.notificationSound} onChange={(event) => void changeSetting("notificationSound", event.target.value as NotificationSound)}>
+              {soundOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <button aria-label="Thử âm thanh thông báo" className="cursor-pointer rounded-lg px-3 py-2 font-medium text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50" disabled={settings.notificationSound === "off"} onClick={() => { void previewNotificationSound(); }} type="button">Thử âm thanh</button>
+          </span>
+        </div>
+        {soundWarning && <p className="mt-2 text-sm text-amber-700" role="status">{soundWarning}</p>}
       </SettingRow>
       <div className="border-t border-gray-100">
         <SettingRow icon="user" title="Hội thoại" description="Đẩy những hội thoại chưa đọc lên đầu danh sách hội thoại">
