@@ -1041,7 +1041,7 @@ function WorkspaceChannelCheckboxGroups({ channels, selected, onToggle }: {
   return <div className="grid gap-4">{Object.entries(groupWorkspaceChannels(channels)).map(([platformKey, platformChannels]) => {
     const platform = platformKey as WorkspaceChannelPlatform;
     return <fieldset className="grid gap-2" key={platform}>
-      <legend className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700"><PlatformIcon provider={workspaceChannelIconProvider(platform)} size={18} />{workspaceChannelLabel(platform)}</legend>
+      <legend className="mb-1 flex w-full min-w-0 items-center gap-2 text-sm font-semibold text-slate-700"><PlatformIcon provider={workspaceChannelIconProvider(platform)} size={18} /><span className="min-w-0 break-words">{workspaceChannelLabel(platform)}</span></legend>
       {platformChannels.map((channel) => <label key={`${channel.platform}:${channel.channelId}`} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
         <input className="cursor-pointer" type="checkbox" checked={hasWorkspaceChannel(selected, channel)} onChange={(event) => onToggle(channel, event.target.checked)} />
         <span className="min-w-0 flex-1 truncate">{channel.name}</span><span className="max-w-[40%] shrink truncate text-right text-xs text-slate-400">{channel.displayId ?? channel.channelId}</span>
@@ -1152,7 +1152,7 @@ function WorkspaceMembersPanel({ token, refresh }: { token: string; refresh?: ()
             finally { setBusy(false); }
           }}>Xóa</button>}
         </div>
-        {canManage && member.role === "staff" && channels.length > 0 && <fieldset className="grid w-full gap-2 rounded-lg bg-slate-50 p-3 sm:rounded-none sm:bg-transparent sm:p-0 sm:pl-2"><legend className="mb-2 text-xs font-medium text-slate-600">Kênh được phép truy cập</legend>{renderChannelChoices(member.allowedChannels, (channel, enabled) => {
+        {canManage && member.role === "staff" && channels.length > 0 && <fieldset className="grid w-full min-w-0 gap-2 rounded-lg bg-slate-50 p-3 sm:rounded-none sm:bg-transparent sm:p-0 sm:pl-2"><legend className="mb-2 w-full min-w-0 text-xs font-medium text-slate-600">Kênh được phép truy cập</legend>{renderChannelChoices(member.allowedChannels, (channel, enabled) => {
           const next = enabled ? [...member.allowedChannels, channel] : member.allowedChannels.filter((current) => current.platform !== channel.platform || current.channelId !== channel.channelId);
           void updateMemberChannels(member, next);
         })}</fieldset>}
