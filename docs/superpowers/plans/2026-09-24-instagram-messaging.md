@@ -101,9 +101,9 @@
 - Persist provider message ID and delivery/error state using existing message flow; apply bounded retry only to safe transient errors.
 - Enforce Meta's standard 24-hour response window and 1,000 UTF-8-byte text maximum (subject to revalidation); represent policy window, permission, recipient and token errors with stable domain error codes; do not retry permanent/policy failures.
 
-- [ ] Add failing tests for valid Instagram text send, cross-account recipient denial, unauthorized staff, missing/expired credential, Meta policy error, and bounded transient retry.
-- [ ] Run focused message service/client tests and confirm expected failures.
-- [ ] Implement server-side account lookup/decryption, authorization guard, Meta request, and delivery/error mapping.
+- [x] Add failing tests for valid Instagram text send, cross-account recipient denial, unauthorized staff, missing/expired credential, Meta policy error, and bounded transient retry.
+- [x] Run focused message service/client tests and confirm expected failures.
+- [x] Implement server-side account lookup/decryption, authorization guard, Meta request, and delivery/error mapping.
 - [ ] Confirm send window, text byte limit, and error semantics against current official Meta docs and API responses.
 
 ### Task 5: Workspace channel directory, realtime access, and activity history

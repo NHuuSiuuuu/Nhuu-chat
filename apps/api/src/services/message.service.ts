@@ -2,12 +2,14 @@ import { CustomFile } from "telegram/client/uploads.js";
 import type { EntityLike } from "telegram/define.js";
 import { TelegramClient } from "../channels/telegram/telegram.client.js";
 import { facebookMessengerClient } from "../channels/facebook-messenger/facebook-messenger.client.js";
+import { instagramClient } from "../channels/instagram/instagram.client.js";
 import { AppError } from "../common/errors.js";
 import { decryptSecret } from "../common/crypto.js";
 import { describeExternalError } from "../common/external-error.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { MessageModel } from "../models/message.model.js";
 import { FacebookPageConnectionModel } from "../models/facebook-page-connection.model.js";
+import { InstagramAccountConnectionModel } from "../models/instagram-account-connection.model.js";
 import { pauseBot } from "../orchestration/bot-pause.service.js";
 import { canJoinConversation } from "../realtime/access.js";
 import type { WorkspaceChannelRef } from "@nhuu-chat/contracts";
@@ -35,7 +37,7 @@ export type UploadedOutboundFile = {
 };
 
 type MessageAuth = AuthUser & {
-  workspace?: { ownerUserId: string; allowedPages?: string[] | null; allowedChannels?: WorkspaceChannelRef[] };
+  workspace?: { ownerUserId: string; role?: string; allowedPages?: readonly string[] | null; allowedChannels?: WorkspaceChannelRef[] };
 };
 
 type PersistedAttachment = {
@@ -99,10 +101,11 @@ export function toMessage(row: any) {
   };
 }
 
-export async function createOutboundMessage(input: { conversationId: string; platform: string; senderId: string; content: string; externalMessageId?: string; clientMessageId?: string; deliveryStatus: "pending" | "sent" | "failed"; type?: "text" | "image" | "file"; attachments?: PersistedAttachment[] }) {
+export async function createOutboundMessage(input: { conversationId: string; platform: string; senderId: string; content: string; externalMessageId?: string; clientMessageId?: string; errorCode?: string; deliveryStatus: "pending" | "sent" | "failed"; type?: "text" | "image" | "file"; attachments?: PersistedAttachment[] }) {
   if (!input.content.trim() && !input.attachments?.length) throw new AppError(400, "INVALID_REQUEST", "content or attachment is required");
-  const { clientMessageId, ...messageInput } = input;
-  return MessageModel.create({ ...messageInput, ...(clientMessageId ? { metadata: { clientMessageId } } : {}), senderType: "agent", type: input.type ?? "text" });
+  const { clientMessageId, errorCode, ...messageInput } = input;
+  const metadata = { ...(clientMessageId ? { clientMessageId } : {}), ...(errorCode ? { errorCode } : {}) };
+  return MessageModel.create({ ...messageInput, ...(Object.keys(metadata).length ? { metadata } : {}), senderType: "agent", type: input.type ?? "text" });
 }
 
 // Listener Zalo có thể lưu event tự phản hồi trước outbound flow; duplicate khi đó vẫn chứng minh tin đã được lưu.
@@ -146,8 +149,43 @@ export async function sendOutboundMessage(
       conversation.platform === "telegram_personal" ? "You do not own this Telegram connection" : "You do not own this Zalo connection"
     );
   }
-  if (!canJoinConversation(auth, conversation)) {
+  // The access helper only reads these Workspace grant arrays; auth state may expose readonly DTO arrays.
+  if (!canJoinConversation(auth as unknown as Parameters<typeof canJoinConversation>[0], conversation)) {
     throw new AppError(403, "FORBIDDEN", "You do not have access to this conversation");
+  }
+  let instagramRecipientId: string | undefined;
+  let instagramAccessToken: string | undefined;
+  if (conversation.platform === "instagram") {
+    const workspace = auth.workspace;
+    if (!workspace || String(conversation.ownerId) !== workspace.ownerUserId) {
+      throw new AppError(403, "FORBIDDEN", "You do not have access to this Instagram channel");
+    }
+    if (workspace.role === "staff" && !workspace.allowedChannels?.some((channel) => channel.platform === "instagram" && channel.channelId === conversation.channelId)) {
+      throw new AppError(403, "FORBIDDEN", "You do not have access to this Instagram channel");
+    }
+    if (input.attachment) throw new AppError(400, "UNSUPPORTED_ATTACHMENT_CHANNEL", "Instagram replies currently support text only");
+    if (Buffer.byteLength(content, "utf8") > 1000) throw new AppError(400, "INSTAGRAM_TEXT_TOO_LONG", "Instagram text must be 1000 UTF-8 bytes or fewer");
+    instagramRecipientId = getInstagramCustomerPlatformId(conversation.customerId, conversation.channelId);
+    if (!instagramRecipientId) throw new AppError(409, "INSTAGRAM_RECIPIENT_ACCOUNT_MISMATCH", "Instagram recipient does not belong to this account");
+    const latestInbound = await MessageModel.findOne({ conversationId, platform: "instagram", senderType: "customer" })
+      .sort({ createdAt: -1 }).select("createdAt").lean();
+    const latestInboundAt = latestInbound?.createdAt instanceof Date
+      ? latestInbound.createdAt.getTime()
+      : new Date(latestInbound?.createdAt ?? Number.NaN).getTime();
+    if (!Number.isFinite(latestInboundAt) || Date.now() - latestInboundAt >= 24 * 60 * 60 * 1000) {
+      throw new AppError(422, "INSTAGRAM_POLICY_WINDOW_CLOSED", "The Instagram reply window is closed");
+    }
+    const connection = await InstagramAccountConnectionModel.findOne({
+      instagramUserId: conversation.channelId, ownerUserId: conversation.ownerId, status: "connected"
+    }).select("+encryptedAccessToken").lean();
+    if (!connection?.encryptedAccessToken || (connection.tokenExpiresAt && connection.tokenExpiresAt.getTime() <= Date.now())) {
+      throw new AppError(409, "INSTAGRAM_TOKEN_UNAVAILABLE", "Instagram account credential is unavailable");
+    }
+    try {
+      instagramAccessToken = decryptSecret(connection.encryptedAccessToken);
+    } catch {
+      throw new AppError(409, "INSTAGRAM_TOKEN_UNAVAILABLE", "Instagram account credential is unavailable");
+    }
   }
   if (input.attachment && conversation.platform !== "telegram_personal" && conversation.platform !== "zalo_personal") {
     throw new AppError(400, "UNSUPPORTED_ATTACHMENT_CHANNEL", "Chỉ hỗ trợ gửi file cho Zalo cá nhân và Telegram cá nhân");
@@ -208,6 +246,26 @@ export async function sendOutboundMessage(
       text: content
     });
     externalMessageId = `facebook:${conversation.channelId}:${delivery.externalMessageId}`;
+  } else if (conversation.platform === "instagram") {
+    try {
+      const delivery = await instagramClient.sendText({
+        instagramUserId: conversation.channelId,
+        accessToken: instagramAccessToken!,
+        recipientId: instagramRecipientId!,
+        text: content
+      });
+      externalMessageId = `instagram:${conversation.channelId}:${delivery.externalMessageId}`;
+    } catch (error) {
+      const permanent = error instanceof AppError && error.statusCode < 500;
+      await createOutboundMessage({
+        conversationId, platform: conversation.platform, senderId: "agent", content,
+        ...(input.clientMessageId ? { clientMessageId: input.clientMessageId } : {}),
+        deliveryStatus: permanent ? "failed" : "pending",
+        errorCode: error instanceof AppError ? error.code : "INSTAGRAM_DELIVERY_UNCERTAIN"
+      });
+      if (error instanceof AppError) throw error;
+      throw new AppError(502, "INSTAGRAM_DELIVERY_UNCERTAIN", "Instagram delivery could not be confirmed");
+    }
   } else if (conversation.platform === "telegram_personal") {
     const userId = sessionOwnerId;
     // Connector cá nhân dùng toMessage cho tin đến; chỉ nạp khi gửi để tránh import vòng.
@@ -324,6 +382,16 @@ export async function sendOutboundMessage(
         externalMessageId,
         deliveryStatus
       })
+      : conversation.platform === "instagram"
+        ? await persistInstagramOutboundMessage({
+          conversationId,
+          platform: conversation.platform,
+          senderId: "agent",
+          content,
+          ...(input.clientMessageId ? { clientMessageId: input.clientMessageId } : {}),
+          externalMessageId,
+          deliveryStatus
+        })
     : await createOutboundMessage({
       conversationId,
       platform: conversation.platform,
@@ -359,6 +427,14 @@ function getFacebookCustomerPlatformId(customer: unknown): string | undefined {
   return typeof customer.platformId === "string" ? customer.platformId : undefined;
 }
 
+function getInstagramCustomerPlatformId(customer: unknown, instagramUserId: string): string | undefined {
+  const platformId = getFacebookCustomerPlatformId(customer);
+  const prefix = `instagram:${instagramUserId}:`;
+  return platformId?.startsWith(prefix) && platformId.length > prefix.length
+    ? platformId.slice(prefix.length)
+    : undefined;
+}
+
 // Meta can deliver message_echoes before the Send API response; the shared external ID makes the webhook row authoritative.
 async function persistFacebookOutboundMessage(input: Parameters<typeof createOutboundMessage>[0]) {
   try {
@@ -366,6 +442,21 @@ async function persistFacebookOutboundMessage(input: Parameters<typeof createOut
   } catch (error) {
     if (!isDuplicateKey(error) || !input.externalMessageId) throw error;
     const existing = await MessageModel.findOne({ platform: "facebook", externalMessageId: input.externalMessageId }).lean();
+    if (!existing) throw error;
+    const metadata = input.clientMessageId
+      ? { ...(existing.metadata ?? {}), clientMessageId: input.clientMessageId }
+      : existing.metadata;
+    return { toObject: () => ({ ...existing, ...(metadata ? { metadata } : {}) }) };
+  }
+}
+
+// The webhook echo may beat the HTTP response; preserve that single authoritative row.
+async function persistInstagramOutboundMessage(input: Parameters<typeof createOutboundMessage>[0]) {
+  try {
+    return await createOutboundMessage(input);
+  } catch (error) {
+    if (!isDuplicateKey(error) || !input.externalMessageId) throw error;
+    const existing = await MessageModel.findOne({ platform: "instagram", externalMessageId: input.externalMessageId }).lean();
     if (!existing) throw error;
     const metadata = input.clientMessageId
       ? { ...(existing.metadata ?? {}), clientMessageId: input.clientMessageId }

@@ -63,3 +63,14 @@ Task 2: complete (commits 969c003..f9813b2, review clean)
 - Reviewer Important: valid attachment-only batches were treated as malformed and could trigger retry storms. RED regression failed with `INSTAGRAM_WEBHOOK_PAYLOAD_INVALID`; GREEN now returns an empty normalized event list (root/entry shape validation remains strict), so the webhook handler acknowledges the delivery with no persistence/realtime changes.
 - Reviewer Minor: text content was trimmed. RED whitespace regression showed the stored value lost leading/trailing spaces; GREEN validates `trim()` nonemptiness but persists the original text.
 - GREEN: focused webhook/event suite passed 2 files, 13 tests; `git diff --check` passed. Report details are in `task-3-report.md`.
+Task 3: complete (commits f9813b2..c02d85d, review clean)
+- Task 3 scoped re-review approved: attachment-only batches are no-ops; malformed structure remains rejected; original nonempty text whitespace is retained.
+- Deferred Meta development-app validation: app-secret variant, subscribed webhook response, and actual delivery payload still need live confirmation.
+
+## Task 4 implementation
+- RED: focused outbound tests showed 8 missing service behaviors (success, account mismatch, staff grant, missing/expired credential, response window, UTF-8 size, permanent policy error); the Instagram client suite could not import the absent module.
+- GREEN: `pnpm --filter api exec vitest run src/services/outbound-message.service.test.ts src/channels/instagram/instagram.client.test.ts` — 2 files, 51 tests passed. Coverage includes Send API contract, auth/recipient/credential/window/byte checks, permanent errors, one bounded 429 retry, retry exhaustion, and webhook echo persistence race.
+- Implemented owner/channel validation before provider access, server-side credential decryption, namespaced provider IDs and duplicate echo recovery. Uncertain sends persist as pending; permanent provider errors persist as failed with a stable error code.
+- Root TypeScript check exits 2 on unrelated existing files; final rerun had no diagnostics in Task 4 service/client/test files. `git diff --check` and commit evidence are recorded in `task-4-report.md`.
+- Official Meta Postman entry confirms endpoint/payload and customer-initiation prerequisite. It does not state the 1,000-byte cap; official source revalidation of the cap and live error response mapping remains open. No live API, migration, or deploy was run.
+Task 4: implementation complete; official policy/error documentation gate remains open.

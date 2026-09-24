@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppError } from "../common/errors.js";
+import type { WorkspaceChannelRef } from "@nhuu-chat/contracts";
 
 const dependencyMocks = vi.hoisted(() => ({
   botClientConstructedWith: vi.fn(),
@@ -9,6 +10,7 @@ const dependencyMocks = vi.hoisted(() => ({
   findMessage: vi.fn(),
   findConversationById: vi.fn(),
   findPageConnection: vi.fn(),
+  findInstagramConnection: vi.fn(),
   pauseConversation: vi.fn(),
   acquireSendLease: vi.fn(),
   releaseSendLease: vi.fn(),
@@ -20,7 +22,8 @@ const dependencyMocks = vi.hoisted(() => ({
   uploadFile: vi.fn(),
   readProviderSecretByName: vi.fn(),
   decryptSecret: vi.fn(),
-  facebookSendText: vi.fn()
+  facebookSendText: vi.fn(),
+  instagramSendText: vi.fn()
 }));
 
 vi.mock("../models/conversation.model.js", () => ({
@@ -35,10 +38,18 @@ vi.mock("../models/facebook-page-connection.model.js", () => ({
   FacebookPageConnectionModel: { findOne: dependencyMocks.findPageConnection }
 }));
 
+vi.mock("../models/instagram-account-connection.model.js", () => ({
+  InstagramAccountConnectionModel: { findOne: dependencyMocks.findInstagramConnection }
+}));
+
 vi.mock("../common/crypto.js", () => ({ decryptSecret: dependencyMocks.decryptSecret }));
 
 vi.mock("../channels/facebook-messenger/facebook-messenger.client.js", () => ({
   facebookMessengerClient: { sendText: dependencyMocks.facebookSendText }
+}));
+
+vi.mock("../channels/instagram/instagram.client.js", () => ({
+  instagramClient: { sendText: dependencyMocks.instagramSendText }
 }));
 
 vi.mock("./telegram-personal.service.js", () => ({
@@ -132,6 +143,9 @@ describe("sendOutboundMessage", () => {
       select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({
         userId: "customer-1", pageId: "page-1", encryptedPageAccessToken: "ciphertext", status: "connected"
       }) })
+    });
+    dependencyMocks.findInstagramConnection.mockReturnValue({
+      select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ ownerUserId: "customer-1", instagramUserId: "ig-1", encryptedAccessToken: "ig-cipher", tokenExpiresAt: null, status: "connected" }) })
     });
     dependencyMocks.decryptSecret.mockReturnValue("page-access-token-secret");
     dependencyMocks.findMessage.mockReturnValue({
@@ -669,7 +683,7 @@ describe("sendOutboundMessage", () => {
   });
 
   it("persists unsupported-platform delivery as pending without an external id", async () => {
-    arrangeConversation(conversation({ platform: "instagram" }));
+    arrangeConversation(conversation({ platform: "unsupported_platform" }));
     arrangeStoredMessage();
 
     const result = await sendOutboundMessage(
@@ -682,7 +696,7 @@ describe("sendOutboundMessage", () => {
     expect(dependencyMocks.getActivePersonalClient).not.toHaveBeenCalled();
     expect(dependencyMocks.createMessage).toHaveBeenCalledWith({
       conversationId: "conversation-1",
-      platform: "instagram",
+      platform: "unsupported_platform",
       senderId: "agent",
       content: "Hello from support",
       externalMessageId: undefined,
@@ -690,6 +704,86 @@ describe("sendOutboundMessage", () => {
       senderType: "agent",
       type: "text"
     });
+  });
+
+  it("sends Instagram text using the connected account token and conversation IGSID", async () => {
+    arrangeConversation(conversation({
+      platform: "instagram", channelId: "ig-1", customerId: { _id: "customer-1", name: "Customer One", platformId: "instagram:ig-1:igsid-7" }
+    }));
+    dependencyMocks.findMessage.mockReturnValue({
+      sort: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ createdAt: now }) }) })
+    });
+    dependencyMocks.instagramSendText.mockResolvedValue({ externalMessageId: "mid-21" });
+    arrangeStoredMessage();
+
+    await sendOutboundMessage({ conversationId: "conversation-1", content: "Hello Instagram" }, agentAuth);
+
+    expect(dependencyMocks.findInstagramConnection).toHaveBeenCalledWith({ instagramUserId: "ig-1", ownerUserId: "customer-1", status: "connected" });
+    expect(dependencyMocks.decryptSecret).toHaveBeenCalledWith("ig-cipher");
+    expect(dependencyMocks.instagramSendText).toHaveBeenCalledWith({ instagramUserId: "ig-1", accessToken: "page-access-token-secret", recipientId: "igsid-7", text: "Hello Instagram" });
+    expect(dependencyMocks.createMessage).toHaveBeenCalledWith(expect.objectContaining({ platform: "instagram", externalMessageId: "instagram:ig-1:mid-21", deliveryStatus: "sent" }));
+  });
+
+  it("denies an Instagram customer ID scoped to another account before calling Meta", async () => {
+    arrangeConversation(conversation({ platform: "instagram", channelId: "ig-1", customerId: { platformId: "instagram:other-ig:igsid-7" } }));
+    await expect(sendOutboundMessage({ conversationId: "conversation-1", content: "Hello" }, agentAuth)).rejects.toMatchObject({ code: "INSTAGRAM_RECIPIENT_ACCOUNT_MISMATCH" });
+    expect(dependencyMocks.instagramSendText).not.toHaveBeenCalled();
+  });
+
+  it("denies Instagram staff without an explicit channel grant before calling Meta", async () => {
+    arrangeConversation(conversation({ platform: "instagram", channelId: "ig-1" }));
+    const staff = { ...agentAuth, workspace: { ownerUserId: "customer-1", role: "staff", allowedChannels: [{ platform: "instagram", channelId: "ig-other" }] as WorkspaceChannelRef[] } };
+    await expect(sendOutboundMessage({ conversationId: "conversation-1", content: "Hello" }, staff)).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+    expect(dependencyMocks.findInstagramConnection).not.toHaveBeenCalled();
+    expect(dependencyMocks.instagramSendText).not.toHaveBeenCalled();
+  });
+
+  it.each([null, { ownerUserId: "customer-1", instagramUserId: "ig-1", status: "connected", encryptedAccessToken: "cipher", tokenExpiresAt: new Date(now.getTime() - 1) }])(
+    "rejects missing or expired Instagram credentials before calling Meta", async (credential) => {
+      arrangeConversation(conversation({ platform: "instagram", channelId: "ig-1", customerId: { platformId: "instagram:ig-1:igsid-7" } }));
+      dependencyMocks.findInstagramConnection.mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue(credential) }) });
+      dependencyMocks.findMessage.mockReturnValue({ sort: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ createdAt: now }) }) }) });
+      await expect(sendOutboundMessage({ conversationId: "conversation-1", content: "Hello" }, agentAuth)).rejects.toMatchObject({ code: "INSTAGRAM_TOKEN_UNAVAILABLE" });
+      expect(dependencyMocks.instagramSendText).not.toHaveBeenCalled();
+    }
+  );
+
+  it("rejects Instagram replies outside the 24-hour response window", async () => {
+    arrangeConversation(conversation({ platform: "instagram", channelId: "ig-1", customerId: { platformId: "instagram:ig-1:igsid-7" } }));
+    dependencyMocks.findMessage.mockReturnValue({ sort: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ createdAt: new Date(now.getTime() - 24 * 60 * 60 * 1000) }) }) }) });
+    await expect(sendOutboundMessage({ conversationId: "conversation-1", content: "Hello" }, agentAuth)).rejects.toMatchObject({ code: "INSTAGRAM_POLICY_WINDOW_CLOSED" });
+    expect(dependencyMocks.instagramSendText).not.toHaveBeenCalled();
+  });
+
+  it("rejects Instagram text over 1000 UTF-8 bytes", async () => {
+    arrangeConversation(conversation({ platform: "instagram", channelId: "ig-1", customerId: { platformId: "instagram:ig-1:igsid-7" } }));
+    await expect(sendOutboundMessage({ conversationId: "conversation-1", content: "😀".repeat(251) }, agentAuth)).rejects.toMatchObject({ code: "INSTAGRAM_TEXT_TOO_LONG" });
+    expect(dependencyMocks.instagramSendText).not.toHaveBeenCalled();
+  });
+
+  it("keeps Meta policy errors permanent and does not persist a retryable send", async () => {
+    arrangeConversation(conversation({ platform: "instagram", channelId: "ig-1", customerId: { platformId: "instagram:ig-1:igsid-7" } }));
+    dependencyMocks.findMessage.mockReturnValue({ sort: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ createdAt: now }) }) }) });
+    dependencyMocks.instagramSendText.mockRejectedValue(new AppError(422, "INSTAGRAM_POLICY_WINDOW_CLOSED", "window closed"));
+    await expect(sendOutboundMessage({ conversationId: "conversation-1", content: "Hello" }, agentAuth)).rejects.toMatchObject({ code: "INSTAGRAM_POLICY_WINDOW_CLOSED" });
+    expect(dependencyMocks.instagramSendText).toHaveBeenCalledTimes(1);
+    expect(dependencyMocks.createMessage).toHaveBeenCalledWith(expect.objectContaining({ deliveryStatus: "failed", metadata: { errorCode: "INSTAGRAM_POLICY_WINDOW_CLOSED" } }));
+  });
+
+  it("returns an Instagram webhook echo row when it wins the Send API persistence race", async () => {
+    arrangeConversation(conversation({
+      platform: "instagram", channelId: "ig-1", customerId: { platformId: "instagram:ig-1:igsid-7" }
+    }));
+    dependencyMocks.findMessage.mockImplementation((filter) => filter.externalMessageId
+      ? { lean: vi.fn().mockResolvedValue({ _id: "echo-message", conversationId: "conversation-1", platform: "instagram", senderType: "agent", senderId: "customer-1", type: "text", content: "Hello", deliveryStatus: "sent", externalMessageId: "instagram:ig-1:mid-echo", createdAt: now }) }
+      : { sort: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ createdAt: now }) }) }) });
+    dependencyMocks.instagramSendText.mockResolvedValue({ externalMessageId: "mid-echo" });
+    dependencyMocks.createMessage.mockRejectedValue(Object.assign(new Error("duplicate external message"), { code: 11000 }));
+
+    const result = await sendOutboundMessage({ conversationId: "conversation-1", content: "Hello" }, agentAuth);
+
+    expect(dependencyMocks.findMessage).toHaveBeenCalledWith({ platform: "instagram", externalMessageId: "instagram:ig-1:mid-echo" });
+    expect(result.message).toMatchObject({ id: "echo-message", platform: "instagram", deliveryStatus: "sent" });
   });
 
   it("sends Facebook replies through the owning Page using only the raw PSID", async () => {
@@ -894,7 +988,7 @@ describe("sendOutboundMessage", () => {
   });
 
   it("allows an admin to send to an unassigned conversation", async () => {
-    arrangeConversation(conversation({ platform: "instagram", ownerId: null, assignedAgentId: null }));
+    arrangeConversation(conversation({ platform: "unsupported_platform", ownerId: null, assignedAgentId: null }));
     arrangeStoredMessage();
 
     const result = await sendOutboundMessage(
