@@ -83,9 +83,9 @@
 - Normalize one-to-one text DMs to `platform="instagram"`, account `channelId`, Workspace `ownerId`, and namespaced IGSID/customer and provider message identifiers.
 - Duplicate delivery is idempotent; unread and last-message fields update once; publish realtime only to authorized Workspace recipients.
 
-- [ ] Add failing tests for signature mismatch, invalid account, status mismatch, text message normalization, multiple customers, repeated delivery, and realtime isolation.
-- [ ] Run webhook/event focused tests and confirm expected failures.
-- [ ] Implement raw-body verification, bounded payload validation, event-to-domain mapping, persistence, idempotency, and authorized emit.
+- [x] Add failing tests for signature mismatch, invalid account, status mismatch, text message normalization, multiple customers, repeated delivery, and realtime isolation.
+- [x] Run webhook/event focused tests and confirm expected failures.
+- [x] Implement raw-body verification, bounded payload validation, event-to-domain mapping, persistence, idempotency, and authorized emit.
 - [ ] Configure app `instagram` webhook object with `messages`, then subscribe each professional account using `POST graph.instagram.com/{version}/{ig-user-id}/subscribed_apps?subscribed_fields=messages`; verify current requirements and payload using official Meta docs/development app before enabling subscriptions.
 
 ### Task 4: Outbound text messaging and policy-aware errors

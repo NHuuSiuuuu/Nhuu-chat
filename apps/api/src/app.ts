@@ -21,6 +21,7 @@ import { facebookPageRouter } from "./routes/facebook-page.routes.js";
 import { instagramRouter } from "./routes/instagram.routes.js";
 import { facebookPostRouter } from "./routes/facebook-post.routes.js";
 import { facebookMessengerWebhookRouter } from "./routes/facebook-messenger-webhook.routes.js";
+import { instagramWebhookRouter } from "./routes/instagram-webhook.routes.js";
 import { settingHistoryRouter } from "./routes/setting-history.routes.js";
 import { workspacesRouter } from "./routes/workspaces.routes.js";
 import { corsAllowlist, originProtection, rateLimit, requestId, securityHeaders } from "./common/security.middleware.js";
@@ -35,6 +36,7 @@ export function createApp(): Express {
   app.use(corsAllowlist);
   app.use(originProtection);
   app.use("/api/v1/webhooks/facebook/messenger", express.raw({ type: "application/json" }), facebookMessengerWebhookRouter);
+  app.use("/api/v1/webhooks/instagram", express.raw({ type: "application/json", limit: "1mb" }), instagramWebhookRouter);
   app.use(express.json());
   app.get("/health", (_request, response) => {
     const health: HealthResponse = { status: "ok", service: "nhuu-chat" };
