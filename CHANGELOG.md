@@ -5,66 +5,30 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
-- Chuyển shortcode like `/-strong` của Zalo thành 👍 và lưu URL ảnh inbound vào attachment để hiển thị trong Inbox.
+## 2026-09-24
 
-- Nhận và hiển thị ảnh/sticker Facebook inbound; lưu attachment và sticker ID để phát lại qua Socket.IO.
-
-- Sửa định tuyến Socket thông báo tin mới để dùng `conversationId`, giúp Toast toàn cục hoạt động ngoài phòng chat đang mở.
-
-- Tách điều kiện phát âm thanh tin nhắn khỏi quyền thông báo trên trình duyệt.
-
-- Ngăn deep link của hội thoại đang mở kích hoạt chọn lại và gọi lặp API đánh dấu đã đọc.
-
-- Thêm thao tác hàng loạt trong Inbox để chọn hội thoại, đánh dấu đã đọc/chưa đọc hoặc xóa cùng dữ liệu liên quan.
-
-- Gỡ tab Thành viên bị trùng, giữ quản lý thành viên trong tab Phân quyền và chuyển URL cũ sang tab này.
-
-- Chỉ hiển thị tên tài khoản trong Header Landing, ẩn email khỏi nút tài khoản và menu mobile.
-
-- Thêm Cài đặt → Giao diện với Sáng/Tối/Theo thiết bị, màu nhấn, mật độ, cỡ chữ tin nhắn, xem trước và khôi phục mặc định theo tài khoản.
-- Sửa màu nền nhấn ở giao diện tối để các lựa chọn đang bật và bong bóng xem trước không còn sáng trắng.
-- Ẩn nút đăng xuất khỏi Landing Header trên mobile và thêm nút gradient ở cuối menu hamburger.
-- Chuyển thông tin tài khoản khỏi header mobile vào menu hamburger, đặt ngay phía trên nút đăng xuất.
-- Hiển thị tên tài khoản phía trên email trong menu hamburger.
-- Ghi lịch sử đăng nhập/đăng xuất tài khoản và kết nối/ngắt kết nối Facebook, Telegram, Zalo.
-- Sửa phát âm thanh thông báo qua Socket.IO, mở khóa AudioContext từ tương tác người dùng và thêm nút thử âm thanh trong Cài đặt.
-- Hiển thị vai trò Chủ sở hữu thành badge tĩnh trong danh sách thành viên, không có thao tác sửa hoặc xóa.
-- Khôi phục trạng thái Inbox và menu mobile qua sessionStorage, giữ conversationId trên URL, đổi Workspace không tải lại toàn trang và thêm thành viên qua modal đa kênh.
-- Đồng bộ bản nháp và vị trí cuộn của Inbox khi tab mobile ẩn, tạm ngắt Socket nền và tải phần dữ liệu còn thiếu khi quay lại.
-- Phân quyền thành viên Workspace theo cặp nền tảng/ID kênh, nhóm bộ chọn đa kênh và áp dụng cùng giới hạn cho API, Inbox, gửi tin và realtime.
-- Mở tab Phân quyền Workspace và Hỗ trợ trả lời trên desktop/mobile, nối tới giao diện quản lý thành viên và trả lời nhanh đã hoàn thiện.
-- Thêm Workspace owner/admin/staff, quản lý thành viên và giới hạn quyền Inbox Facebook theo Page; hỗ trợ kết nối nhiều Facebook Page, chọn Page để đăng bài và migration riêng cho dữ liệu Workspace cùng index Page.
-- Bổ sung bộ chọn Workspace toàn ứng dụng và giao diện Cài đặt → Thành viên; giữ quyền hệ thống `User.role` và hành vi các kênh không phải Facebook hiện có.
-- Bổ sung hướng dẫn triển khai Inbox Messenger: callback HTTPS, verify token và app secret, quyền OAuth, migration MongoDB và quản lý secret backend.
-- Hỗ trợ thay thế đồng thời bubble optimistic và echo Messenger bằng cùng bản tin đã lưu; sắp xếp tin realtime theo thời điểm tạo và migration xử lý legacy unique index `(platform, channelId)`.
-- Làm rõ kiểm tra quyền Messenger tại thao tác đăng ký webhook/gửi tin, tránh dùng Conversations API làm điều kiện kết nối Page.
-- Giữ khóa sở hữu Page trong Mongo qua các lần đăng ký/gỡ webhook Messenger; thao tác đồng thời dùng compare-and-swap và lỗi xác định có thể thử lại an toàn.
-- Tách hội thoại Facebook theo từng PSID dưới cùng Page và lưu thời điểm sự kiện từ Meta làm thời gian tin nhắn.
-- Ổn định kiểm thử bot delivery bằng cách nới timeout fixture thông thường để không bị hết giờ trong thao tác MongoDB chậm.
-- Hỗ trợ đăng nhập nhiều thiết bị với refresh/logout theo từng phiên và thu hồi kết nối Socket.IO tương ứng; đặt lại mật khẩu thu hồi mọi phiên.
-- Tránh treo màn hình khởi tạo vô hạn khi API xác thực không phản hồi; thêm timeout và thao tác thử lại.
-- Đặc tả phiên đăng nhập độc lập theo thiết bị, refresh/logout theo từng phiên và thu hồi socket tương ứng.
-- Lập kế hoạch triển khai phiên đăng nhập nhiều thiết bị theo task backend có review và verification riêng.
-- Đặc tả MVP Inbox Facebook Messenger thủ công qua webhook và Send API, tách khỏi giai đoạn AI tự trả lời.
-- Lập kế hoạch triển khai Inbox Facebook Messenger theo từng lát kết nối, webhook, gửi tin và Inbox.
-- Đánh dấu các mục Cài đặt chưa hoàn thiện bằng nhãn “Sắp có”, làm mờ và vô hiệu hóa thao tác.
-- Thêm các trang `/login`, `/register`, `/forgot-password` và `/reset-password` có Landing Header, liên kết SPA, xác nhận mật khẩu và luồng đặt lại mật khẩu qua Nodemailer/SMTP với token một lần; API luôn trả xác nhận chung, kể cả khi gửi email lỗi.
-- Bổ sung kiểm tra dữ liệu phía trình duyệt cho trang đăng nhập/đăng ký và hiển thị lỗi bằng Sonner.
-- Tách thông báo bỏ trống theo từng trường, Việt hóa lỗi xác thực API, hiển thị lỗi đăng nhập sai dưới ô mật khẩu và báo toast khi đăng nhập thành công.
-- Bỏ style màu trắng/xám ghi đè Sonner để `richColors` hiển thị nền màu theo trạng thái toast.
-- Thiết kế lại email đặt lại mật khẩu với logo NhuuChat, nút thao tác, thời hạn liên kết và lưu ý bảo mật.
-- Làm mới minh họa Chatbot AI trên Landing Page với khung xoay, robot lơ lửng và thẻ trạng thái trả lời tự động.
-- Phát toast tin nhắn khách qua Socket.IO toàn cục đến người nhận Inbox được phân quyền và dùng giao diện sáng theo cài đặt tài khoản.
-- Cho phép click toast tin nhắn toàn cục để mở Inbox và chọn đúng hội thoại sau khi danh sách tải xong.
-- Chuẩn hóa cursor và hover của nút, liên kết tương tác xuyên frontend; bổ sung hover rõ hơn cho nút xem mật khẩu và mục hội thoại.
-- Ngăn tự động zoom trên mobile khi focus input, select hoặc textarea bằng cách giữ cỡ chữ tối thiểu 16px.
-- Chuyển điều hướng frontend sang React Router v6; bảo vệ Dashboard và route nội bộ bằng phiên cookie đã xác minh, chuyển người chưa đăng nhập về `/login`.
-- Giữ NetflixIntro làm màn hình chờ trong suốt lúc xác minh phiên với backend, thay cho skeleton không liên quan khi API phản hồi chậm hoặc timeout.
+- Chuẩn hóa shortcode like `/-strong` thành 👍, lưu ảnh Zalo inbound vào attachment và hiển thị ảnh trong Inbox.
+- Nhận ảnh và sticker Facebook inbound, lưu attachment/sticker ID và phát qua Socket.IO.
+- Sửa định tuyến Toast theo `conversationId`, phát âm thanh độc lập với thông báo trình duyệt và tránh gọi lặp API đánh dấu đã đọc.
+- Thêm thao tác hàng loạt trong Inbox để đánh dấu đã đọc/chưa đọc hoặc xóa hội thoại cùng dữ liệu liên quan.
+- Phân quyền Workspace theo kênh đa nền tảng, gồm Facebook Page và phiên Zalo/Telegram cá nhân; bổ sung bộ chọn Workspace, danh sách kênh Staff và lọc Inbox theo quyền.
+- Hoàn thiện modal quản lý nhân viên, bố cục phân quyền mobile, ẩn thao tác của Chủ sở hữu và gỡ tab Thành viên bị trùng.
+- Khôi phục trạng thái Inbox trên mobile qua sessionStorage, lưu bản nháp/vị trí cuộn và tạm ngắt Socket khi tab chạy nền.
+- Cải thiện menu tài khoản mobile, hiển thị tên tài khoản trên Landing Header và thêm nút đăng nhập/đăng ký dễ truy cập.
+- Thêm cài đặt giao diện theo tài khoản với chế độ Sáng/Tối/Theo thiết bị, màu nhấn, mật độ và cỡ chữ; sửa màu nhấn ở chế độ tối.
+- Ghi lịch sử đăng nhập/đăng xuất và kết nối/ngắt kết nối kênh; bổ sung thao tác ngắt kết nối Telegram Bot.
 
 ## 2026-09-23
 
-- Cấu hình triển khai frontend trên Vercel và API/Redis trên Railway, bổ sung Dockerfile đóng gói API và giữ MongoDB trên Atlas.
-- Sửa khai báo trùng `ownerKey` khiến frontend không biên dịch được cho production.
+- Thêm Workspace owner/admin/staff, API thành viên và quyền Inbox Facebook theo Page; hỗ trợ nhiều Page trong cùng Workspace.
+- Bổ sung Inbox Messenger thủ công: xác minh webhook, nhận tin theo từng PSID, gửi trả lời, đồng bộ realtime và hướng dẫn cấu hình/migration.
+- Hỗ trợ đăng nhập nhiều thiết bị với refresh/logout riêng từng phiên, thu hồi Socket tương ứng và thu hồi mọi phiên khi đặt lại mật khẩu.
+- Chuyển frontend sang React Router v6, bảo vệ route riêng tư bằng phiên đã xác minh và giữ màn hình chờ khi API xác thực chậm.
+- Thêm luồng đặt lại mật khẩu qua email bằng token một lần; cải thiện xác thực biểu mẫu và thông báo lỗi tiếng Việt.
+- Đánh dấu các mục Cài đặt chưa hoàn thiện bằng nhãn “Sắp có”, trạng thái khóa và thông báo giải thích.
+- Chuẩn hóa cursor/hover của thành phần tương tác và ngăn trình duyệt tự zoom biểu mẫu trên mobile.
+- Cấu hình triển khai frontend trên Vercel, API/Redis trên Railway và Docker image cho API; giữ MongoDB trên Atlas.
+- Sửa khai báo trùng `ownerKey` khiến frontend không biên dịch production.
 
 ## 2026-09-22
 
@@ -328,5 +292,3 @@ Các ghi chú nâng cấp được viết rõ ràng để cả team dễ theo d�
 - Khi bấm tài khoản Telegram đã kết nối trên Dashboard, chuyển vào trang Hội thoại với bố cục Livechat mới; thêm composer và header hội thoại theo presentation layer hiện có.
 - Giữ header NhuuChat dùng chung khi chuyển từ Dashboard sang trang Hội thoại; layout inbox nằm bên dưới header và tự chiếm phần chiều cao còn lại.
 - Thêm `DEVELOPMENT_PROMPT.md` ở thư mục gốc để lưu prompt và handoff dài; agent chỉ đọc file khi người dùng yêu cầu trực tiếp.
-- Cho phép cấp quyền Workspace cho phiên Zalo/Telegram cá nhân của chủ; giới hạn Inbox, realtime và gửi tin theo platform đã gán.
-- Hiển thị trên Dashboard Staff toàn bộ kênh được cấp từ Workspace và mở Inbox đúng nền tảng/kênh.

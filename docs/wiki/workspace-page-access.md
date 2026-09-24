@@ -1,14 +1,16 @@
-# Workspace và quyền truy cập Facebook Page
+# Workspace và quyền truy cập kênh
 
 NhuuChat tạo một Workspace cá nhân cho mỗi tài khoản với vai trò `owner`. Vai trò cấp hệ thống (`admin`, `agent`, `customer`) vẫn độc lập với vai trò Workspace (`owner`, `admin`, `staff`). Một tài khoản có thể là thành viên của nhiều Workspace; bộ chọn trong ứng dụng xác định phạm vi API và Socket.IO.
 
 ## Thành viên
 
-Mở **Cài đặt → Thành viên** để xem thành viên, thêm tài khoản đã đăng ký bằng email, đổi vai trò hoặc xóa thành viên. Chỉ owner được quản lý thành viên; owner không thể bị sửa hoặc xóa. `admin` và `owner` truy cập mọi Facebook Page trong Workspace. `staff` có thể được giới hạn theo Page. Danh sách Page để trống mang nghĩa truy cập mọi Page trong Workspace.
+Mở **Cài đặt → Thành viên** để xem thành viên, thêm tài khoản đã đăng ký bằng email, đổi vai trò hoặc xóa thành viên. Chỉ owner được quản lý thành viên; owner không thể bị sửa hoặc xóa. Vai trò Workspace độc lập với role hệ thống. `owner` và `admin` được truy cập các kênh của Workspace; `staff` được giới hạn theo từng cặp nền tảng/ID kênh. Không chọn kênh nào nghĩa là truy cập mọi kênh trong Workspace.
 
-## Facebook Page
+## Kênh được chia sẻ
 
-Workspace owner kết nối nhiều Facebook Page từ trang Bài viết. Mỗi Page có một connection và token mã hóa riêng; kết nối/ngắt một Page không thay thế các Page khác. Inbox, gửi Messenger, ghi chú, ghim, trạng thái và thao tác bài viết kiểm tra Workspace cùng Page được cấp. Telegram, Zalo và cài đặt cá nhân giữ phạm vi hiện tại.
+Workspace owner có thể kết nối nhiều Facebook Page và chia sẻ các kênh đã kết nối, gồm Facebook, Zalo, Telegram và phiên Zalo/Telegram cá nhân của owner. Quyền dùng định danh gồm cả nền tảng và ID để các kênh trùng ID không cấp nhầm quyền. Danh sách Inbox, tìm kiếm, số liệu, gửi tin, lịch sử hội thoại và thao tác hội thoại đều áp dụng phạm vi kênh được cấp. Chọn Workspace đang làm việc để xác định dữ liệu và quyền áp dụng.
+
+Mỗi Facebook Page giữ connection và token mã hóa riêng. Kết nối hoặc ngắt một Page không thay đổi các Page khác; webhook nhận tin được định tuyến theo Page ID.
 
 ## Migration database hiện hữu
 

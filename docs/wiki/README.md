@@ -12,8 +12,8 @@ Nhuu-chat hiện là MVP tập trung vào:
 - Dashboard onboarding sau đăng nhập.
 - Kết nối Telegram cá nhân bằng QR MTProto.
 - Nhận và gửi tin nhắn Telegram trong Inbox realtime.
-- Nhận tin Messenger mới qua webhook đã xác minh chữ ký, lưu hội thoại riêng theo PSID, cập nhật Inbox realtime và trả lời văn bản qua Send API.
-- Workspace hỗ trợ owner/admin/staff, thành viên nhiều Workspace, quyền Inbox theo Facebook Page và nhiều Page trên một Workspace; xem [hướng dẫn Workspace/Page](workspace-page-access.md).
+- Nhận tin Messenger mới qua webhook đã xác minh chữ ký, hỗ trợ text/ảnh/sticker, lưu hội thoại riêng theo PSID, cập nhật Inbox realtime và trả lời văn bản qua Send API.
+- Workspace hỗ trợ owner/admin/staff, thành viên nhiều Workspace, quyền theo nền tảng/kênh (gồm Facebook Page và phiên Zalo/Telegram cá nhân được chia sẻ); xem [hướng dẫn Workspace/Page](workspace-page-access.md).
 - Quản lý hội thoại, unread count, avatar, tên khách hàng, nhóm và nền tảng gửi.
 - Chọn nhiều hội thoại để đánh dấu đã đọc/chưa đọc hoặc xóa; `POST /api/v1/conversations/bulk` giới hạn 100 ID và yêu cầu quyền truy cập với toàn bộ hội thoại trong lô.
 - Trợ lý RAG với dữ liệu knowledge dạng tài liệu/chính sách.
@@ -39,9 +39,10 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
 - Telegram webhook có secret validation và idempotency.
 - Chatbot tự động trên hai connector Telegram dùng chung orchestrator, delivery, automation template và RAG theo owner.
 - Telegram cá nhân hỗ trợ QR login, xác minh 2FA, hủy phiên QR cũ và khôi phục session sau khi API restart.
-- Backend Zalo cá nhân thử nghiệm hỗ trợ QR, lưu credentials mã hóa, nhận direct/group media metadata và gửi text, ảnh hoặc file.
+- Backend Zalo cá nhân thử nghiệm hỗ trợ QR, lưu credentials mã hóa, nhận direct/group text và ảnh, chuẩn hóa shortcode like, hiển thị ảnh trong Inbox và gửi text, ảnh hoặc file.
 - Outbound media từ Inbox hỗ trợ một ảnh/file tối đa 20 MB kèm chú thích cho Zalo cá nhân và Telegram cá nhân; media được lưu qua Cloudinary và các định dạng nguy hiểm bị chặn.
 - Socket.IO room authentication và event realtime cho message/conversation.
+- Toast tin nhắn mới hoạt động trên mọi route, click mở đúng hội thoại; âm thanh được điều khiển riêng với thông báo trình duyệt.
 - API đọc/ghi hội thoại, message, customer và knowledge.
 - API CRUD danh mục thẻ hội thoại dùng chung cho admin/agent tại `/api/v1/conversation-tags`.
 - API CRUD mẫu trả lời nhanh dùng chung cho admin/agent tại `/api/v1/quick-replies`, hỗ trợ một ảnh đính kèm lưu trên Cloudinary.
@@ -202,7 +203,7 @@ Các route `/api/v1/quick-replies` yêu cầu role `admin` hoặc `agent`, nhưn
 
 ### Đăng bài Facebook Page V1
 
-Mỗi user chỉ có một kết nối Facebook Page trong V1. Người vận hành nhập thủ công `Page ID` và `Page access token` trong màn hình đăng bài; API xác thực metadata Page qua Meta Graph API trước khi lưu token đã mã hóa. Token không được trả về frontend, lưu trong browser, ghi log hoặc đưa vào `.env`; chỉ giải mã trong memory khi publish. Dùng HTTPS, giới hạn quyền truy cập vận hành và thu hồi token tại Meta nếu có dấu hiệu lộ.
+Workspace owner có thể kết nối nhiều Facebook Page trong V1. Người vận hành chọn Page đã kết nối hoặc thêm Page bằng OAuth/nhập `Page ID` và `Page access token` trong màn hình đăng bài; API xác thực Page qua Meta Graph API trước khi lưu token đã mã hóa. Mỗi Page là một connection riêng. Token không được trả về frontend, lưu trong browser, ghi log hoặc đưa vào `.env`; chỉ giải mã trong memory khi publish. Dùng HTTPS, giới hạn quyền truy cập vận hành và thu hồi token tại Meta nếu có dấu hiệu lộ.
 
 Cấu hình Cloudinary đủ `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` và `CLOUDINARY_API_SECRET`. Bài bắt buộc có text, tùy chọn tối đa một ảnh `JPG`/`PNG`/`WebP` không quá 5 MiB; ảnh được lưu qua Cloudinary và MongoDB chỉ giữ metadata/URL an toàn. Graph API mặc định là `v26.0`, qua `META_GRAPH_API_VERSION`. Có thể đăng nhập OAuth trong modal Dashboard với `META_APP_ID`, `META_APP_SECRET`, `META_OAUTH_REDIRECT_URI` và `WEB_APP_URL`; luồng nhập thủ công Page ID/Page Access Token vẫn được giữ nguyên. Khi Meta App còn ở Development Mode, chỉ tài khoản/Page và vai trò được cấp trong app mới có thể kiểm thử; cần hoàn tất cấu hình/quyền và quy trình Meta phù hợp trước khi mở cho người dùng production.
 
@@ -212,7 +213,7 @@ Retry chỉ là thao tác thủ công trên bài `failed`. Timeout Meta là kế
 
 ### Lịch sử hoạt động cài đặt
 
-Người dùng mở `Cài đặt > Lịch sử` (`/settings/history`) để xem Timeline gồm giá trị cũ/mới, người thực hiện, thời gian và mã phiên bản. Phạm vi hiện tại gồm cập nhật Cài đặt AI, kết nối Facebook Page qua OAuth hoặc nhập thủ công, và ngắt kết nối Facebook Page. Giao diện dùng các bộ lọc `Tất cả`, `Cài đặt AI`, `Kết nối Facebook`, tải 20 bản ghi mỗi trang và có nút chuyển trang; thao tác ngắt kết nối hiện nằm trong `Tất cả`.
+Người dùng mở `Cài đặt > Lịch sử` (`/settings/history`) để xem Timeline gồm giá trị cũ/mới, người thực hiện, thời gian và mã phiên bản. Phạm vi gồm cập nhật Cài đặt AI, đăng nhập/đăng xuất và kết nối/ngắt kết nối các kênh. Giao diện tải 20 bản ghi mỗi trang và có nút chuyển trang.
 
 Người dùng mở `Cài đặt > Giao diện` (`/settings/appearance`) để chọn theme Sáng/Tối/Theo thiết bị, một trong năm màu nhấn, mật độ hội thoại và cỡ chữ tin nhắn. Tuỳ chọn được lưu trong `generalSettings` của tài khoản qua API hiện có; không cần collection hoặc migration riêng. Giao diện áp dụng ngay, có vùng xem trước và khôi phục về Sáng, xanh dương, thoải mái, cỡ chữ vừa.
 
@@ -290,7 +291,7 @@ Connector backend dùng `zca-js`, API không chính thức mô phỏng Zalo Web,
 - `GET /api/v1/channels/zalo-personal/status`: đọc trạng thái kết nối.
 - `POST /api/v1/channels/zalo-personal/logout`: dừng listener và xóa session.
 
-QR không tạo được trả trạng thái `error` với `ZALO_QR_CREATE_FAILED`. Inbound direct/group giữ caption, URL/thumbnail và metadata attachment đã lọc trường nhạy cảm; outbound hiện chỉ hỗ trợ text.
+QR không tạo được trả trạng thái `error` với `ZALO_QR_CREATE_FAILED`. Inbound direct/group giữ caption, URL/thumbnail và metadata attachment đã lọc trường nhạy cảm; ảnh inbound được lưu thành attachment để hiển thị trong Inbox, shortcode like `/-strong` được đổi thành 👍; outbound hỗ trợ text và media.
 
 Trước rollout trên database cũ: sao lưu, mở maintenance window, chạy lệnh sau thành công rồi mới deploy/restart API:
 

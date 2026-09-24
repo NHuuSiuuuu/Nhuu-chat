@@ -9,22 +9,23 @@ MVP quản lý inbox chăm sóc khách hàng Facebook Messenger và Telegram cù
 - React Router v6 chia route public và private; route Dashboard được mở sau khi API xác minh phiên cookie HttpOnly.
 - Quên mật khẩu qua Nodemailer/SMTP với token đặt lại một lần, hết hạn sau 30 phút.
 - Dashboard onboarding và kết nối Telegram cá nhân bằng QR MTProto; session chỉ lưu mã hóa ở backend.
-- Backend Zalo cá nhân thử nghiệm qua QR, nhận media metadata và gửi text, ảnh hoặc file; credentials chỉ lưu mã hóa ở backend.
+- Backend Zalo cá nhân thử nghiệm qua QR, nhận direct/group text và ảnh (bao gồm shortcode like `/-strong`), hiển thị ảnh trong Inbox và gửi text, ảnh hoặc file; credentials chỉ lưu mã hóa ở backend.
 - MongoDB/Mongoose domain models, mã hóa provider secret AES-256-GCM.
 - Telegram webhook có secret và idempotency.
 - Chatbot tự động dùng chung orchestration/delivery cho Telegram Bot và Telegram cá nhân, có template, RAG đúng owner, fallback và bàn giao.
 - REST conversation/message API và Socket.IO room authentication.
-- Inbox Facebook Messenger thủ công cho tin nhắn văn bản mới: webhook xác minh chữ ký, lưu riêng conversation theo PSID, cập nhật realtime và gửi trả lời qua Messenger Send API.
-- Workspace có vai trò owner/admin/staff; owner quản lý thành viên đã đăng ký, cấp quyền theo Facebook Page và có thể kết nối nhiều Page trong một Workspace.
+- Inbox Facebook Messenger thủ công: webhook xác minh chữ ký, nhận text/ảnh/sticker, lưu riêng conversation theo PSID, cập nhật realtime và gửi trả lời qua Messenger Send API.
+- Workspace có vai trò owner/admin/staff; owner quản lý thành viên đã đăng ký và cấp quyền theo nền tảng/kênh, gồm nhiều Facebook Page cùng phiên Zalo/Telegram cá nhân được chia sẻ.
 - CRUD danh mục thẻ hội thoại dùng chung cho admin/agent tại `/api/v1/conversation-tags`.
 - CRUD mẫu trả lời nhanh dùng chung cho admin/agent tại `/api/v1/quick-replies`, hỗ trợ lưu một ảnh đính kèm qua Cloudinary.
 - Knowledge chunking, TXT/Markdown/PDF/DOCX parser, provider-independent RAG.
 - Bot Pause 30 phút; queue có chính sách retry 0s/1s/4s, riêng chatbot tự động chỉ gửi một lần để tránh trả lời trùng.
 - Inbox React tối thiểu.
 - Chọn nhiều hội thoại trong Inbox để đánh dấu đã đọc/chưa đọc hoặc xóa; API kiểm tra quyền trên toàn bộ lô, và thao tác xóa đồng bộ đến các phiên đang mở.
+- Toast tin nhắn mới hoạt động toàn ứng dụng, mở đúng hội thoại; âm thanh có cài đặt riêng với quyền thông báo trình duyệt.
 - Ghim tối đa 10 tin nhắn trong mỗi hội thoại, có thanh tin đã ghim và đồng bộ realtime cho admin/agent.
 - Ghi chú nội bộ theo từng hội thoại; agent/admin có thể tạo, sửa, xóa và ghim ghi chú trong sidebar Thông tin.
-- Trang `Cài đặt > Lịch sử` hiển thị Timeline thay đổi Cài đặt AI và kết nối/ngắt kết nối Facebook Page theo từng người dùng.
+- Trang `Cài đặt > Lịch sử` hiển thị thay đổi Cài đặt AI, phiên đăng nhập và kết nối/ngắt kết nối các kênh theo từng người dùng.
 - Cài đặt `Giao diện` lưu riêng theo tài khoản, hỗ trợ Sáng/Tối/Theo thiết bị, 5 màu nhấn, mật độ hội thoại, cỡ chữ tin nhắn, xem trước trực tiếp và khôi phục mặc định.
 - Security headers, request ID và rate limit auth.
 
@@ -100,7 +101,7 @@ Trước khi bật connector, cấu hình `MONGODB_URI`, `ENCRYPTION_KEY` tối 
 - `GET /api/v1/channels/zalo-personal/status`: đọc trạng thái kết nối.
 - `POST /api/v1/channels/zalo-personal/logout`: dừng listener và xóa session đã lưu.
 
-QR không tạo được chuyển session sang `error` với mã `ZALO_QR_CREATE_FAILED`. Inbound hỗ trợ direct/group text và chuẩn hóa caption, URL/thumbnail cùng metadata an toàn từ attachment; outbound hiện chỉ gửi text.
+QR không tạo được chuyển session sang `error` với mã `ZALO_QR_CREATE_FAILED`. Inbound hỗ trợ direct/group text và ảnh, chuẩn hóa shortcode like `/-strong`, caption, URL/thumbnail cùng metadata an toàn từ attachment; outbound hỗ trợ text và media.
 
 Với database đã tồn tại, thực hiện theo đúng thứ tự: sao lưu, mở maintenance window, chạy migration rồi mới rollout/restart API:
 
