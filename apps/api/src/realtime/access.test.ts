@@ -60,8 +60,22 @@ describe("conversation realtime access", () => {
     expect(canJoinConversation(staff, { platform: "facebook", ownerId: "owner-1", channelId: "page-b" })).toBe(false);
     expect(canJoinConversation(staff, { platform: "facebook", ownerId: "owner-2", channelId: "page-a" })).toBe(false);
     expect(conversationAccessFilter(staff)).toEqual({ $or: [
-      { platform: "facebook", ownerId: "owner-1", channelId: { $in: ["page-a"] } },
-      { platform: { $ne: "facebook" }, ownerId: "staff-1" }
+      { platform: "facebook", ownerId: "owner-1", channelId: "page-a" },
+      { platform: { $nin: ["facebook", "instagram", "zalo", "telegram"] }, ownerId: "staff-1" }
+    ] });
+  });
+
+  it("limits Workspace staff by platform and channel ID and preserves personal account isolation", () => {
+    const staff = { id: "staff-1", role: "customer", workspace: {
+      ownerUserId: "owner-1", allowedPages: [], allowedChannels: [{ platform: "telegram" as const, channelId: "same-id" }]
+    } };
+    expect(canJoinConversation(staff, { platform: "telegram", ownerId: "owner-1", channelId: "same-id" })).toBe(true);
+    expect(canJoinConversation(staff, { platform: "facebook", ownerId: "owner-1", channelId: "same-id" })).toBe(false);
+    expect(canJoinConversation(staff, { platform: "telegram", ownerId: "owner-2", channelId: "same-id" })).toBe(false);
+    expect(canJoinConversation(staff, { platform: "zalo_personal", ownerId: "owner-1", channelId: "same-id" })).toBe(false);
+    expect(conversationAccessFilter(staff)).toEqual({ $or: [
+      { ownerId: "owner-1", platform: "telegram", channelId: "same-id" },
+      { platform: { $nin: ["facebook", "instagram", "zalo", "telegram"] }, ownerId: "staff-1" }
     ] });
   });
 

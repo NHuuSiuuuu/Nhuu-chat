@@ -279,6 +279,17 @@ describe("Settings page", () => {
     }
   });
 
+  it("groups Workspace access choices by platform and sends platform-aware channel references", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("/api/v1/workspaces/${id}/channels");
+    expect(source).toContain("WorkspaceChannelRef");
+    expect(source).toContain("allowedChannels");
+    expect(source).toContain("channel.platform === platform");
+    expect(source).toContain("<PlatformIcon provider={platform}");
+    expect(source).toContain("allowedChannels: role === \"staff\" ? allowedChannels : []");
+  });
+
   it("maps each settings option to its corresponding icon", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 

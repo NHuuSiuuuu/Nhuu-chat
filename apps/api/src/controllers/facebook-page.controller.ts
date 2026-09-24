@@ -76,8 +76,8 @@ export const getFacebookPage: RequestHandler = async (request, response, next) =
   try {
     const authRequest = request as AuthenticatedRequest;
     const allConnections = await facebookPageService.list(authRequest.workspace?.ownerUserId ?? authenticatedUserId(authRequest));
-    const connections = authRequest.workspace?.allowedPages.length
-      ? allConnections.filter((item) => authRequest.workspace?.allowedPages.includes(item.pageId))
+    const connections = authRequest.workspace?.role === "staff" && authRequest.workspace.allowedPages != null
+      ? allConnections.filter((item) => authRequest.workspace?.allowedPages?.includes(item.pageId))
       : allConnections;
     if (request.path === "/connections") {
       response.json({ connections });

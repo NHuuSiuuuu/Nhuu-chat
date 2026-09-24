@@ -34,6 +34,22 @@ describe("Facebook post controller", () => {
     expect(serviceMocks.createPost).toHaveBeenCalledWith("owner-1", expect.objectContaining({ pageId: "page-1" }));
   });
 
+  it("denies Facebook access when a staff member is assigned only another platform", async () => {
+    const workspace = { id: "workspace-1", ownerUserId: "owner-1", role: "staff", allowedPages: [] };
+    const list = responseRecorder();
+    await listFacebookPosts({ auth: { id: "staff-1" }, workspace, query: {} } as never, list.response as never, vi.fn());
+    expect(serviceMocks.listPosts).toHaveBeenCalledWith("owner-1", { pageIds: [] });
+
+    const denied = vi.fn();
+    await listFacebookPosts({ auth: { id: "staff-1" }, workspace, query: { pageId: "page-1" } } as never, responseRecorder().response as never, denied);
+    expect(denied.mock.calls[0]?.[0]).toMatchObject({ code: "FACEBOOK_PAGE_NOT_FOUND", statusCode: 404 });
+
+    const createDenied = vi.fn();
+    await createFacebookPost({ auth: { id: "staff-1" }, workspace, body: { message: "Hello", mode: "draft" } } as never, responseRecorder().response as never, createDenied);
+    expect(createDenied.mock.calls[0]?.[0]).toMatchObject({ code: "FACEBOOK_PAGE_ACCESS_DENIED", statusCode: 403 });
+    expect(serviceMocks.createPost).not.toHaveBeenCalled();
+  });
+
   it("creates a post with authenticated user and uploaded media", async () => {
     serviceMocks.createPost.mockResolvedValue({ id: "post-1", status: "draft" });
     const { response, state } = responseRecorder();

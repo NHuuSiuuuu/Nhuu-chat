@@ -74,6 +74,19 @@ describe("Facebook page controller", () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it("does not expose Facebook connections when a staff member is assigned only another platform", async () => {
+    serviceMocks.list.mockResolvedValue([
+      { id: "connection-1", pageId: "page-1", status: "connected" },
+      { id: "connection-2", pageId: "page-2", status: "connected" }
+    ]);
+    const { response, state } = responseRecorder();
+    await getFacebookPage({
+      auth: { id: "staff-1" }, path: "/connections",
+      workspace: { ownerUserId: "owner-1", role: "staff", allowedPages: [], allowedChannels: [{ platform: "telegram", channelId: "chat-1" }] }
+    } as never, response as never, vi.fn());
+    expect(state.body).toEqual({ connections: [] });
+  });
+
   it("starts OAuth for the authenticated user and redirects callback without exposing tokens", async () => {
     serviceMocks.start.mockResolvedValue({ authorizationUrl: "https://www.facebook.com/v26.0/dialog/oauth?state=state-1" });
     const startResponse = responseRecorder();

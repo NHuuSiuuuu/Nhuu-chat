@@ -37,6 +37,14 @@ export const listWorkspaceMembers: RequestHandler = async (request, response, ne
   } catch (error) { next(error); }
 };
 
+export const listWorkspaceChannels: RequestHandler = async (request, response, next) => {
+  try {
+    response.json(await workspaceMemberService.listChannels(
+      workspaceId(request), authenticatedUserId(request as AuthenticatedRequest)
+    ));
+  } catch (error) { next(error); }
+};
+
 export const addWorkspaceMember: RequestHandler = async (request, response, next) => {
   try {
     const input = workspaceMemberSchema.safeParse(request.body);

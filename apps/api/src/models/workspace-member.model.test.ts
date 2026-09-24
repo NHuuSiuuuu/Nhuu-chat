@@ -9,6 +9,7 @@ describe("Workspace member model", () => {
       workspaceId: new mongoose.Types.ObjectId(), userId: new mongoose.Types.ObjectId(), role: "staff"
     });
     expect(member.allowedPages).toEqual([]);
+    expect(member.allowedChannels).toBeUndefined();
     expect(workspaceRoles).toEqual(["owner", "admin", "staff"]);
   });
 

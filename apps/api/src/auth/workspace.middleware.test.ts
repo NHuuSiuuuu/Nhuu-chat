@@ -29,8 +29,18 @@ describe("Workspace request context", () => {
     const req = request("507f1f77bcf86cd799439011") as { workspace?: unknown };
     const next = vi.fn();
     await resolveWorkspaceContext(req as never, {} as never, next);
-    expect(req.workspace).toEqual({ id: "507f1f77bcf86cd799439011", ownerUserId: "507f1f77bcf86cd799439033", role: "staff", allowedPages: ["page-a"] });
+    expect(req.workspace).toEqual({ id: "507f1f77bcf86cd799439011", ownerUserId: "507f1f77bcf86cd799439033", role: "staff", allowedPages: ["page-a"], allowedChannels: [{ platform: "facebook", channelId: "page-a" }] });
     expect(next).toHaveBeenCalledWith();
+  });
+
+  it("keeps Facebook access empty when a staff member is limited to another platform", async () => {
+    db.membership = {
+      workspaceId: "507f1f77bcf86cd799439011", userId: "507f1f77bcf86cd799439022", role: "staff",
+      allowedPages: [], allowedChannels: [{ platform: "telegram", channelId: "chat-1" }]
+    };
+    const req = request("507f1f77bcf86cd799439011") as { workspace?: { allowedPages: string[] | null } };
+    await resolveWorkspaceContext(req as never, {} as never, vi.fn());
+    expect(req.workspace?.allowedPages).toEqual([]);
   });
 
   it("rejects a Workspace ID when the user has no membership", async () => {

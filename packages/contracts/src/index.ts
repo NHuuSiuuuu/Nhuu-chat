@@ -71,6 +71,12 @@ export interface GeneralSettingsContract {
 }
 
 export type ChatPlatform = "facebook" | "instagram" | "zalo" | "zalo_personal" | "telegram" | "telegram_personal";
+export type WorkspaceChannelPlatform = Exclude<ChatPlatform, "zalo_personal" | "telegram_personal">;
+export interface WorkspaceChannelRef {
+  platform: WorkspaceChannelPlatform;
+  channelId: string;
+}
+
 export type ConversationStatus = "open" | "pending" | "closed";
 
 export interface ConversationTagContract {

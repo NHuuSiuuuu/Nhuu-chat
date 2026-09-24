@@ -1,8 +1,9 @@
 import * as React from "react";
 import { useEffect, useState } from "react";
-import type { AiModelTier, AiSentimentWindow, AiSettingsContract, AiSuggestionMode, AssistantContract, AutomationTemplateContract, BotPreviewResponse, ConversationTagContract, QuickReplyContract } from "@nhuu-chat/contracts";
+import type { AiModelTier, AiSentimentWindow, AiSettingsContract, AiSuggestionMode, AssistantContract, AutomationTemplateContract, BotPreviewResponse, ConversationTagContract, QuickReplyContract, WorkspaceChannelPlatform, WorkspaceChannelRef } from "@nhuu-chat/contracts";
 import { DashboardTopbar } from "../components/dashboard/DashboardTopbar.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
+import { PlatformIcon } from "../components/dashboard/PlatformIcon.js";
 import { AutomationTemplateImportModal } from "../components/settings/AutomationTemplateImportModal.js";
 import { GeneralSettingsPanel } from "../components/settings/GeneralSettingsPanel.js";
 import { SettingHistoryTimeline } from "../components/settings/SettingHistoryTimeline.js";
@@ -12,7 +13,6 @@ import { toast } from "sonner";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { AutomationTemplateImportRow } from "../lib/automation-template-import.js";
 import { getActiveWorkspaceId } from "../lib/api.js";
-import type { FacebookPageConnectionResponse } from "@nhuu-chat/contracts";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 const TAGS_API_PATH = "/api/v1/conversation-tags";
@@ -1009,28 +1009,141 @@ function SettingsDevelopmentPlaceholder({ title }: { title: string }) {
   return <div className="grid min-h-[520px] place-items-center p-6 text-center"><div><div className="mx-auto grid size-16 place-items-center rounded-full text-gray-900  text-3xl text-sky-500">⋯</div><h2 className="mt-5 text-2xl font-bold text-gray-900">{title}</h2><p className="mt-2 text-sm text-gray-500">Chức năng đang được phát triển</p></div></div>;
 }
 
-type WorkspaceMemberView = { userId: string; email: string; name: string; role: "owner" | "admin" | "staff"; allowedPages: string[] };
+type WorkspaceChannelView = WorkspaceChannelRef & { name: string; avatarUrl?: string };
+type WorkspaceMemberView = { userId: string; email: string; name: string; role: "owner" | "admin" | "staff"; allowedPages: string[]; allowedChannels: WorkspaceChannelRef[] };
+const workspaceChannelLabels: Record<WorkspaceChannelPlatform, string> = { facebook: "Facebook", instagram: "Instagram", zalo: "Zalo", telegram: "Telegram" };
+const workspaceChannelPlatforms: WorkspaceChannelPlatform[] = ["facebook", "instagram", "zalo", "telegram"];
+
+function hasWorkspaceChannel(channels: readonly WorkspaceChannelRef[], target: WorkspaceChannelRef): boolean {
+  return channels.some((channel) => channel.platform === target.platform && channel.channelId === target.channelId);
+}
+
+function WorkspaceChannelCheckboxGroups({ channels, selected, onToggle }: {
+  channels: WorkspaceChannelView[];
+  selected: WorkspaceChannelRef[];
+  onToggle: (channel: WorkspaceChannelRef, enabled: boolean) => void;
+}) {
+  return <div className="grid gap-4">{workspaceChannelPlatforms.map((platform) => {
+    const platformChannels = channels.filter((channel) => channel.platform === platform);
+    if (!platformChannels.length) return null;
+    return <fieldset className="grid gap-2" key={platform}>
+      <legend className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700"><PlatformIcon provider={platform} size={18} />{workspaceChannelLabels[platform]}</legend>
+      {platformChannels.map((channel) => <label key={`${channel.platform}:${channel.channelId}`} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
+        <input className="cursor-pointer" type="checkbox" checked={hasWorkspaceChannel(selected, channel)} onChange={(event) => onToggle(channel, event.target.checked)} />
+        <span className="min-w-0 flex-1 truncate">{channel.name}</span><span className="truncate text-xs text-slate-400">{channel.channelId}</span>
+      </label>)}
+    </fieldset>;
+  })}</div>;
+}
 
 function WorkspaceMembersPanel({ token, refresh }: { token: string; refresh?: () => Promise<string | null> }) {
   const [workspaceId, setWorkspaceId] = useState(() => getActiveWorkspaceId() ?? "");
   const [canManage, setCanManage] = useState(false);
   const [members, setMembers] = useState<WorkspaceMemberView[]>([]);
-  const [pages, setPages] = useState<FacebookPageConnectionResponse[]>([]);
+  const [channels, setChannels] = useState<WorkspaceChannelView[]>([]);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"admin" | "staff">("staff");
-  const [allowedPages, setAllowedPages] = useState<string[]>([]);
+  const [allowedChannels, setAllowedChannels] = useState<WorkspaceChannelRef[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
   const load = async (id: string) => {
-    const [memberResult, pageResult] = await Promise.all([
+    const [memberResult, channelResult] = await Promise.all([
       apiRequest<{ members: WorkspaceMemberView[] }>(API_URL, `/api/v1/workspaces/${id}/members`, token, {}, refresh),
-      apiRequest<{ connections: FacebookPageConnectionResponse[] }>(API_URL, "/api/v1/facebook-page/connections", token, {}, refresh).catch(() => ({ connections: [] }))
+      apiRequest<{ channels: WorkspaceChannelView[] }>(API_URL, `/api/v1/workspaces/${id}/channels`, token, {}, refresh)
     ]);
-    setMembers(memberResult.members); setPages(pageResult.connections);
+    setMembers(memberResult.members.map((member) => ({ ...member, allowedChannels: member.allowedChannels ?? member.allowedPages.map((channelId) => ({ platform: "facebook" as const, channelId })) })));
+    setChannels(channelResult.channels);
   };
-  useEffect(() => { let live = true; void apiRequest<{ workspaces: Array<{ id: string; role: string }> }>(API_URL, "/api/v1/workspaces", token, {}, refresh).then(async ({ workspaces }) => { const id = workspaceId || workspaces.find((item) => item.role === "owner")?.id || workspaces[0]?.id || ""; if (!live || !id) return; setWorkspaceId(id); setCanManage(workspaces.some((item) => item.id === id && item.role === "owner")); await load(id); }).catch(() => { if (live) setError("Không thể tải thành viên Workspace."); }); return () => { live = false; }; }, [token, refresh]);
-  const submit = async (event: React.FormEvent) => { event.preventDefault(); if (!workspaceId) return; setBusy(true); setError(""); try { await apiRequest(API_URL, `/api/v1/workspaces/${workspaceId}/members`, token, { method: "POST", body: JSON.stringify({ email, role, allowedPages: role === "staff" ? allowedPages : [] }) }, refresh); setEmail(""); setAllowedPages([]); await load(workspaceId); } catch (failure) { setError(failure instanceof Error ? failure.message : "Không thể thêm thành viên."); } finally { setBusy(false); } };
-  return <div className="p-6"><h2 className="mb-2 text-2xl font-bold text-gray-900">Thành viên Workspace</h2><p className="mb-5 text-sm text-gray-600">Chỉ tài khoản đã đăng ký mới được thêm. Chủ sở hữu không thể sửa hoặc xóa.</p>{error && <p className="mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</p>}<div className="rounded-2xl bg-white p-5 shadow-sm"><div className="grid gap-3">{members.map((member) => <div key={member.userId} className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 py-3"><div><p className="font-semibold text-slate-800">{member.name || member.email}</p><p className="text-sm text-slate-500">{member.email}{member.allowedPages.length ? ` · ${member.allowedPages.join(", ")}` : " · Tất cả Page"}</p></div><div className="flex items-center gap-2"><select aria-label={`Vai trò của ${member.email}`} disabled={!canManage || member.role === "owner" || busy} value={member.role} className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50" onChange={async (event) => { const nextRole = event.target.value as "admin" | "staff"; await apiRequest(API_URL, `/api/v1/workspaces/${workspaceId}/members/${member.userId}`, token, { method: "PATCH", body: JSON.stringify({ role: nextRole, allowedPages: nextRole === "staff" ? member.allowedPages : [] }) }, refresh); await load(workspaceId); }}><option value="owner">Chủ sở hữu</option><option value="admin">Quản trị viên</option><option value="staff">Nhân viên</option></select>{canManage && member.role !== "owner" && <button type="button" disabled={busy} className="rounded-lg px-3 py-2 text-sm text-rose-600 hover:bg-rose-50 cursor-pointer disabled:cursor-not-allowed" onClick={async () => { if (window.confirm(`Xóa ${member.email} khỏi Workspace?`)) { await apiRequest(API_URL, `/api/v1/workspaces/${workspaceId}/members/${member.userId}`, token, { method: "DELETE" }, refresh); await load(workspaceId); } }}>Xóa</button>}</div>{canManage && member.role === "staff" && pages.length > 0 && <fieldset className="grid gap-2 sm:col-span-2"><legend className="text-xs font-medium text-slate-600">Page được phép truy cập (để trống: tất cả)</legend>{pages.map((page) => <label key={page.pageId} className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={member.allowedPages.includes(page.pageId)} onChange={async (event) => { const nextPages = event.target.checked ? [...member.allowedPages, page.pageId] : member.allowedPages.filter((id) => id !== page.pageId); await apiRequest(API_URL, `/api/v1/workspaces/${workspaceId}/members/${member.userId}`, token, { method: "PATCH", body: JSON.stringify({ allowedPages: nextPages }) }, refresh); await load(workspaceId); }} />{page.pageName ?? page.pageId}</label>)}</fieldset>}</div>)}</div></div>{canManage && <form className="mt-5 grid gap-4 rounded-2xl bg-white p-5 shadow-sm" onSubmit={(event) => void submit(event)}><h3 className="font-semibold text-slate-800">Thêm thành viên</h3><label className="grid gap-1 text-sm font-medium">Email<input className="rounded-lg border border-slate-200 px-3 py-2.5" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label><label className="grid gap-1 text-sm font-medium">Vai trò<select className="rounded-lg border border-slate-200 px-3 py-2.5" value={role} onChange={(event) => setRole(event.target.value as "admin" | "staff")}><option value="admin">Quản trị viên</option><option value="staff">Nhân viên</option></select></label>{role === "staff" && <fieldset className="grid gap-2"><legend className="text-sm font-medium">Page được phép truy cập (để trống: tất cả)</legend>{pages.map((page) => <label key={page.pageId} className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={allowedPages.includes(page.pageId)} onChange={(event) => setAllowedPages((current) => event.target.checked ? [...current, page.pageId] : current.filter((id) => id !== page.pageId))} />{page.pageName ?? page.pageId}</label>)}</fieldset>}<button disabled={busy} className="w-fit rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-60">{busy ? "Đang lưu..." : "Thêm nhân viên"}</button></form>}</div>;
+
+  useEffect(() => {
+    let live = true;
+    void apiRequest<{ workspaces: Array<{ id: string; role: string }> }>(API_URL, "/api/v1/workspaces", token, {}, refresh)
+      .then(async ({ workspaces }) => {
+        const id = workspaceId || workspaces.find((item) => item.role === "owner")?.id || workspaces[0]?.id || "";
+        if (!live || !id) return;
+        setWorkspaceId(id);
+        setCanManage(workspaces.some((item) => item.id === id && item.role === "owner"));
+        await load(id);
+      })
+      .catch(() => { if (live) setError("Không thể tải thành viên Workspace."); });
+    return () => { live = false; };
+  }, [token, refresh]);
+
+  const updateMemberChannels = async (member: WorkspaceMemberView, nextChannels: WorkspaceChannelRef[]) => {
+    setBusy(true);
+    setError("");
+    try {
+      await apiRequest(API_URL, `/api/v1/workspaces/${workspaceId}/members/${member.userId}`, token, {
+        method: "PATCH", body: JSON.stringify({ allowedChannels: nextChannels })
+      }, refresh);
+      await load(workspaceId);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Không thể cập nhật quyền kênh.");
+    } finally { setBusy(false); }
+  };
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!workspaceId) return;
+    setBusy(true);
+    setError("");
+    try {
+      await apiRequest(API_URL, `/api/v1/workspaces/${workspaceId}/members`, token, {
+        method: "POST", body: JSON.stringify({ email, role, allowedChannels: role === "staff" ? allowedChannels : [] })
+      }, refresh);
+      setEmail("");
+      setAllowedChannels([]);
+      await load(workspaceId);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Không thể thêm thành viên.");
+    } finally { setBusy(false); }
+  };
+
+  const renderChannelChoices = (selected: WorkspaceChannelRef[], onToggle: (channel: WorkspaceChannelRef, enabled: boolean) => void) => (
+    <WorkspaceChannelCheckboxGroups channels={channels} selected={selected} onToggle={onToggle} />
+  );
+
+  return <div className="p-6">
+    <h2 className="mb-2 text-2xl font-bold text-gray-900">Thành viên Workspace</h2>
+    <p className="mb-5 text-sm text-gray-600">Chỉ tài khoản đã đăng ký mới được thêm. Chủ sở hữu không thể sửa hoặc xóa. Không chọn kênh nào nghĩa là được truy cập tất cả kênh.</p>
+    {error && <p className="mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</p>}
+    <div className="rounded-2xl bg-white p-5 shadow-sm">
+      <div className="grid gap-3">{members.map((member) => <div key={member.userId} className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 py-3">
+        <div><p className="font-semibold text-slate-800">{member.name || member.email}</p><p className="text-sm text-slate-500">{member.email}{member.allowedChannels.length ? ` · ${member.allowedChannels.map((channel) => `${workspaceChannelLabels[channel.platform]}: ${channel.channelId}`).join(", ")}` : " · Tất cả kênh"}</p></div>
+        <div className="flex items-center gap-2">
+          <select aria-label={`Vai trò của ${member.email}`} disabled={!canManage || member.role === "owner" || busy} value={member.role} className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50" onChange={async (event) => {
+            const nextRole = event.target.value as "admin" | "staff";
+            setBusy(true);
+            try {
+              await apiRequest(API_URL, `/api/v1/workspaces/${workspaceId}/members/${member.userId}`, token, { method: "PATCH", body: JSON.stringify({ role: nextRole, allowedChannels: nextRole === "staff" ? member.allowedChannels : [] }) }, refresh);
+              await load(workspaceId);
+            } catch (failure) { setError(failure instanceof Error ? failure.message : "Không thể cập nhật vai trò."); }
+            finally { setBusy(false); }
+          }}><option value="owner">Chủ sở hữu</option><option value="admin">Quản trị viên</option><option value="staff">Nhân viên</option></select>
+          {canManage && member.role !== "owner" && <button type="button" disabled={busy} className="rounded-lg px-3 py-2 text-sm text-rose-600 hover:bg-rose-50 cursor-pointer disabled:cursor-not-allowed" onClick={async () => {
+            if (!window.confirm(`Xóa ${member.email} khỏi Workspace?`)) return;
+            setBusy(true);
+            try { await apiRequest(API_URL, `/api/v1/workspaces/${workspaceId}/members/${member.userId}`, token, { method: "DELETE" }, refresh); await load(workspaceId); }
+            catch (failure) { setError(failure instanceof Error ? failure.message : "Không thể xóa thành viên."); }
+            finally { setBusy(false); }
+          }}>Xóa</button>}
+        </div>
+        {canManage && member.role === "staff" && channels.length > 0 && <fieldset className="grid w-full gap-2 sm:pl-2"><legend className="mb-2 text-xs font-medium text-slate-600">Kênh được phép truy cập</legend>{renderChannelChoices(member.allowedChannels, (channel, enabled) => {
+          const next = enabled ? [...member.allowedChannels, channel] : member.allowedChannels.filter((current) => current.platform !== channel.platform || current.channelId !== channel.channelId);
+          void updateMemberChannels(member, next);
+        })}</fieldset>}
+      </div>)}</div>
+    </div>
+    {canManage && <form className="mt-5 grid gap-4 rounded-2xl bg-white p-5 shadow-sm" onSubmit={(event) => void submit(event)}>
+      <h3 className="font-semibold text-slate-800">Thêm thành viên</h3>
+      <label className="grid gap-1 text-sm font-medium">Email<input className="rounded-lg border border-slate-200 px-3 py-2.5" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+      <label className="grid gap-1 text-sm font-medium">Vai trò<select className="rounded-lg border border-slate-200 px-3 py-2.5" value={role} onChange={(event) => setRole(event.target.value as "admin" | "staff")}><option value="admin">Quản trị viên</option><option value="staff">Nhân viên</option></select></label>
+      {role === "staff" && channels.length > 0 && <fieldset className="grid gap-2"><legend className="mb-2 text-sm font-medium">Kênh được phép truy cập</legend>{renderChannelChoices(allowedChannels, (channel, enabled) => setAllowedChannels((current) => enabled ? [...current, channel] : current.filter((item) => item.platform !== channel.platform || item.channelId !== channel.channelId)))}<p className="text-xs text-slate-500">Để trống nghĩa là không giới hạn trong Workspace.</p></fieldset>}
+      {role === "staff" && channels.length === 0 && <p className="text-sm text-slate-500">Workspace chưa có kênh để phân quyền.</p>}
+      <button disabled={busy} className="w-fit rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-60">{busy ? "Đang lưu..." : "Thêm nhân viên"}</button>
+    </form>}
+  </div>;
 }
 
 export function SettingsPage({ token, refresh, onLogoClick, onNavigate, user, onLogout, onProfile }: SettingsPageProps) {

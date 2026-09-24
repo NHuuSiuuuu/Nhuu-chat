@@ -37,9 +37,13 @@ describe("inbox realtime recipients", () => {
     socketMocks.to.mockReturnValue({ emit: socketMocks.emit });
     socketMocks.in.mockReturnValue({ disconnectSockets: socketMocks.disconnectSockets });
     authMocks.isAuthSessionActive.mockResolvedValue(true);
-    workspaceMemberMocks.findOne.mockReturnValue({ lean: () => Promise.resolve(null), sort: () => ({ lean: () => Promise.resolve(null) }) });
+    workspaceMemberMocks.findOne.mockReturnValue({
+      lean: () => Promise.resolve(null), select: () => ({ lean: () => Promise.resolve(null) }),
+      sort: () => ({ lean: () => Promise.resolve(null) })
+    });
     workspaceMemberMocks.find.mockReturnValue({ limit: () => ({ lean: () => Promise.resolve([]) }), select: () => ({ lean: () => Promise.resolve([]) }) });
     workspaceMocks.findById.mockReturnValue({ select: () => ({ lean: () => Promise.resolve(null) }) });
+    workspaceMocks.findOne.mockReturnValue({ select: () => ({ lean: () => Promise.resolve(null) }) });
     createRealtimeServer({} as never, "");
   });
 
@@ -52,13 +56,57 @@ describe("inbox realtime recipients", () => {
     expect(socketMocks.emit).toHaveBeenCalledWith("chat:conversation_updated", payload);
   });
 
-  it("keeps the shared admin broadcast for existing platforms", () => {
+  it("keeps the shared admin broadcast for shared channels without a Workspace", async () => {
     const payload = { id: "conversation-1", platform: "telegram" };
+    conversationMocks.findById.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({
+      ownerId: "owner-1", platform: "telegram", channelId: "chat-1"
+    }) }) });
 
     emitInboxEventToRecipients("chat:conversation_updated", ["owner-1"], payload);
 
+    await vi.waitFor(() => expect(socketMocks.to).toHaveBeenCalledWith(["inbox:admins", "inbox:owner-1"]));
     expect(socketMocks.to).toHaveBeenCalledWith(["inbox:admins", "inbox:owner-1"]);
     expect(socketMocks.emit).toHaveBeenCalledWith("chat:conversation_updated", payload);
+  });
+
+  it("adds only Workspace members permitted for the shared platform and channel", async () => {
+    conversationMocks.findById.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({
+      ownerId: "owner-1", platform: "telegram", channelId: "chat-1"
+    }) }) });
+    workspaceMocks.findOne.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({ _id: "workspace-1" }) }) });
+    workspaceMemberMocks.find.mockReturnValue({ select: () => ({ lean: () => Promise.resolve([
+      { userId: "staff-allowed", role: "staff", allowedChannels: [{ platform: "telegram", channelId: "chat-1" }], allowedPages: [] },
+      { userId: "staff-denied", role: "staff", allowedChannels: [{ platform: "facebook", channelId: "chat-1" }], allowedPages: [] },
+      { userId: "admin-1", role: "admin", allowedChannels: [], allowedPages: [] }
+    ]) }) });
+
+    emitInboxEventToRecipients("chat:conversation_updated", ["owner-1"], {
+      id: "conversation-1", platform: "telegram", channelId: "chat-1"
+    });
+
+    await vi.waitFor(() => expect(socketMocks.to).toHaveBeenCalledWith(["inbox:staff-allowed", "inbox:admin-1"]));
+    expect(socketMocks.emit).toHaveBeenCalledWith("chat:conversation_updated", {
+      id: "conversation-1", platform: "telegram", channelId: "chat-1"
+    });
+  });
+
+  it("does not leak a shared-channel update to an assigned member without channel access", async () => {
+    conversationMocks.findById.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({
+      ownerId: "owner-1", platform: "telegram", channelId: "chat-1"
+    }) }) });
+    workspaceMocks.findOne.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({ _id: "workspace-1" }) }) });
+    workspaceMemberMocks.find.mockReturnValue({ select: () => ({ lean: () => Promise.resolve([
+      { userId: "owner-1", role: "owner", allowedPages: [] },
+      { userId: "staff-denied", role: "staff", allowedChannels: [{ platform: "facebook", channelId: "page-1" }], allowedPages: [] }
+    ]) }) });
+
+    emitInboxEventToRecipients("chat:conversation_updated", ["owner-1", "staff-denied"], {
+      id: "conversation-1", platform: "telegram", channelId: "chat-1"
+    });
+
+    await vi.waitFor(() => expect(socketMocks.to).toHaveBeenCalledWith(["inbox:owner-1"]));
+    expect(socketMocks.to).not.toHaveBeenCalledWith(["inbox:owner-1", "inbox:staff-denied"]);
+    expect(socketMocks.to).not.toHaveBeenCalledWith(["inbox:admins", "inbox:owner-1", "inbox:staff-denied"]);
   });
 
   it("authenticates a handshake from the access cookie and retains the legacy auth fallback", async () => {
@@ -83,6 +131,27 @@ describe("inbox realtime recipients", () => {
 
     expect(authMocks.verifyAccessToken).toHaveBeenCalledWith("session-token");
     expect(socket.data).toEqual({ auth: principal });
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it("resolves platform-aware Workspace permissions in the socket handshake", async () => {
+    const principal = { id: "staff-1", email: "staff@example.com", role: "customer" };
+    authMocks.verifyAccessToken.mockResolvedValue(principal);
+    workspaceMemberMocks.findOne.mockReturnValue({ lean: () => Promise.resolve({
+      workspaceId: "workspace-1", userId: "staff-1", role: "staff", allowedPages: [],
+      allowedChannels: [{ platform: "telegram", channelId: "chat-1" }]
+    }) });
+    workspaceMocks.findById.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({ ownerUserId: "owner-1" }) }) });
+    const socket = { data: {}, handshake: { headers: {}, auth: { token: "session-token", workspaceId: "workspace-1" } } };
+    const middleware = socketMocks.use.mock.calls[0]?.[0] as (socket: unknown, next: (error?: Error) => void) => Promise<void>;
+    const next = vi.fn();
+
+    await middleware(socket, next);
+
+    expect(socket.data).toEqual({ auth: {
+      ...principal,
+      workspace: { ownerUserId: "owner-1", allowedChannels: [{ platform: "telegram", channelId: "chat-1" }], allowedPages: [] }
+    } });
     expect(next).toHaveBeenCalledWith();
   });
 

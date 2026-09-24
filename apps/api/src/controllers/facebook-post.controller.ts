@@ -11,7 +11,7 @@ function userId(request: AuthenticatedRequest): string {
   return request.workspace?.ownerUserId ?? request.auth.id;
 }
 function allowedPages(request: AuthenticatedRequest): string[] | undefined {
-  return request.workspace?.allowedPages.length ? request.workspace.allowedPages : undefined;
+  return request.workspace?.allowedPages ?? undefined;
 }
 function assertPageAccess(request: AuthenticatedRequest, pageId: string) {
   const pages = allowedPages(request);

@@ -1,4 +1,5 @@
 import mongoose, { model, Schema, type InferSchemaType } from "mongoose";
+import { workspaceChannelPlatforms } from "../auth/workspace-channel-access.js";
 
 export const workspaceRoles = ["owner", "admin", "staff"] as const;
 export type WorkspaceRole = (typeof workspaceRoles)[number];
@@ -8,7 +9,11 @@ const workspaceMemberSchema = new Schema(
     workspaceId: { type: Schema.Types.ObjectId, ref: "Workspace", required: true },
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     role: { type: String, enum: workspaceRoles, required: true },
-    allowedPages: { type: [String], default: [] }
+    allowedPages: { type: [String], default: [] },
+    allowedChannels: {
+      type: [{ _id: false, platform: { type: String, enum: workspaceChannelPlatforms, required: true }, channelId: { type: String, required: true, trim: true } }],
+      default: undefined
+    }
   },
   { timestamps: true }
 );

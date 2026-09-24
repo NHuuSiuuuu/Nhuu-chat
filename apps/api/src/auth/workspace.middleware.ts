@@ -5,13 +5,15 @@ import { AppError } from "../common/errors.js";
 import { WorkspaceMemberModel } from "../models/workspace-member.model.js";
 import { WorkspaceModel } from "../models/workspace.model.js";
 import { workspaceService } from "../services/workspace.service.js";
+import { effectiveAllowedChannels } from "./workspace-channel-access.js";
 import type { AuthenticatedRequest } from "./auth.middleware.js";
 
 export interface WorkspaceContext {
   id: string;
   ownerUserId: string;
   role: "owner" | "admin" | "staff";
-  allowedPages: string[];
+  allowedPages: string[] | null;
+  allowedChannels: Array<{ platform: "facebook" | "instagram" | "zalo" | "telegram"; channelId: string }>;
 }
 
 export const resolveWorkspaceContext: RequestHandler = async (request, _response, next) => {
@@ -36,9 +38,13 @@ export const resolveWorkspaceContext: RequestHandler = async (request, _response
     if (!membership) throw new AppError(requestedId ? 403 : 404, requestedId ? "WORKSPACE_MEMBERSHIP_REQUIRED" : "WORKSPACE_NOT_FOUND", "Workspace membership is required");
     const workspace = await WorkspaceModel.findById(membership.workspaceId).select("ownerUserId").lean();
     if (!workspace) throw new AppError(404, "WORKSPACE_NOT_FOUND", "Workspace was not found");
+    const allowedChannels = membership.role === "staff" ? effectiveAllowedChannels(membership) : [];
     authRequest.workspace = {
       id: String(membership.workspaceId), ownerUserId: String(workspace.ownerUserId),
-      role: membership.role, allowedPages: membership.allowedPages ?? []
+      role: membership.role, allowedChannels,
+      allowedPages: membership.role !== "staff" || allowedChannels.length === 0
+        ? null
+        : allowedChannels.filter((channel) => channel.platform === "facebook").map((channel) => channel.channelId)
     };
     next();
   } catch (error) { next(error); }

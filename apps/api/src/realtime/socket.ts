@@ -9,6 +9,7 @@ import { ConversationModel } from "../models/conversation.model.js";
 import { canJoinConversation } from "./access.js";
 import { WorkspaceMemberModel } from "../models/workspace-member.model.js";
 import { WorkspaceModel } from "../models/workspace.model.js";
+import { effectiveAllowedChannels, isWorkspaceChannelPlatform } from "../auth/workspace-channel-access.js";
 
 const redisClients = new WeakMap<Server, { pub: RedisClientType; sub: RedisClientType }>();
 let activeServer: Server | undefined;
@@ -40,9 +41,13 @@ export function createRealtimeServer(httpServer: HttpServer, redisUrl = process.
       if (membership) {
         const workspace = await WorkspaceModel.findById(membership.workspaceId).select("ownerUserId").lean();
         if (!workspace) throw new Error("workspace not found");
+        const allowedChannels = membership.role === "staff" ? effectiveAllowedChannels(membership) : [];
         socket.data.auth = {
           ...auth,
-          workspace: { ownerUserId: String(workspace.ownerUserId), allowedPages: membership.allowedPages ?? [] }
+          workspace: {
+            ownerUserId: String(workspace.ownerUserId), allowedChannels,
+            allowedPages: allowedChannels.filter((channel) => channel.platform === "facebook").map((channel) => channel.channelId)
+          }
         };
       } else {
         socket.data.auth = auth;
@@ -51,7 +56,7 @@ export function createRealtimeServer(httpServer: HttpServer, redisUrl = process.
     } catch { next(new Error("unauthorized")); }
   });
   io.on("connection", (socket) => {
-    const auth = socket.data.auth as AuthPrincipal & { workspace?: { ownerUserId: string; allowedPages: string[] } };
+    const auth = socket.data.auth as AuthPrincipal & { workspace?: { ownerUserId: string; allowedPages: string[]; allowedChannels: ReturnType<typeof effectiveAllowedChannels> } };
     const ready = (async (): Promise<boolean> => {
       try {
         if (auth.sessionId) {
@@ -116,15 +121,6 @@ export function emitChatEvent(event: string, conversationId: string, payload: un
     void ConversationModel.findById(conversationId).select("ownerId assignedAgentId platform channelId").lean().then(async (conversation) => {
       if (!conversation) return;
       let recipients = [conversation.ownerId ? String(conversation.ownerId) : "", conversation.assignedAgentId ? String(conversation.assignedAgentId) : ""];
-      if (conversation.platform === "facebook" && conversation.ownerId && conversation.channelId) {
-        const workspace = await WorkspaceModel.findOne({ ownerUserId: conversation.ownerId }).select("_id").lean();
-        if (workspace) {
-          const memberships = await WorkspaceMemberModel.find({ workspaceId: workspace._id }).select("userId allowedPages").lean();
-          recipients = [...recipients, ...memberships
-            .filter((membership) => !membership.allowedPages?.length || membership.allowedPages.includes(conversation.channelId!))
-            .map((membership) => String(membership.userId))];
-        }
-      }
       emitInboxEventToRecipients(
         chatEvents.incomingMessage,
         recipients,
@@ -142,16 +138,33 @@ export function emitInboxEvent(event: string, ownerId: string | null, payload: u
 
 export function emitInboxEventToRecipients(event: string, recipientIds: string[], payload: unknown): void {
   if (!activeServer) return;
-  const isZaloPersonal = Boolean(
-    payload
-    && typeof payload === "object"
-    && "platform" in payload
-    && payload.platform === "zalo_personal"
-  );
-  const isFacebook = Boolean(payload && typeof payload === "object" && "platform" in payload && payload.platform === "facebook");
+  const payloadRecord = payload && typeof payload === "object" ? payload as Record<string, unknown> : null;
+  const conversationId = typeof payloadRecord?.id === "string" ? payloadRecord.id
+    : typeof payloadRecord?.conversationId === "string" ? payloadRecord.conversationId : null;
+  if (conversationId && isWorkspaceChannelPlatform(payloadRecord?.platform)) {
+    const server = activeServer;
+    void ConversationModel.findById(conversationId).select("ownerId platform channelId").lean().then(async (conversation) => {
+      if (!conversation?.ownerId || !conversation.channelId || !isWorkspaceChannelPlatform(conversation.platform)) return;
+      const workspace = await WorkspaceModel.findOne({ ownerUserId: conversation.ownerId }).select("_id").lean();
+      if (!workspace) {
+        const rooms = ["inbox:admins", ...new Set(recipientIds.filter(Boolean).map((recipientId) => `inbox:${recipientId}`))];
+        server.to(rooms).emit(event, payload);
+        return;
+      }
+      const memberships = await WorkspaceMemberModel.find({ workspaceId: workspace._id }).select("userId role allowedPages allowedChannels").lean();
+      const authorizedRecipients = memberships.filter((membership) => {
+        if (membership.role === "owner" || membership.role === "admin") return true;
+        const allowed = effectiveAllowedChannels(membership);
+        return allowed.length === 0 || allowed.some((channel) => channel.platform === conversation.platform && channel.channelId === conversation.channelId);
+      }).map((membership) => String(membership.userId));
+      if (authorizedRecipients.length) server.to([...new Set(authorizedRecipients)].map((id) => `inbox:${id}`)).emit(event, payload);
+    }).catch(() => undefined);
+    return;
+  }
+  const isZaloPersonal = payloadRecord?.platform === "zalo_personal";
   // Zalo cá nhân chỉ phát đến owner/người được phân công; các nền tảng cũ vẫn dùng phòng admin chung.
   const rooms = [
-    ...(isZaloPersonal || isFacebook ? [] : ["inbox:admins"]),
+    ...(isZaloPersonal ? [] : ["inbox:admins"]),
     ...new Set(recipientIds.filter(Boolean).map((recipientId) => `inbox:${recipientId}`))
   ];
   activeServer.to(rooms).emit(event, payload);

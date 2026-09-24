@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { WorkspaceMemberService, type WorkspaceMemberDependencies, type WorkspaceMembership, type WorkspaceMemberView } from "./workspace-member.service.js";
+import { WorkspaceMemberService, type WorkspaceChannelView, type WorkspaceMemberDependencies, type WorkspaceMembership, type WorkspaceMemberView } from "./workspace-member.service.js";
 
 function fixture() {
   const memberships = new Map<string, WorkspaceMembership>([
@@ -9,6 +9,10 @@ function fixture() {
     ["workspace-2:staff-1", { workspaceId: "workspace-2", userId: "staff-1", role: "staff", allowedPages: [] }]
   ]);
   const views: WorkspaceMemberView[] = [];
+  const channels: WorkspaceChannelView[] = [
+    { platform: "facebook", channelId: "page-1", name: "Page Một" },
+    { platform: "telegram", channelId: "chat-1", name: "Nhóm Telegram" }
+  ];
   const dependencies: WorkspaceMemberDependencies = {
     users: {
       async findByEmail(email) {
@@ -32,8 +36,12 @@ function fixture() {
       },
       async remove(workspaceId, userId) { memberships.delete(`${workspaceId}:${userId}`); }
     },
-    pages: {
-      async findOwned(ownerUserId, pageIds) { return ownerUserId === "owner-1" ? pageIds.filter((id) => id === "page-1") : []; }
+    channels: {
+      async listOwned(ownerUserId) { return ownerUserId === "owner-1" ? channels : []; },
+      async findOwned(ownerUserId, refs) {
+        const owned = new Set(ownerUserId === "owner-1" ? channels.map((item) => `${item.platform}:${item.channelId}`) : []);
+        return refs.filter((item) => owned.has(`${item.platform}:${item.channelId}`));
+      }
     }
   };
   return { service: new WorkspaceMemberService(dependencies), memberships };
@@ -47,9 +55,9 @@ describe("WorkspaceMemberService", () => {
     })).rejects.toMatchObject({ statusCode: 400, message: "Tài khoản không tồn tại, yêu cầu đăng ký trước" });
 
     const result = await service.addMember("workspace-1", "owner-1", {
-      email: " STAFF@example.com ", role: "staff", allowedPages: ["page-1"]
+      email: " STAFF@example.com ", role: "staff", allowedChannels: [{ platform: "facebook", channelId: "page-1" }]
     });
-    expect(result.member).toMatchObject({ userId: "staff-1", role: "staff", allowedPages: ["page-1"] });
+    expect(result.member).toMatchObject({ userId: "staff-1", role: "staff", allowedPages: ["page-1"], allowedChannels: [{ platform: "facebook", channelId: "page-1" }] });
     expect(memberships.has("workspace-1:staff-1")).toBe(true);
   });
 
@@ -59,8 +67,8 @@ describe("WorkspaceMemberService", () => {
       email: "staff@example.com", role: "staff", allowedPages: []
     })).rejects.toMatchObject({ statusCode: 403 });
     await expect(service.addMember("workspace-1", "owner-1", {
-      email: "staff@example.com", role: "staff", allowedPages: ["foreign-page"]
-    })).rejects.toMatchObject({ statusCode: 400, code: "WORKSPACE_PAGE_ACCESS_INVALID" });
+      email: "staff@example.com", role: "staff", allowedChannels: [{ platform: "telegram", channelId: "foreign-chat" }]
+    })).rejects.toMatchObject({ statusCode: 400, code: "WORKSPACE_CHANNEL_ACCESS_INVALID" });
   });
 
   it("keeps the owner immutable and gives admins unrestricted Page access", async () => {
@@ -68,7 +76,21 @@ describe("WorkspaceMemberService", () => {
     await expect(service.removeMember("workspace-1", "owner-1", "owner-1"))
       .rejects.toMatchObject({ statusCode: 409, code: "WORKSPACE_OWNER_IMMUTABLE" });
     await expect(service.addMember("workspace-1", "owner-1", {
-      email: "staff@example.com", role: "admin", allowedPages: ["page-1"]
+      email: "staff@example.com", role: "admin", allowedChannels: [{ platform: "facebook", channelId: "page-1" }]
     })).resolves.toMatchObject({ member: { role: "admin", allowedPages: [] } });
+  });
+
+  it("lists all shared channels for the owner and only the assigned platform/channel pair for staff", async () => {
+    const { service } = fixture();
+    await expect(service.listChannels("workspace-1", "owner-1")).resolves.toMatchObject({ channels: [
+      { platform: "facebook", channelId: "page-1" },
+      { platform: "telegram", channelId: "chat-1" }
+    ] });
+    const fixtureWithRestrictedMember = fixture();
+    await fixtureWithRestrictedMember.service.addMember("workspace-1", "owner-1", {
+      email: "staff@example.com", role: "staff", allowedChannels: [{ platform: "telegram", channelId: "chat-1" }]
+    });
+    await expect(fixtureWithRestrictedMember.service.listChannels("workspace-1", "staff-1"))
+      .resolves.toMatchObject({ channels: [{ platform: "telegram", channelId: "chat-1" }] });
   });
 });

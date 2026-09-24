@@ -6,7 +6,7 @@ import { errorHandler } from "../common/errors.js";
 import { issueTokens } from "../services/auth.service.js";
 
 const serviceMocks = vi.hoisted(() => ({
-  listWorkspaces: vi.fn(), listMembers: vi.fn(), addMember: vi.fn(), updateMember: vi.fn(), removeMember: vi.fn()
+  listWorkspaces: vi.fn(), listMembers: vi.fn(), listChannels: vi.fn(), addMember: vi.fn(), updateMember: vi.fn(), removeMember: vi.fn()
 }));
 vi.mock("../services/workspace-member.service.js", () => ({ workspaceMemberService: serviceMocks }));
 
@@ -52,5 +52,15 @@ describe("Workspace routes", () => {
       "507f1f77bcf86cd799439012", "507f1f77bcf86cd799439011",
       { email: "staff@example.com", role: "staff", allowedPages: [] }
     );
+  });
+
+  it("lists workspace channels only through the authenticated route", async () => {
+    const token = await customerToken();
+    const url = "/api/v1/workspaces/507f1f77bcf86cd799439012/channels";
+    await expect(request(app).get(url)).resolves.toMatchObject({ status: 401 });
+    serviceMocks.listChannels.mockResolvedValue({ channels: [{ platform: "telegram", channelId: "chat-1" }] });
+    await expect(request(app).get(url).set("Authorization", `Bearer ${token}`))
+      .resolves.toMatchObject({ status: 200, body: { channels: [{ platform: "telegram", channelId: "chat-1" }] } });
+    expect(serviceMocks.listChannels).toHaveBeenCalledWith("507f1f77bcf86cd799439012", "507f1f77bcf86cd799439011");
   });
 });

@@ -13,4 +13,20 @@ describe("workspace member schemas", () => {
     expect(workspaceMemberSchema.safeParse({ email: "owner@example.com", role: "owner" }).success).toBe(false);
     expect(workspaceMemberPatchSchema.safeParse({}).success).toBe(false);
   });
+
+  it("accepts unique multi-platform channel references and rejects personal platforms", () => {
+    expect(workspaceMemberSchema.parse({
+      email: "staff@example.com", role: "staff", allowedChannels: [
+        { platform: "facebook", channelId: "same-id" },
+        { platform: "telegram", channelId: "same-id" },
+        { platform: "telegram", channelId: "same-id" }
+      ]
+    }).allowedChannels).toEqual([
+      { platform: "facebook", channelId: "same-id" },
+      { platform: "telegram", channelId: "same-id" }
+    ]);
+    expect(workspaceMemberSchema.safeParse({ email: "staff@example.com", role: "staff", allowedChannels: [
+      { platform: "zalo_personal", channelId: "personal" }
+    ] }).success).toBe(false);
+  });
 });
