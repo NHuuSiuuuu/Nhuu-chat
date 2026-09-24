@@ -137,6 +137,7 @@ export function App() {
   const [sessionRetryCount, setSessionRetryCount] = useState(0);
   const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState("");
+  const [workspaceContentVersion, setWorkspaceContentVersion] = useState(0);
   const [workspacesLoaded, setWorkspacesLoaded] = useState(false);
   const [workspaceLoadFailed, setWorkspaceLoadFailed] = useState(false);
   const page = pageFromPath(location.pathname);
@@ -282,8 +283,12 @@ export function App() {
     if (!auth || workspaceId === activeWorkspaceId) return;
     setActiveWorkspaceSelection(auth.user.id, workspaceId);
     setActiveWorkspaceId(workspaceId);
-    window.location.reload();
-  }, [activeWorkspaceId, auth]);
+    setWorkspaceContentVersion((version) => version + 1);
+    setRequestedConversation(null);
+    setInboxPlatform(undefined);
+    persistInboxPlatform(undefined);
+    if (location.pathname === "/inbox") routerNavigate("/inbox", { replace: true });
+  }, [activeWorkspaceId, auth, location.pathname, routerNavigate]);
   useEffect(() => {
     if (!authReady || !auth || !canAccessInbox(auth.user.role)) return;
     let settingsLoaded = false;
@@ -379,7 +384,7 @@ export function App() {
         fallback={sessionFallback}
         landing={<LandingPage user={auth?.user ?? null} onDashboard={() => navigate("dashboard")} onLogin={() => navigateAuth("login")} onRegister={() => navigateAuth("register")} onLogout={logout} />}
         authPages={authPages}
-        privatePage={privatePage}
+        privatePage={<React.Fragment key={workspaceContentVersion}>{privatePage}</React.Fragment>}
       />
     </Suspense>
     </WorkspacePickerProvider>

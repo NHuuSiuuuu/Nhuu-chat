@@ -69,4 +69,12 @@ describe("DashboardTopbar", () => {
     expect(source).toContain("isMobileNestedSettingsOpen");
     expect(source).toContain("navigateSettingsFromMobile(settingsItem)");
   });
+
+  it("restores mobile navigation state from session storage", () => {
+    const source = readFileSync(new URL("./DashboardTopbar.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('"nhuu-chat.mobile-menu-open"');
+    expect(source).toContain('"nhuu-chat.mobile-settings-open"');
+    expect(source).toContain('"nhuu-chat.mobile-nested-settings-open"');
+  });
 });

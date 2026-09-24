@@ -290,6 +290,16 @@ describe("Settings page", () => {
     expect(source).toContain("allowedChannels: role === \"staff\" ? allowedChannels : []");
   });
 
+  it("opens the Workspace member form in an accessible modal", () => {
+    const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("const [isModalOpen, setIsModalOpen] = useState(false)");
+    expect(source).toContain('role="dialog"');
+    expect(source).toContain('aria-modal="true"');
+    expect(source).toContain('aria-label="Đóng modal thêm nhân viên"');
+    expect(source).toContain('>Hủy</button>');
+  });
+
   it("maps each settings option to its corresponding icon", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 

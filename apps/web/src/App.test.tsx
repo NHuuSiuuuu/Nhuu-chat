@@ -64,6 +64,8 @@ describe("App navigation", () => {
     expect(source).toContain("WorkspacePickerProvider");
     expect(source).not.toContain("workspaces.length > 1");
     expect(source).toContain("createChatSocket(API_URL, undefined, activeWorkspaceId || undefined)");
+    expect(source).not.toContain("window.location.reload()");
+    expect(source).toContain("workspaceContentVersion");
   });
 
   it("routes the settings header item to /settings and renders it below the shared header", () => {

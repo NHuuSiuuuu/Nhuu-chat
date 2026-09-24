@@ -1058,8 +1058,16 @@ function WorkspaceMembersPanel({ token, refresh }: { token: string; refresh?: ()
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"admin" | "staff">("staff");
   const [allowedChannels, setAllowedChannels] = useState<WorkspaceChannelRef[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setIsModalOpen(false); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [isModalOpen]);
 
   const load = async (id: string) => {
     const [memberResult, channelResult] = await Promise.all([
@@ -1108,6 +1116,7 @@ function WorkspaceMembersPanel({ token, refresh }: { token: string; refresh?: ()
       }, refresh);
       setEmail("");
       setAllowedChannels([]);
+      setIsModalOpen(false);
       await load(workspaceId);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Không thể thêm thành viên.");
@@ -1121,7 +1130,7 @@ function WorkspaceMembersPanel({ token, refresh }: { token: string; refresh?: ()
   return <div className="p-6">
     <h2 className="mb-2 text-2xl font-bold text-gray-900">Thành viên Workspace</h2>
     <p className="mb-5 text-sm text-gray-600">Chỉ tài khoản đã đăng ký mới được thêm. Chủ sở hữu không thể sửa hoặc xóa. Không chọn kênh nào nghĩa là được truy cập tất cả kênh.</p>
-    {error && <p className="mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</p>}
+    {error && !isModalOpen && <p className="mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</p>}
     <div className="rounded-2xl bg-white p-5 shadow-sm">
       <div className="grid gap-3">{members.map((member) => <div key={member.userId} className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 py-3">
         <div><p className="font-semibold text-slate-800">{member.name || member.email}</p><p className="text-sm text-slate-500">{member.email}{member.allowedChannels.length ? ` · ${member.allowedChannels.map((channel) => `${workspaceChannelLabel(channel.platform)}: ${channels.find((available) => available.platform === channel.platform && available.channelId === channel.channelId)?.displayId ?? channel.channelId}`).join(", ")}` : " · Tất cả kênh"}</p></div>
@@ -1149,14 +1158,20 @@ function WorkspaceMembersPanel({ token, refresh }: { token: string; refresh?: ()
         })}</fieldset>}
       </div>)}</div>
     </div>
-    {canManage && <form className="mt-5 grid gap-4 rounded-2xl bg-white p-5 shadow-sm" onSubmit={(event) => void submit(event)}>
-      <h3 className="font-semibold text-slate-800">Thêm thành viên</h3>
-      <label className="grid gap-1 text-sm font-medium">Email<input className="rounded-lg border border-slate-200 px-3 py-2.5" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
-      <label className="grid gap-1 text-sm font-medium">Vai trò<select className="rounded-lg border border-slate-200 px-3 py-2.5" value={role} onChange={(event) => setRole(event.target.value as "admin" | "staff")}><option value="admin">Quản trị viên</option><option value="staff">Nhân viên</option></select></label>
-      {role === "staff" && channels.length > 0 && <fieldset className="grid gap-2"><legend className="mb-2 text-sm font-medium">Kênh được phép truy cập</legend>{renderChannelChoices(allowedChannels, (channel, enabled) => setAllowedChannels((current) => enabled ? [...current, channel] : current.filter((item) => item.platform !== channel.platform || item.channelId !== channel.channelId)))}<p className="text-xs text-slate-500">Để trống nghĩa là không giới hạn trong Workspace.</p></fieldset>}
-      {role === "staff" && channels.length === 0 && <p className="text-sm text-slate-500">Workspace chưa có kênh để phân quyền.</p>}
-      <button disabled={busy} className="w-fit rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-60">{busy ? "Đang lưu..." : "Thêm nhân viên"}</button>
-    </form>}
+    {canManage && <button type="button" onClick={() => { setError(""); setIsModalOpen(true); }} className="mt-5 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700 cursor-pointer">Thêm nhân viên</button>}
+    {canManage && isModalOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsModalOpen(false); }}>
+      <section className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="workspace-member-modal-title">
+        <header className="flex items-center justify-between border-b border-slate-100 p-5"><h3 id="workspace-member-modal-title" className="font-semibold text-slate-800">Thêm nhân viên</h3><button type="button" className="grid size-8 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 cursor-pointer" aria-label="Đóng modal thêm nhân viên" onClick={() => setIsModalOpen(false)}>×</button></header>
+        <form className="grid gap-4 overflow-y-auto p-5" onSubmit={(event) => void submit(event)}>
+          <label className="grid gap-1 text-sm font-medium text-slate-700">Email (đã có tài khoản trong hệ thống)<input className="rounded-lg border border-slate-200 px-3 py-2.5" type="email" required placeholder="nhanvien@email.com" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+          <label className="grid gap-1 text-sm font-medium text-slate-700">Vai trò<select className="rounded-lg border border-slate-200 px-3 py-2.5" value={role} onChange={(event) => setRole(event.target.value as "admin" | "staff")}><option value="admin">Quản trị viên</option><option value="staff">Nhân viên</option></select></label>
+          {role === "staff" && channels.length > 0 && <fieldset className="grid gap-2"><legend className="mb-2 text-sm font-medium text-slate-700">Kênh được phép truy cập</legend>{renderChannelChoices(allowedChannels, (channel, enabled) => setAllowedChannels((current) => enabled ? [...current, channel] : current.filter((item) => item.platform !== channel.platform || item.channelId !== channel.channelId)))}<p className="text-xs text-slate-500">Để trống nghĩa là không giới hạn trong Workspace.</p></fieldset>}
+          {role === "staff" && channels.length === 0 && <p className="text-sm text-slate-500">Workspace chưa có kênh để phân quyền.</p>}
+          {error && <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</p>}
+          <footer className="flex justify-end gap-2 border-t border-slate-100 pt-4"><button type="button" disabled={busy} onClick={() => setIsModalOpen(false)} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 cursor-pointer disabled:cursor-not-allowed">Hủy</button><button type="submit" disabled={busy} className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60">{busy ? "Đang lưu..." : "Thêm"}</button></footer>
+        </form>
+      </section>
+    </div>}
   </div>;
 }
 

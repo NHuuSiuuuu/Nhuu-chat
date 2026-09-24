@@ -357,8 +357,10 @@ describe("Inbox Tailwind migration", () => {
 
     expect(source).toContain("selectedConversationId?: string | null");
     expect(source).toContain("handledRequestedConversationRef.current = selectedConversationRequest");
-    expect(source).toContain("selectConversation(selectedConversationId)");
-    expect(source).toContain('params.delete("conversationId")');
+    expect(source).toContain("selectConversation(selectedConversationId, false)");
+    expect(source).not.toContain('params.delete("conversationId")');
+    expect(source).toContain('params.set("conversationId", id)');
+    expect(source).toContain('"nhuu-chat.inbox-list-open"');
   });
 
   it("applies per-account general settings to inbox notifications and unread navigation", () => {
