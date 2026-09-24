@@ -62,7 +62,7 @@
   html[data-accent="rose"] { --accent-color: #e11d48; --accent-soft: #fff1f2; }
   html[data-message-size="small"] { --message-font-size: 0.75rem; }
   html[data-message-size="large"] { --message-font-size: 1rem; }
-  html[data-theme="dark"] { --surface-color: #1e293b; --page-background: #0f172a; color-scheme: dark; }
+  html[data-theme="dark"] { --surface-color: #1e293b; --page-background: #0f172a; --accent-soft: color-mix(in srgb, var(--accent-color) 22%, #1e293b); color-scheme: dark; }
   html[data-theme="light"] { color-scheme: light; }
   html[data-theme="dark"] body { color: #e2e8f0; }
 
