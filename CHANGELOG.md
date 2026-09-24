@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Tách điều kiện phát âm thanh tin nhắn khỏi quyền thông báo trên trình duyệt.
+
 - Ngăn deep link của hội thoại đang mở kích hoạt chọn lại và gọi lặp API đánh dấu đã đọc.
 
 - Thêm thao tác hàng loạt trong Inbox để chọn hội thoại, đánh dấu đã đọc/chưa đọc hoặc xóa cùng dữ liệu liên quan.

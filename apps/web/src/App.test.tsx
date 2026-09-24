@@ -62,7 +62,9 @@ describe("App navigation", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("playNotificationSound(notificationSettings.notificationSound)");
-    expect(source).toContain("notificationSettings.notificationSound !== \"off\"");
+    expect(source).toContain("shouldPlayNotificationSound(notificationSettings.notificationSound, message.senderType)");
+    expect(source).toContain("shouldNotifyForIncomingMessage(notificationSettings, message.senderType)");
+    expect(source).not.toContain("!notificationSettings?.browserNotificationsEnabled || seenMessageIds.has(message.id)");
     expect(source).toContain('document.addEventListener("pointerdown", unlockAudio');
     expect(source).toContain('document.addEventListener("keydown", unlockAudio');
     expect(source).toContain("window.addEventListener(GENERAL_SETTINGS_UPDATED_EVENT, handleSettingsUpdated)");

@@ -25,7 +25,7 @@ import { authRouteFromPath, authenticatedAuthRedirect, type AuthRoute } from "./
 import { getActiveWorkspaceIdForUser, setActiveWorkspaceSelection, setActiveWorkspaceUser } from "./lib/api.js";
 import { WorkspacePickerProvider, type WorkspaceOption, type WorkspacePickerState } from "./components/dashboard/workspace-picker-context.js";
 import { playNotificationSound, unlockNotificationSound } from "./state/notification-sound.js";
-import { GENERAL_SETTINGS_UPDATED_EVENT } from "./state/general-settings.js";
+import { GENERAL_SETTINGS_UPDATED_EVENT, shouldNotifyForIncomingMessage, shouldPlayNotificationSound } from "./state/general-settings.js";
 import { applyAppearanceSettings, resetAppearanceSettings } from "./state/appearance-settings.js";
 
 const API_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
@@ -329,10 +329,13 @@ export function App() {
       }
     };
     const handleIncomingMessage = (message: ChatMessageContract) => {
-      if (message.senderType !== "customer" || !notificationSettings?.browserNotificationsEnabled || seenMessageIds.has(message.id)) return;
+      if (message.senderType !== "customer" || seenMessageIds.has(message.id)) return;
       seenMessageIds.add(message.id);
       if (seenMessageIds.size > 100) seenMessageIds.delete(seenMessageIds.values().next().value as string);
-      if (notificationSettings.notificationSound !== "off") void playNotificationSound(notificationSettings.notificationSound);
+      if (notificationSettings && shouldPlayNotificationSound(notificationSettings.notificationSound, message.senderType)) {
+        void playNotificationSound(notificationSettings.notificationSound);
+      }
+      if (!notificationSettings || !shouldNotifyForIncomingMessage(notificationSettings, message.senderType)) return;
       const activeConversationId = (globalThis as typeof globalThis & { __nhuuChatConversationContext?: { id: string | null } }).__nhuuChatConversationContext?.id;
       if (location.pathname === "/inbox" && activeConversationId === message.conversationId) return;
       const senderName = message.senderName?.trim() || "Khách hàng";

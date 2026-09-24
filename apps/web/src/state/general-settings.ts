@@ -38,6 +38,10 @@ export function shouldNotifyForIncomingMessage(settings: NotificationSettings, s
   return settings.browserNotificationsEnabled && senderType === "customer";
 }
 
+export function shouldPlayNotificationSound(sound: NotificationSound, senderType: InboxMessageSender): boolean {
+  return sound !== "off" && senderType === "customer";
+}
+
 export function getNotificationSoundTones(sound: NotificationSound): NotificationTone[] | null {
   return sound === "off" ? null : SOUND_PATTERNS[sound];
 }

@@ -4,6 +4,7 @@ import {
   getNextUnreadConversationId,
   getNotificationSoundTones,
   orderConversationsByUnread,
+  shouldPlayNotificationSound,
   shouldNotifyForIncomingMessage,
 } from "./general-settings.js";
 
@@ -23,6 +24,12 @@ describe("general settings inbox behavior", () => {
   });
 
   describe("notification sound", () => {
+    it("plays customer message sounds independently of browser notification permission", () => {
+      expect(shouldPlayNotificationSound("default", "customer")).toBe(true);
+      expect(shouldPlayNotificationSound("default", "agent")).toBe(false);
+      expect(shouldPlayNotificationSound("off", "customer")).toBe(false);
+    });
+
     it("maps enabled sound choices to tone patterns", () => {
       expect(getNotificationSoundTones("default")).toEqual([{ frequency: 880, durationMs: 140 }]);
       expect(getNotificationSoundTones("tri-tone")).toEqual([
