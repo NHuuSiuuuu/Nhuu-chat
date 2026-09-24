@@ -3,10 +3,28 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import { FacebookPublishingApiError } from "../lib/facebook-publishing.api.js";
-import { buildDashboardAccounts, conversationPathForPlatform, createLatestRequestRunner, loadFacebookDashboardStatus } from "./DashboardPage.js";
+import { buildDashboardAccounts, buildWorkspaceDashboardAccounts, conversationPathForPlatform, createLatestRequestRunner, loadFacebookDashboardStatus } from "./DashboardPage.js";
 import { buildConversationListRequestPath } from "./InboxPage.js";
 
 describe("dashboard connected accounts", () => {
+  it("builds staff dashboard accounts from every permitted Workspace platform", () => {
+    expect(buildWorkspaceDashboardAccounts([
+      { platform: "facebook", channelId: "page-42", name: "Facebook Page" },
+      { platform: "zalo_personal", channelId: "owner-1", name: "Zalo cá nhân", displayId: "zalo-user-1" },
+      { platform: "telegram_personal", channelId: "owner-1", name: "Telegram cá nhân", displayId: "telegram-user-1" },
+      { platform: "zalo", channelId: "oa-1", name: "Zalo OA" },
+      { platform: "telegram", channelId: "bot-1", name: "Telegram Bot" },
+      { platform: "instagram", channelId: "ig-1", name: "Instagram" }
+    ])).toMatchObject([
+      { id: "facebook:page-42", platform: "facebook", identifier: "page-42" },
+      { id: "zalo_personal", platform: "zalo", identifier: "zalo-user-1" },
+      { id: "telegram_personal", platform: "telegram", identifier: "telegram-user-1" },
+      { id: "zalo:oa-1", platform: "zalo", identifier: "oa-1" },
+      { id: "telegram:bot-1", platform: "telegram", identifier: "bot-1" },
+      { id: "instagram:ig-1", platform: "instagram", identifier: "ig-1" }
+    ]);
+  });
+
   it("includes a connected Zalo personal account beside Telegram", () => {
     expect(buildDashboardAccounts(
       { connected: true, displayName: "Telegram cá nhân", username: "telegram-user", avatarUrl: "https://cdn.example/telegram.jpg" },
@@ -59,6 +77,8 @@ describe("dashboard connected accounts", () => {
     expect(conversationPathForPlatform("facebook:page-42")).toBe(
       "/inbox?platform=facebook&channelId=page-42"
     );
+    expect(conversationPathForPlatform("zalo:oa-1")).toBe("/inbox?platform=zalo&channelId=oa-1");
+    expect(conversationPathForPlatform("telegram:bot-1")).toBe("/inbox?platform=telegram&channelId=bot-1");
     expect(conversationPathForPlatform()).toBe("/inbox");
   });
 
@@ -72,9 +92,17 @@ describe("dashboard connected accounts", () => {
     const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("getFacebookPageConnection");
-    expect(source).toContain('provider="facebook"');
-    expect(source).toContain('filter === "facebook"');
-    expect(source).toContain("facebook:pageId");
+    expect(source).toContain("availablePlatforms.map((provider)");
+    expect(source).toContain('facebook: "Facebook"');
+    expect(source).toContain("buildDashboardAccounts(");
+  });
+
+  it("loads staff cards from the active Workspace channel API instead of personal status endpoints", () => {
+    const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
+    expect(source).toContain('activeWorkspace?.role === "staff"');
+    expect(source).toContain("/api/v1/workspaces/${activeWorkspace.id}/channels");
+    expect(source).toContain("buildWorkspaceDashboardAccounts(workspaceChannels ?? [])");
+    expect(source).toContain("canManage={!isWorkspaceStaff}");
   });
 
   it("forwards nested settings navigation from the dashboard topbar", () => {

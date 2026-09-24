@@ -6,7 +6,7 @@ import { PlatformIcon } from "./PlatformIcon.js";
 export interface MergePageOption {
   id: string;
   name: string;
-  platform: "telegram" | "zalo" | "facebook";
+  platform: "telegram" | "zalo" | "facebook" | "instagram";
   identifier?: string | null;
   username?: string;
   avatarUrl?: string | null;

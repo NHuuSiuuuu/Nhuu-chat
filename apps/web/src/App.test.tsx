@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { preloadIntroDependencies } from "./App.js";
+import { inboxPlatformFromLocation, preloadIntroDependencies } from "./App.js";
 import * as AppModule from "./App.js";
 
 type AppModuleWithRouteTitle = typeof AppModule & {
@@ -10,6 +10,13 @@ type AppModuleWithRouteTitle = typeof AppModule & {
 const appModule = AppModule as AppModuleWithRouteTitle;
 
 describe("App navigation", () => {
+  it("restores a selected channel from each supported Workspace platform", () => {
+    expect(inboxPlatformFromLocation("?platform=zalo&channelId=oa-1")).toBe("zalo:oa-1");
+    expect(inboxPlatformFromLocation("?platform=telegram&channelId=bot-1")).toBe("telegram:bot-1");
+    expect(inboxPlatformFromLocation("?platform=instagram&channelId=ig-1")).toBe("instagram:ig-1");
+    expect(inboxPlatformFromLocation("?platform=zalo_personal")).toBe("zalo_personal");
+  });
+
   it("keeps the public landing page at root and sends an authenticated user to dashboard only from the user action", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
     const routes = readFileSync(new URL("./app-routes.tsx", import.meta.url), "utf8");

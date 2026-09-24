@@ -33,7 +33,7 @@ interface AuthResponse {
 
 type AppPage = "landing" | "dashboard" | "telegram" | "inbox" | "settings" | "profile" | "development";
 type RoutePage = AppPage | "posts" | AuthRoute;
-type InboxPlatform = "telegram_personal" | "zalo_personal" | `facebook:${string}` | undefined;
+type InboxPlatform = "telegram_personal" | "zalo_personal" | `${"facebook" | "instagram" | "zalo" | "telegram"}:${string}` | undefined;
 type HeaderNavItem = "Hộp thư" | "Đơn hàng" | "Bài viết" | "Thống kê" | "Cài đặt";
 const INBOX_PLATFORM_STORAGE_KEY = "nhuu-chat.inbox-platform";
 
@@ -89,17 +89,17 @@ export function getRouteTitle(route: string): string {
   return titles[route as RoutePage] ?? titles.dashboard;
 }
 
-function inboxPlatformFromLocation(search: string): InboxPlatform {
+export function inboxPlatformFromLocation(search: string): InboxPlatform {
   const params = new URLSearchParams(search);
   const value = params.get("platform");
   if (value === "telegram_personal" || value === "zalo_personal") return value;
-  const channelId = value === "facebook" ? params.get("channelId")?.trim() : undefined;
-  if (channelId) return `facebook:${channelId}`;
+  const channelId = value && ["facebook", "instagram", "zalo", "telegram"].includes(value) ? params.get("channelId")?.trim() : undefined;
+  if (channelId) return `${value}:${channelId}` as InboxPlatform;
   try {
     const stored = window.sessionStorage.getItem(INBOX_PLATFORM_STORAGE_KEY);
     if (stored === "telegram_personal" || stored === "zalo_personal") return stored;
-    return stored?.startsWith("facebook:") && stored.length > "facebook:".length
-      ? stored as `facebook:${string}`
+    return stored && /^(facebook|instagram|zalo|telegram):.+$/.test(stored)
+      ? stored as InboxPlatform
       : undefined;
   } catch {
     return undefined;
@@ -343,10 +343,9 @@ export function App() {
   if (auth && !canAccessInbox(auth.user.role)) {
     privatePage = <main><h1>Nhuu Chat</h1><p>Tài khoản của anh đã đăng nhập nhưng chưa có quyền mở inbox. Hãy nhờ admin cấp role agent.</p><button className="cursor-pointer transition-opacity hover:opacity-80" onClick={() => { void fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).finally(() => { clearAuth(); setAuth(null); }); }}>Đăng xuất</button></main>;
   } else if (auth) {
-    const inboxChannelId = inboxPlatform?.startsWith("facebook:")
-      ? inboxPlatform.slice("facebook:".length)
-      : undefined;
-    const inboxConversationPlatform = inboxChannelId ? "facebook" : inboxPlatform;
+    const separatorIndex = inboxPlatform?.indexOf(":") ?? -1;
+    const inboxChannelId = separatorIndex >= 0 ? inboxPlatform?.slice(separatorIndex + 1) : undefined;
+    const inboxConversationPlatform = separatorIndex >= 0 ? inboxPlatform?.slice(0, separatorIndex) : inboxPlatform;
     const openProfile = () => navigate("profile");
     const navigateFromHeader = (item: HeaderNavItem) => {
       if (item === "Hộp thư") return navigate("inbox", inboxPlatform);
