@@ -179,7 +179,7 @@ describe("LandingPage", () => {
     }
   });
 
-  it("lets an authenticated user log out from the landing header", () => {
+  it("moves authenticated logout from the mobile header to the end of the mobile menu", () => {
     const onLogout = vi.fn();
     const renderer = renderLanding({
       user: { email: "admin@example.com", role: "admin" },
@@ -189,14 +189,25 @@ describe("LandingPage", () => {
       onLogout,
     });
 
-    const logoutButton = renderer.root.findByProps({ "aria-label": "Đăng xuất" });
+    const menuToggle = renderer.root.findByProps({ "aria-label": "Mở menu điều hướng" });
+    const headerLogout = renderer.root.findAllByProps({ "aria-label": "Đăng xuất" })[0];
     const email = renderer.root.findAllByType("span").find((candidate) => candidate.children.includes("admin@example.com"));
 
     expect(email?.props.className).not.toContain("hidden");
-    expect(logoutButton.props.className).not.toContain("hidden");
-    act(() => logoutButton.props.onClick());
+    expect(headerLogout.props.className).toContain("hidden");
+    expect(headerLogout.props.className).toContain("md:block");
+
+    act(() => menuToggle.props.onClick());
+    const mobileNavigation = renderer.root.findByProps({ id: "mobile-navigation" });
+    const mobileLogout = mobileNavigation.findByProps({ "aria-label": "Đăng xuất" });
+    const lastMenuItem = mobileNavigation.findAllByType("button").at(-1);
+
+    expect(lastMenuItem?.props["aria-label"]).toBe("Đăng xuất");
+    expect(mobileLogout.props.className).toContain("bg-gradient-to-r from-[#0875ff] to-[#09bce9]");
+    act(() => mobileLogout.props.onClick());
 
     expect(onLogout).toHaveBeenCalledOnce();
+    expect(renderer.root.findByProps({ "aria-label": "Mở menu điều hướng" }).props["aria-expanded"]).toBe(false);
   });
 
   it("opens and closes the FAQ answer while updating aria-expanded", () => {
