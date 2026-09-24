@@ -988,6 +988,7 @@ describe("Zalo personal inbound message persistence", () => {
       externalMessageId: "zalo_personal:zalo-account:zalo-media-1",
       type: "image",
       content: "",
+      attachments: [{ url: "https://cdn.example/photo.jpg", fileType: "image/jpeg", fileName: "photo.jpg" }],
       metadata: {
         senderName: "Khách hàng",
         messageType: "photo",
@@ -995,7 +996,7 @@ describe("Zalo personal inbound message persistence", () => {
       }
     }));
     expect(dependencies.emitChatEvent).toHaveBeenCalledWith("chat:message_received", "conversation-1", expect.objectContaining({
-      type: "image", content: ""
+      type: "image", content: "", attachments: [{ url: "https://cdn.example/photo.jpg", mimeType: "image/jpeg", fileName: "photo.jpg" }]
     }));
     expect(dependencies.processTelegramCustomerMessage).toHaveBeenCalledWith(expect.objectContaining({
       externalMessageId: "zalo-media-1", type: "image", content: ""

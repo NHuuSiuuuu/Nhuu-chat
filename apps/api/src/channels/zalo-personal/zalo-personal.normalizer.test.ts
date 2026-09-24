@@ -25,6 +25,14 @@ describe("Zalo personal message normalizer", () => {
     expect(result?.sentAt).toEqual(new Date(1700000000000));
   });
 
+  it("converts Zalo's strong shortcode into a like emoji", () => {
+    expect(normalizeZaloPersonalMessage({
+      type: 0,
+      threadId: "thread-direct",
+      data: { msgId: "like-1", uidFrom: "sender-1", content: "/-strong", ts: 1700000000000, msgType: "webchat" }
+    }, "account-1")).toMatchObject({ content: "👍" });
+  });
+
   it("normalizes group media with caption and recognizes account-originated events", () => {
     const result = normalizeZaloPersonalMessage({
       type: 1,
@@ -66,6 +74,7 @@ describe("Zalo personal message normalizer", () => {
     expect(result).toMatchObject({
       type: "image",
       content: "",
+      attachments: [{ url: "https://cdn.example/photo.jpg", fileType: "image/jpeg" }],
       metadata: {
         messageType: "photo",
         media: { url: "https://cdn.example/photo.jpg", fileName: "photo.jpg", width: 1200 }
@@ -101,6 +110,7 @@ describe("Zalo personal message normalizer", () => {
     expect(result).toMatchObject({
       type: "image",
       content: "Menu mùa thu",
+      attachments: [{ url: "https://cdn.example/menu.jpg", fileType: "image/jpeg", fileName: "Menu mùa thu" }],
       metadata: {
         messageType: "chat.photo",
         media: {

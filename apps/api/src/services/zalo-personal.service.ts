@@ -584,6 +584,7 @@ async function ingestZaloPersonalMessage(userId: string, message: NormalizedZalo
       senderId: message.senderId,
       type: message.type,
       content: message.content,
+      attachments: message.attachments,
       deliveryStatus: "delivered",
       metadata: { senderName: message.senderName || "Zalo user", ...message.metadata }
     });
@@ -595,7 +596,7 @@ async function ingestZaloPersonalMessage(userId: string, message: NormalizedZalo
   const updatedConversation = await ConversationModel.findOneAndUpdate(
     { _id: conversation._id, ownerId: userId },
     {
-      $set: { lastMessageAt: message.sentAt, lastMessageSnippet: message.content },
+      $set: { lastMessageAt: message.sentAt, lastMessageSnippet: message.content || (message.type === "image" ? "Hình ảnh" : "") },
       $inc: { unreadCount: 1 }
     },
     { returnDocument: "after" }

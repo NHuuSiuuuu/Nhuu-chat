@@ -7,6 +7,7 @@ export interface NormalizedZaloPersonalMessage {
   avatarUrl?: string;
   type: "text" | "image" | "video" | "audio" | "file";
   content: string;
+  attachments: { url: string; fileType: string; fileName?: string }[];
   sentAt: Date;
   chatType: "private" | "group";
   isSelf: boolean;
@@ -22,7 +23,8 @@ export function normalizeZaloPersonalMessage(event: unknown, accountId: string):
   const channelId = stringValue(event.threadId);
   const senderId = stringValue(data.uidFrom);
   const attachment = isPlainRecord(data.content) ? data.content : undefined;
-  const content = typeof data.content === "string" ? data.content : attachmentCaption(attachment);
+  const rawContent = typeof data.content === "string" ? data.content : attachmentCaption(attachment);
+  const content = rawContent.replaceAll("/-strong", "👍");
   if (!externalMessageId || !channelId || !senderId || (!content && !hasMedia(data))) return null;
 
   const isSelf = senderId === accountId;
@@ -31,6 +33,7 @@ export function normalizeZaloPersonalMessage(event: unknown, accountId: string):
   const sentAt = parseTimestamp(data.ts);
   if (!sentAt) return null;
   const media = safeMediaMetadata(data.propertyExt, attachment);
+  const attachments = type === "image" ? imageAttachments(data.propertyExt, attachment) : [];
 
   return {
     platform: "zalo_personal",
@@ -41,11 +44,32 @@ export function normalizeZaloPersonalMessage(event: unknown, accountId: string):
     ...(stringValue(data.avatar) ? { avatarUrl: stringValue(data.avatar) } : {}),
     type,
     content,
+    attachments,
     sentAt,
     chatType,
     isSelf,
     metadata: { messageType: data.msgType, ...(media ? { media } : {}) }
   };
+}
+
+function imageAttachments(propertyExt: unknown, attachment: Record<string, unknown> | undefined): NormalizedZaloPersonalMessage["attachments"] {
+  const media = isPlainRecord(propertyExt) ? propertyExt : {};
+  const url = safeHttpUrl(attachment?.href) ?? safeHttpUrl(attachment?.url) ?? safeHttpUrl(media.url) ?? safeHttpUrl(attachment?.thumb) ?? safeHttpUrl(media.thumb);
+  if (!url) return [];
+  const extension = stringValue(media.ext);
+  const fileType = extension?.startsWith("image/") ? extension : "image/jpeg";
+  const fileName = stringValue(attachment?.fileName) ?? stringValue(attachment?.title) ?? stringValue(media.fileName);
+  return [{ url, fileType, ...(fileName ? { fileName } : {}) }];
+}
+
+function safeHttpUrl(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? value : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function stringValue(value: unknown): string | undefined {
