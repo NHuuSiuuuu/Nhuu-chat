@@ -761,6 +761,17 @@ describe("sendOutboundMessage", () => {
     expect(dependencyMocks.instagramSendText).not.toHaveBeenCalled();
   });
 
+  it("rejects blank Instagram text before credential lookup or provider delivery", async () => {
+    arrangeConversation(conversation({ platform: "instagram", channelId: "ig-1", customerId: { platformId: "instagram:ig-1:igsid-7" } }));
+
+    await expect(sendOutboundMessage({ conversationId: "conversation-1", content: " \n\t " }, agentAuth))
+      .rejects.toMatchObject({ statusCode: 400, code: "INVALID_REQUEST" });
+
+    expect(dependencyMocks.findInstagramConnection).not.toHaveBeenCalled();
+    expect(dependencyMocks.instagramSendText).not.toHaveBeenCalled();
+    expect(dependencyMocks.createMessage).not.toHaveBeenCalled();
+  });
+
   it("keeps Meta policy errors permanent and does not persist a retryable send", async () => {
     arrangeConversation(conversation({ platform: "instagram", channelId: "ig-1", customerId: { platformId: "instagram:ig-1:igsid-7" } }));
     dependencyMocks.findMessage.mockReturnValue({ sort: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ createdAt: now }) }) }) });
@@ -768,6 +779,29 @@ describe("sendOutboundMessage", () => {
     await expect(sendOutboundMessage({ conversationId: "conversation-1", content: "Hello" }, agentAuth)).rejects.toMatchObject({ code: "INSTAGRAM_POLICY_WINDOW_CLOSED" });
     expect(dependencyMocks.instagramSendText).toHaveBeenCalledTimes(1);
     expect(dependencyMocks.createMessage).toHaveBeenCalledWith(expect.objectContaining({ deliveryStatus: "failed", metadata: { errorCode: "INSTAGRAM_POLICY_WINDOW_CLOSED" } }));
+  });
+
+  it.each([
+    { error: new AppError(422, "INSTAGRAM_POLICY_WINDOW_CLOSED", "window closed"), deliveryStatus: "failed" },
+    { error: new AppError(502, "INSTAGRAM_DELIVERY_UNCERTAIN", "delivery uncertain"), deliveryStatus: "pending" }
+  ] as const)("attaches a persisted $deliveryStatus trace for immediate socket updates without replacing the provider error", async ({ error, deliveryStatus }) => {
+    arrangeConversation(conversation({
+      platform: "instagram", channelId: "ig-1", customerId: { _id: "customer-1", name: "Customer One", platformId: "instagram:ig-1:igsid-7" }
+    }));
+    dependencyMocks.findMessage.mockReturnValue({ sort: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ createdAt: now }) }) }) });
+    dependencyMocks.instagramSendText.mockRejectedValue(error);
+    arrangeStoredMessage();
+
+    let thrown: unknown;
+    try {
+      await sendOutboundMessage({ conversationId: "conversation-1", content: "Hello" }, agentAuth);
+    } catch (caught) {
+      thrown = caught;
+    }
+
+    expect(thrown).toBe(error);
+    expect(thrown).toMatchObject({ outboundResult: { message: { platform: "instagram", content: "Hello", deliveryStatus } } });
+    expect(dependencyMocks.pauseConversation).toHaveBeenCalledWith("conversation-1", expect.objectContaining({ $set: expect.objectContaining({ lastMessageSnippet: "Hello" }) }));
   });
 
   it("returns an Instagram webhook echo row when it wins the Send API persistence race", async () => {

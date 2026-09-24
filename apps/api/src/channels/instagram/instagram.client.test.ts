@@ -37,12 +37,13 @@ describe("InstagramClient.sendText", () => {
     expect(fetchMeta).toHaveBeenCalledTimes(2);
   });
 
-  it("does not retry permanent permission and recipient errors", async () => {
-    for (const [status, code] of [[403, "INSTAGRAM_PERMISSION_DENIED"], [400, "INSTAGRAM_RECIPIENT_INVALID"]] as const) {
-      const fetchMeta = vi.fn().mockResolvedValue(response(status, { error: { code: status === 403 ? 10 : 100 } }));
+  it.each([
+    { status: 403, providerCode: 10, code: "INSTAGRAM_PERMISSION_DENIED" },
+    { status: 400, providerCode: 100, code: "INSTAGRAM_REQUEST_REJECTED" }
+  ])("does not retry a permanent Meta error ($code)", async ({ status, providerCode, code }) => {
+      const fetchMeta = vi.fn().mockResolvedValue(response(status, { error: { code: providerCode } }));
       const client = new InstagramClient(fetchMeta, "v26.0", 100, 0);
-      await expect(client.sendText({ instagramUserId: "ig-1", accessToken: "secret", recipientId: "igsid-9", text: "Hi" })).rejects.toMatchObject({ code: status === 403 ? code : "INSTAGRAM_RECIPIENT_UNAVAILABLE" } satisfies Partial<AppError>);
+      await expect(client.sendText({ instagramUserId: "ig-1", accessToken: "secret", recipientId: "igsid-9", text: "Hi" })).rejects.toMatchObject({ code } satisfies Partial<AppError>);
       expect(fetchMeta).toHaveBeenCalledTimes(1);
-    }
   });
 });

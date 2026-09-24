@@ -9,6 +9,14 @@ import { conversationIdSchema } from "../schemas/conversation.schemas.js";
 import { messageListQuerySchema, outboundMessageSchema } from "../schemas/message.schemas.js";
 import { listMessages as listMessageRecords, sendOutboundMessage, type UploadedOutboundFile } from "../services/message.service.js";
 
+type OutboundMessageResult = Awaited<ReturnType<typeof sendOutboundMessage>>;
+
+function emitOutboundMessageResult(conversationId: string, result: OutboundMessageResult) {
+  emitChatEvent("chat:message_received", conversationId, result.message);
+  emitChatEvent("chat:delivery_updated", conversationId, result.message);
+  emitInboxEventToRecipients("chat:conversation_updated", result.recipients, result.conversation);
+}
+
 function authenticatedRequest(request: Request) {
   const auth = (request as AuthenticatedRequest).auth;
   if (!auth) {
@@ -60,15 +68,17 @@ export const sendMessage: RequestHandler = async (request, response, next) => {
       size: file.size
     } : undefined;
     const result = await sendOutboundMessage({ conversationId, content, ...(clientMessageId ? { clientMessageId } : {}), ...(attachment ? { attachment } : {}) }, auth);
-    emitChatEvent("chat:message_received", conversationId, result.message);
-    emitChatEvent("chat:delivery_updated", conversationId, result.message);
-    emitInboxEventToRecipients(
-      "chat:conversation_updated",
-      result.recipients,
-      result.conversation
-    );
+    emitOutboundMessageResult(conversationId, result);
     response.status(201).json(result.message);
   } catch (error) {
+    const outboundResult = typeof error === "object" && error !== null && "outboundResult" in error
+      ? error.outboundResult as OutboundMessageResult
+      : undefined;
+    try {
+      if (outboundResult) emitOutboundMessageResult(outboundResult.message.conversationId, outboundResult);
+    } catch {
+      // Socket failures must not replace the stable provider error already being forwarded.
+    }
     next(error);
   }
 };

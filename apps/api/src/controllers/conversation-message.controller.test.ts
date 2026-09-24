@@ -616,4 +616,24 @@ describe("message controller", () => {
     expect(state.statusCode).toBe(200);
     expect(state.body).toBeUndefined();
   });
+
+  it("emits a persisted failed delivery trace before forwarding the original error", async () => {
+    const message = { id: "message-1", conversationId: "conversation-1", platform: "instagram", senderType: "agent", content: "Hello", deliveryStatus: "failed" };
+    const conversation = { id: "conversation-1", platform: "instagram", lastMessageSnippet: "Hello" };
+    const recipients = ["owner-1", "agent-1"];
+    const failure = Object.assign(new AppError(422, "INSTAGRAM_POLICY_WINDOW_CLOSED", "The Instagram reply window is closed"), {
+      outboundResult: { message, conversation, recipients }
+    });
+    serviceMocks.sendOutboundMessage.mockRejectedValue(failure);
+    const { response, state } = responseRecorder();
+    const next = vi.fn();
+
+    await sendMessage({ auth: adminAuth, body: { conversationId: "conversation-1", type: "text", content: "Hello" } } as never, response as never, next);
+
+    expect(socketMocks.emitChatEvent).toHaveBeenNthCalledWith(1, "chat:message_received", "conversation-1", message);
+    expect(socketMocks.emitChatEvent).toHaveBeenNthCalledWith(2, "chat:delivery_updated", "conversation-1", message);
+    expect(socketMocks.emitInboxEventToRecipients).toHaveBeenCalledWith("chat:conversation_updated", recipients, conversation);
+    expect(next).toHaveBeenCalledWith(failure);
+    expect(state.body).toBeUndefined();
+  });
 });

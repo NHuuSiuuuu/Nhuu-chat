@@ -164,6 +164,7 @@ export async function sendOutboundMessage(
       throw new AppError(403, "FORBIDDEN", "You do not have access to this Instagram channel");
     }
     if (input.attachment) throw new AppError(400, "UNSUPPORTED_ATTACHMENT_CHANNEL", "Instagram replies currently support text only");
+    if (!content.trim()) throw new AppError(400, "INVALID_REQUEST", "Instagram text cannot be empty");
     if (Buffer.byteLength(content, "utf8") > 1000) throw new AppError(400, "INSTAGRAM_TEXT_TOO_LONG", "Instagram text must be 1000 UTF-8 bytes or fewer");
     instagramRecipientId = getInstagramCustomerPlatformId(conversation.customerId, conversation.channelId);
     if (!instagramRecipientId) throw new AppError(409, "INSTAGRAM_RECIPIENT_ACCOUNT_MISMATCH", "Instagram recipient does not belong to this account");
@@ -257,14 +258,34 @@ export async function sendOutboundMessage(
       externalMessageId = `instagram:${conversation.channelId}:${delivery.externalMessageId}`;
     } catch (error) {
       const permanent = error instanceof AppError && error.statusCode < 500;
-      await createOutboundMessage({
-        conversationId, platform: conversation.platform, senderId: "agent", content,
-        ...(input.clientMessageId ? { clientMessageId: input.clientMessageId } : {}),
-        deliveryStatus: permanent ? "failed" : "pending",
-        errorCode: error instanceof AppError ? error.code : "INSTAGRAM_DELIVERY_UNCERTAIN"
-      });
-      if (error instanceof AppError) throw error;
-      throw new AppError(502, "INSTAGRAM_DELIVERY_UNCERTAIN", "Instagram delivery could not be confirmed");
+      const deliveryError = error instanceof AppError
+        ? error
+        : new AppError(502, "INSTAGRAM_DELIVERY_UNCERTAIN", "Instagram delivery could not be confirmed");
+      try {
+        const failedMessage = await createOutboundMessage({
+          conversationId, platform: conversation.platform, senderId: "agent", content,
+          ...(input.clientMessageId ? { clientMessageId: input.clientMessageId } : {}),
+          deliveryStatus: permanent ? "failed" : "pending",
+          errorCode: deliveryError.code
+        });
+        const lastMessageAt = new Date();
+        const lastMessageSnippet = content || input.attachment?.originalname || "Tệp đính kèm";
+        try {
+          await ConversationModel.findByIdAndUpdate(conversationId, { $set: { lastMessageAt, lastMessageSnippet } });
+        } catch {
+          // Continue to emit the persisted message trace even if the summary update fails.
+        }
+        Object.assign(deliveryError, {
+          outboundResult: {
+            message: toMessage(failedMessage.toObject()),
+            conversation: toConversation({ ...conversation, lastMessageAt, lastMessageSnippet }),
+            recipients: [conversation.ownerId ? String(conversation.ownerId) : "", conversation.assignedAgentId ? String(conversation.assignedAgentId) : ""]
+          }
+        });
+      } catch {
+        // Preserve the original stable delivery error if trace or summary persistence fails.
+      }
+      throw deliveryError;
     }
   } else if (conversation.platform === "telegram_personal") {
     const userId = sessionOwnerId;

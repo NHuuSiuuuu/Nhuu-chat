@@ -37,7 +37,6 @@ export class InstagramClient {
       if (subcode === 2018278) throw new AppError(422, "INSTAGRAM_POLICY_WINDOW_CLOSED", "The Instagram reply window is closed");
       if (response.status === 401 || code === 190) throw new AppError(409, "INSTAGRAM_TOKEN_UNAVAILABLE", "Instagram access token is invalid or expired");
       if (response.status === 403 || code === 10 || code === 200) throw new AppError(403, "INSTAGRAM_PERMISSION_DENIED", "Instagram messaging permission is unavailable");
-      if (code === 100 || code === 551) throw new AppError(422, "INSTAGRAM_RECIPIENT_UNAVAILABLE", "Instagram recipient is unavailable");
       if (response.status === 429 && attempt === 0) {
         if (this.retryDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.retryDelayMs));
         continue;

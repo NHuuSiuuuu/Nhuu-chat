@@ -74,3 +74,9 @@ Task 3: complete (commits f9813b2..c02d85d, review clean)
 - Root TypeScript check exits 2 on unrelated existing files; final rerun had no diagnostics in Task 4 service/client/test files. `git diff --check` and staged diff check passed.
 - Official Meta Postman entry confirms endpoint/payload and customer-initiation prerequisite. It does not state the 1,000-byte cap; official source revalidation of the cap and live error response mapping remains open. No live API, migration, or deploy was run.
 Task 4: implementation commit `f21822a27a59d3af8ad8153afbdc3765a56c1ad5`; focused suite 51/51 passed. Official policy/error documentation gate remains open.
+
+## Task 4 reviewer follow-up
+- RED: focused service/client/controller tests failed for whitespace-only text, provider code 100's recipient-specific mapping, missing failed/pending trace update propagation, and missing controller socket emissions.
+- GREEN: focused outbound/client/controller suite passed 3 files / 92 tests. The service rejects whitespace-only Instagram content before account lookup or API call; code 100 maps to generic `INSTAGRAM_REQUEST_REJECTED`.
+- Failed/pending traces now carry the persisted response through the existing socket event path before the original stable error is forwarded. Conversation summary update and event emission are best effort and do not mask that error.
+- Official provider-specific recipient code mapping remains unclaimed pending documentation verification.
