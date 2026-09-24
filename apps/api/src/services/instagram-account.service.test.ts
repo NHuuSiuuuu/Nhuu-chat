@@ -136,4 +136,36 @@ describe("Instagram account lifecycle", () => {
     expect(meta.unsubscribe).toHaveBeenCalledTimes(2);
     expect(history).toHaveBeenCalledTimes(1);
   });
+
+  it("rejects connect while an unsubscribed account is waiting for local deletion", async () => {
+    const { service, rows, model, meta, history, input } = fixture();
+    await service.connect("owner-1", input);
+    history.mockClear();
+    const deleteRow = model.findOneAndDelete.getMockImplementation();
+    if (!deleteRow) throw new Error("fixture delete missing");
+    let reachedDelete: () => void = () => undefined;
+    let releaseDelete: () => void = () => undefined;
+    const atDelete = new Promise<void>((resolve) => { reachedDelete = resolve; });
+    const heldDelete = new Promise<void>((resolve) => { releaseDelete = resolve; });
+    model.findOneAndDelete.mockImplementationOnce(async (filter) => {
+      reachedDelete();
+      await heldDelete;
+      return deleteRow(filter);
+    });
+
+    const disconnecting = service.disconnect("owner-1", "1");
+    await atDelete;
+    expect(rows[0].lastErrorCode).toBe("INSTAGRAM_REMOVE_UNSUBSCRIBED");
+    let connectError: unknown;
+    try { await service.connect("owner-1", { ...input, accessToken: "new-secret" }); }
+    catch (error) { connectError = error; }
+    releaseDelete();
+    const disconnected = await disconnecting.catch((error: unknown) => error);
+
+    expect(connectError).toMatchObject({ code: "INSTAGRAM_CONNECTION_BUSY" });
+    expect(disconnected).toEqual({ disconnected: true });
+    expect(meta.subscribe).toHaveBeenCalledTimes(1);
+    expect(meta.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(history).toHaveBeenCalledTimes(1);
+  });
 });

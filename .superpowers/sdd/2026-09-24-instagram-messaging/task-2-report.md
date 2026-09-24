@@ -44,3 +44,10 @@
 - RED: `pnpm exec vitest run src/services/instagram-account.service.test.ts` produced 3 failures out of 11 tests. The throwing delete leaked `database unavailable`, the null delete retained `INSTAGRAM_REMOVE_PENDING`, and the simulated failed recovery write did not follow the intended retry path.
 - GREEN: the same command passed 11/11. The service now records `INSTAGRAM_REMOVE_UNSUBSCRIBED` after Meta success and before local deletion; a retry in that state only retries the local delete. History is written once, after successful deletion, and no subscription call occurs during recovery.
 - When the database cannot record Meta success, the row remains `INSTAGRAM_REMOVE_PENDING`. Its 30-second lease prevents concurrent retries, then a stale request retries unsubscribe and records the result. A repeated Meta unsubscribe may be needed because the external success could not be durably recorded; this still needs live Meta idempotency validation. The service never re-subscribes during disconnect recovery.
+
+## Reviewer follow-up: connect/disconnect interleaving
+
+- Finding: `connect()` allowed an existing `INSTAGRAM_REMOVE_UNSUBSCRIBED` row to be reserved while `disconnect()` waited for local deletion. This could replace the marker and token before deletion completed.
+- RED: `pnpm exec vitest run src/services/instagram-account.service.test.ts -t 'rejects connect while'` failed: concurrent connect resolved, so `connectError` was `undefined` instead of `INSTAGRAM_CONNECTION_BUSY`.
+- GREEN: the same test passed 1/1 after `connect()` included `INSTAGRAM_REMOVE_UNSUBSCRIBED` in its busy states. The interleaving test also checks that disconnect finishes, Meta subscribe/unsubscribe each run once, and disconnect history is written once.
+- Final focused Instagram API suite: 6 files, 27/27 tests passed. `git diff --check` passed.

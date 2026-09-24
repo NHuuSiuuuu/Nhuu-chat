@@ -102,7 +102,7 @@ export class InstagramAccountService {
     const existing = await this.model.findOne({ instagramUserId: input.instagramUserId }).select("+encryptedAccessToken").lean();
     const prior = existing ? { ...existing } : null;
     if (existing && String(existing.ownerUserId) !== ownerUserId) throw claimConflict();
-    if (existing?.lastErrorCode === SUBSCRIBE_PENDING || existing?.lastErrorCode === REMOVE_PENDING) {
+    if ([SUBSCRIBE_PENDING, REMOVE_PENDING, REMOVE_UNSUBSCRIBED].includes(existing?.lastErrorCode ?? "")) {
       throw new AppError(409, "INSTAGRAM_CONNECTION_BUSY", "Instagram connection is being updated");
     }
     const now = new Date();
