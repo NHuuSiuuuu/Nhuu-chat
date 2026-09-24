@@ -38,6 +38,25 @@ describe("Instagram event persistence", () => {
     expect(message).toMatchObject({ conversationId: conversation?._id, senderType: "customer", senderId: "igsid-1", content: "Hello" });
   });
 
+  it("preserves leading and trailing text whitespace", async () => {
+    await connect();
+    await processInstagramWebhook(event("igsid-1", "mid-space", "  Keep spaces  "));
+    expect((await MessageModel.findOne({ externalMessageId: "instagram:ig-account-1:mid-space" }).lean())?.content).toBe("  Keep spaces  ");
+  });
+
+  it("acknowledges attachment-only batches as unsupported no-ops", async () => {
+    await connect();
+    await expect(processInstagramWebhook({
+      object: "instagram",
+      entry: [{ id: "ig-account-1", messaging: [{ sender: { id: "igsid-1" }, recipient: { id: "ig-account-1" }, message: { mid: "photo-1", attachments: [{ type: "image" }] } }] }]
+    })).resolves.toBeUndefined();
+    expect(await CustomerModel.countDocuments({ platform: "instagram" })).toBe(0);
+    expect(await ConversationModel.countDocuments({ platform: "instagram" })).toBe(0);
+    expect(await MessageModel.countDocuments({ platform: "instagram" })).toBe(0);
+    expect(socket.emitChatEvent).not.toHaveBeenCalled();
+    expect(socket.emitInboxEventToRecipients).not.toHaveBeenCalled();
+  });
+
   it("keeps multiple customers on one account in separate conversations", async () => {
     await connect();
     await processInstagramWebhook(event("igsid-1", "mid-1"));

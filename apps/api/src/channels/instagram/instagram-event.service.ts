@@ -27,7 +27,7 @@ function normalizeInstagramWebhook(payload: unknown): InstagramTextEvent[] {
       const sender = nonempty(record(event?.sender)?.id);
       const recipient = nonempty(record(event?.recipient)?.id);
       const mid = nonempty(message?.mid);
-      const text = nonempty(message?.text);
+      const text = typeof message?.text === "string" && message.text.trim() ? message.text : null;
       if (!event || !sender || !recipient || !mid || !text || message?.is_echo !== undefined && typeof message.is_echo !== "boolean" || message?.attachments !== undefined) continue;
       const echo = message.is_echo === true;
       if (echo ? sender !== accountId || recipient === accountId : recipient !== accountId || sender === accountId) continue;
@@ -35,7 +35,6 @@ function normalizeInstagramWebhook(payload: unknown): InstagramTextEvent[] {
       result.push({ accountId, igsid: echo ? recipient : sender, mid, senderId: sender, text, timestamp: new Date(timestamp), echo });
     }
   }
-  if (!result.length) throw new AppError(400, "INSTAGRAM_WEBHOOK_PAYLOAD_INVALID", "Instagram webhook payload contains no supported messages");
   return result;
 }
 

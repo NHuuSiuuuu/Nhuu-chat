@@ -58,3 +58,8 @@ Task 2: complete (commits 969c003..f9813b2, review clean)
 - Realtime updates use existing helpers, preserving Workspace `{ platform, channelId }` channel-grant filtering.
 - GREEN: `pnpm --filter api exec vitest run src/channels/instagram/instagram-event.service.test.ts src/routes/instagram-webhook.routes.test.ts` — 2 files, 11 tests passed. `git diff --check` passed.
 - Live Meta app secret variant, subscription and payload acceptance remains an explicit gate; no app setup, production migration, or deploy was attempted. Details: `task-3-report.md`.
+
+## Task 3 reviewer follow-up
+- Reviewer Important: valid attachment-only batches were treated as malformed and could trigger retry storms. RED regression failed with `INSTAGRAM_WEBHOOK_PAYLOAD_INVALID`; GREEN now returns an empty normalized event list (root/entry shape validation remains strict), so the webhook handler acknowledges the delivery with no persistence/realtime changes.
+- Reviewer Minor: text content was trimmed. RED whitespace regression showed the stored value lost leading/trailing spaces; GREEN validates `trim()` nonemptiness but persists the original text.
+- GREEN: focused webhook/event suite passed 2 files, 13 tests; `git diff --check` passed. Report details are in `task-3-report.md`.
