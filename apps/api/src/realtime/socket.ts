@@ -7,6 +7,8 @@ import { ACCESS_COOKIE_NAME, readCookieHeader } from "../auth/auth.cookies.js";
 import { chatEvents } from "@nhuu-chat/contracts";
 import { ConversationModel } from "../models/conversation.model.js";
 import { canJoinConversation } from "./access.js";
+import { WorkspaceMemberModel } from "../models/workspace-member.model.js";
+import { WorkspaceModel } from "../models/workspace.model.js";
 
 const redisClients = new WeakMap<Server, { pub: RedisClientType; sub: RedisClientType }>();
 let activeServer: Server | undefined;
@@ -25,12 +27,31 @@ export function createRealtimeServer(httpServer: HttpServer, redisUrl = process.
       const cookieToken = readCookieHeader(socket.handshake.headers.cookie, ACCESS_COOKIE_NAME);
       const token = cookieToken ?? socket.handshake.auth?.token;
       if (typeof token !== "string") throw new Error("missing token");
-      socket.data.auth = await verifyAccessToken(token);
+      const auth = await verifyAccessToken(token);
+      const requestedWorkspaceId = socket.handshake.auth?.workspaceId;
+      let membership = typeof requestedWorkspaceId === "string"
+        ? await WorkspaceMemberModel.findOne({ workspaceId: requestedWorkspaceId, userId: auth.id }).lean()
+        : await WorkspaceMemberModel.findOne({ userId: auth.id, role: "owner" }).sort({ createdAt: 1 }).lean();
+      if (!membership && typeof requestedWorkspaceId !== "string") {
+        const rows = await WorkspaceMemberModel.find({ userId: auth.id }).limit(2).lean();
+        if (rows.length === 1) membership = rows[0] ?? null;
+      }
+      if (typeof requestedWorkspaceId === "string" && !membership) throw new Error("workspace membership required");
+      if (membership) {
+        const workspace = await WorkspaceModel.findById(membership.workspaceId).select("ownerUserId").lean();
+        if (!workspace) throw new Error("workspace not found");
+        socket.data.auth = {
+          ...auth,
+          workspace: { ownerUserId: String(workspace.ownerUserId), allowedPages: membership.allowedPages ?? [] }
+        };
+      } else {
+        socket.data.auth = auth;
+      }
       next();
     } catch { next(new Error("unauthorized")); }
   });
   io.on("connection", (socket) => {
-    const auth = socket.data.auth as AuthPrincipal;
+    const auth = socket.data.auth as AuthPrincipal & { workspace?: { ownerUserId: string; allowedPages: string[] } };
     const ready = (async (): Promise<boolean> => {
       try {
         if (auth.sessionId) {
@@ -92,11 +113,21 @@ export function emitChatEvent(event: string, conversationId: string, payload: un
   if (!server) return;
   server.to(`conversation:${conversationId}`).emit(event, payload);
   if (event === chatEvents.messageReceived && typeof payload === "object" && payload !== null && "senderType" in payload && payload.senderType === "customer") {
-    void ConversationModel.findById(conversationId).select("ownerId assignedAgentId").lean().then((conversation) => {
+    void ConversationModel.findById(conversationId).select("ownerId assignedAgentId platform channelId").lean().then(async (conversation) => {
       if (!conversation) return;
+      let recipients = [conversation.ownerId ? String(conversation.ownerId) : "", conversation.assignedAgentId ? String(conversation.assignedAgentId) : ""];
+      if (conversation.platform === "facebook" && conversation.ownerId && conversation.channelId) {
+        const workspace = await WorkspaceModel.findOne({ ownerUserId: conversation.ownerId }).select("_id").lean();
+        if (workspace) {
+          const memberships = await WorkspaceMemberModel.find({ workspaceId: workspace._id }).select("userId allowedPages").lean();
+          recipients = [...recipients, ...memberships
+            .filter((membership) => !membership.allowedPages?.length || membership.allowedPages.includes(conversation.channelId!))
+            .map((membership) => String(membership.userId))];
+        }
+      }
       emitInboxEventToRecipients(
         chatEvents.incomingMessage,
-        [conversation.ownerId ? String(conversation.ownerId) : "", conversation.assignedAgentId ? String(conversation.assignedAgentId) : ""],
+        recipients,
         payload
       );
     }).catch(() => undefined);
@@ -117,9 +148,10 @@ export function emitInboxEventToRecipients(event: string, recipientIds: string[]
     && "platform" in payload
     && payload.platform === "zalo_personal"
   );
+  const isFacebook = Boolean(payload && typeof payload === "object" && "platform" in payload && payload.platform === "facebook");
   // Zalo cá nhân chỉ phát đến owner/người được phân công; các nền tảng cũ vẫn dùng phòng admin chung.
   const rooms = [
-    ...(isZaloPersonal ? [] : ["inbox:admins"]),
+    ...(isZaloPersonal || isFacebook ? [] : ["inbox:admins"]),
     ...new Set(recipientIds.filter(Boolean).map((recipientId) => `inbox:${recipientId}`))
   ];
   activeServer.to(rooms).emit(event, payload);

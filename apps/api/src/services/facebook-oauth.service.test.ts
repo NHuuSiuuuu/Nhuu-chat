@@ -94,7 +94,9 @@ describe("FacebookOAuthService", () => {
     expect(url.searchParams.get("client_id")).toBe("meta-app-id");
     expect(url.searchParams.get("state")).toBe("state-token");
     expect(url.searchParams.get("redirect_uri")).toBe("https://api.example.com/api/v1/facebook-page/oauth/callback");
-    expect(url.searchParams.get("scope")).toContain("pages_show_list");
+    expect(url.searchParams.get("scope")?.split(",")).toEqual(expect.arrayContaining([
+      "pages_show_list", "pages_read_engagement", "pages_manage_posts", "pages_messaging", "pages_manage_metadata"
+    ]));
     expect(stateStore.saved).toEqual([
       { token: "state-token", value: { kind: "oauth", userId: "user-1" }, ttlSeconds: 600 }
     ]);
@@ -107,8 +109,8 @@ describe("FacebookOAuthService", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "user-token" }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         data: [
-          { id: "page-1", name: "Page One", access_token: "page-token-1", tasks: ["CREATE_CONTENT"] },
-          { id: "page-2", name: "Page Two", access_token: "page-token-2", tasks: ["MODERATE_CONTENT"] }
+          { id: "page-1", name: "Page One", access_token: "page-token-1", tasks: ["CREATE_CONTENT", "MESSAGE"] },
+          { id: "page-2", name: "Page Two", access_token: "page-token-2", tasks: ["MODERATE"] }
         ]
       }), { status: 200 }));
     const service = new FacebookOAuthService({
@@ -126,8 +128,8 @@ describe("FacebookOAuthService", () => {
     expect(result.userId).toBe("user-1");
     expect(result.selectionToken).toBe("selection-token");
     expect(result.pages).toEqual([
-      { id: "page-1", name: "Page One", canPublish: true },
-      { id: "page-2", name: "Page Two", canPublish: false }
+      { id: "page-1", name: "Page One", canPublish: true, canMessage: true },
+      { id: "page-2", name: "Page Two", canPublish: false, canMessage: true }
     ]);
     expect(JSON.stringify(result.pages)).not.toContain("page-token");
     expect(stateStore.saved.at(-1)).toEqual({
@@ -136,11 +138,48 @@ describe("FacebookOAuthService", () => {
         kind: "selection",
         userId: "user-1",
         pages: [
-          { id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true },
-          { id: "page-2", name: "Page Two", accessToken: "page-token-2", canPublish: false }
+          { id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true, canMessage: true },
+          { id: "page-2", name: "Page Two", accessToken: "page-token-2", canPublish: false, canMessage: true }
         ]
       },
       ttlSeconds: 600
+    });
+  });
+
+  it.each(["MESSAGE", "MESSAGING", "MODERATE"])("recognizes %s as a Messenger Page task", async (task) => {
+    const stateStore = store();
+    await stateStore.save("state-token", { kind: "oauth", userId: "user-1" }, 600);
+    const fetchGraph = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "user-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: [{ id: "page-1", name: "Page One", access_token: "page-token-1", tasks: [task] }]
+      }), { status: 200 }));
+    const service = new FacebookOAuthService({
+      appId: "meta-app-id", appSecret: "meta-app-secret", redirectUri: "https://api.example/callback",
+      stateStore, fetchGraph, randomToken: () => "selection-token"
+    });
+
+    const result = await service.finish("state-token", "code");
+
+    expect(result.pages).toEqual([{ id: "page-1", name: "Page One", canPublish: false, canMessage: true }]);
+    expect(JSON.stringify(result.pages)).not.toContain("page-token-1");
+  });
+
+  it("does not infer Messenger access from publishing or unrelated Page tasks", async () => {
+    const stateStore = store();
+    await stateStore.save("state-token", { kind: "oauth", userId: "user-1" }, 600);
+    const fetchGraph = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "user-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: [{ id: "page-1", name: "Page One", access_token: "page-token-1", tasks: ["CREATE_CONTENT", "MANAGE"] }]
+      }), { status: 200 }));
+    const service = new FacebookOAuthService({
+      appId: "meta-app-id", appSecret: "meta-app-secret", redirectUri: "https://api.example/callback",
+      stateStore, fetchGraph, randomToken: () => "selection-token"
+    });
+
+    await expect(service.finish("state-token", "code")).resolves.toMatchObject({
+      pages: [{ id: "page-1", canPublish: true, canMessage: false }]
     });
   });
 
@@ -293,8 +332,8 @@ describe("FacebookOAuthService", () => {
     const result = await service.finish("state-token", "authorization-code");
 
     expect(result.pages).toEqual([
-      { id: "page-1", name: "Page One", canPublish: true },
-      { id: "page-2", name: "Page Two", canPublish: false }
+      { id: "page-1", name: "Page One", canPublish: true, canMessage: false },
+      { id: "page-2", name: "Page Two", canPublish: false, canMessage: false }
     ]);
     expect(fetchGraph).toHaveBeenCalledTimes(3);
     expect(fetchGraph.mock.calls[2]?.[0]).toBe(nextUrl);
@@ -442,7 +481,7 @@ describe("FacebookOAuthService", () => {
     await stateStore.save("selection-token", {
       kind: "selection",
       userId: "user-1",
-      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true }]
+      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true, canMessage: true }]
     }, 600);
     const service = new FacebookOAuthService({ stateStore });
 
@@ -451,7 +490,7 @@ describe("FacebookOAuthService", () => {
       service.getSelection("user-1", "selection-token")
     ]);
 
-    expect(first).toEqual([{ id: "page-1", name: "Page One", canPublish: true }]);
+    expect(first).toEqual([{ id: "page-1", name: "Page One", canPublish: true, canMessage: true }]);
     expect(second).toEqual(first);
     expect(stateStore.saved).toHaveLength(1);
     expect(stateStore.consumeCalls).toEqual([]);
@@ -462,7 +501,7 @@ describe("FacebookOAuthService", () => {
     await stateStore.save("selection-token", {
       kind: "selection",
       userId: "user-1",
-      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true }]
+      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true, canMessage: true }]
     }, 600);
     const service = new FacebookOAuthService({ stateStore });
     const connect = vi.fn().mockResolvedValue({ id: "connection-1" });
@@ -476,22 +515,36 @@ describe("FacebookOAuthService", () => {
     expect(stateStore.consumeCalls).toEqual(["selection-token"]);
   });
 
-  it("rejects a non-publishable Page without connecting or consuming the selection", async () => {
+  it("rejects a Page without messaging access even when it can publish", async () => {
     const stateStore = store();
     await stateStore.save("selection-token", {
       kind: "selection",
       userId: "user-1",
-      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: false }]
+      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true, canMessage: false }]
     }, 600);
     const service = new FacebookOAuthService({ stateStore });
     const connect = vi.fn();
 
     await expect(service.select("user-1", "selection-token", "page-1", connect)).rejects.toMatchObject({
-      code: "FACEBOOK_OAUTH_PAGE_NOT_PUBLISHABLE"
+      code: "FACEBOOK_OAUTH_PAGE_NOT_MESSAGING_CAPABLE"
     });
 
     expect(connect).not.toHaveBeenCalled();
     expect(stateStore.consumeCalls).toEqual([]);
+  });
+
+  it("allows a messaging-capable Page without publishing access", async () => {
+    const stateStore = store();
+    await stateStore.save("selection-token", {
+      kind: "selection",
+      userId: "user-1",
+      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: false, canMessage: true }]
+    }, 600);
+    const connect = vi.fn().mockResolvedValue({ id: "connection-1" });
+
+    await expect(new FacebookOAuthService({ stateStore }).select("user-1", "selection-token", "page-1", connect))
+      .resolves.toEqual({ id: "connection-1" });
+    expect(connect).toHaveBeenCalledWith("user-1", { pageId: "page-1", pageAccessToken: "page-token-1" });
   });
 
   it("keeps the selection retryable when connection persistence fails", async () => {
@@ -499,7 +552,7 @@ describe("FacebookOAuthService", () => {
     await stateStore.save("selection-token", {
       kind: "selection",
       userId: "user-1",
-      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true }]
+      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true, canMessage: true }]
     }, 600);
     const service = new FacebookOAuthService({ stateStore });
     const persistenceError = new Error("persistence failed");
@@ -524,7 +577,7 @@ describe("FacebookOAuthService", () => {
     await stateStore.save("selection-token", {
       kind: "selection",
       userId: "user-1",
-      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true }]
+      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true, canMessage: true }]
     }, 600);
     stateStore.consumeClaim = vi.fn().mockResolvedValue(undefined);
     const service = new FacebookOAuthService({ stateStore });
@@ -548,7 +601,7 @@ describe("FacebookOAuthService", () => {
     await stateStore.save("selection-token", {
       kind: "selection",
       userId: "user-1",
-      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true }]
+      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true, canMessage: true }]
     }, 600);
     stateStore.consumeClaim = vi.fn().mockRejectedValue(new Error("Redis unavailable"));
     const service = new FacebookOAuthService({ stateStore });
@@ -572,7 +625,7 @@ describe("FacebookOAuthService", () => {
     await stateStore.save("selection-token", {
       kind: "selection",
       userId: "user-1",
-      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true }]
+      pages: [{ id: "page-1", name: "Page One", accessToken: "page-token-1", canPublish: true, canMessage: true }]
     }, 600);
     let markConnectionStarted: (() => void) | undefined;
     const connectionStarted = new Promise<void>((resolve) => {

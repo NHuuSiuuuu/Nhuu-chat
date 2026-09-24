@@ -41,13 +41,14 @@ export type FacebookPostServiceDependencies = {
 export type CreatePostInput = {
   message: string;
   mode: "draft" | "now" | "scheduled";
+  pageId?: string;
   scheduledAt?: string;
   file?: Express.Multer.File;
   media?: FacebookPostMedia;
 };
 
 export type UpdatePostInput = { message?: string; mode?: "draft" | "scheduled"; scheduledAt?: string | null; file?: Express.Multer.File };
-export type ListPostFilters = { status?: FacebookPostResponse["status"] };
+export type ListPostFilters = { status?: FacebookPostResponse["status"]; pageId?: string; pageIds?: string[] };
 
 const TIMEZONE = "Asia/Ho_Chi_Minh" as const;
 
@@ -107,8 +108,8 @@ export class FacebookPostService {
     this.clock = dependencies.now ?? (() => new Date());
   }
 
-  private async connection(userId: string): Promise<ConnectionRecord> {
-    const connection = await this.connections.findOne({ userId }).select("+encryptedPageAccessToken").lean();
+  private async connection(userId: string, pageId?: string): Promise<ConnectionRecord> {
+    const connection = await this.connections.findOne({ userId, ...(pageId ? { pageId } : {}) }).select("+encryptedPageAccessToken").lean();
     if (!connection || connection.status !== "connected") {
       throw new AppError(409, "FACEBOOK_PAGE_NOT_CONNECTED", "Facebook Page is not connected");
     }
@@ -154,7 +155,7 @@ export class FacebookPostService {
     const message = input.message.trim();
     if (!message) throw new AppError(400, "INVALID_REQUEST", "Post message is required");
     const scheduled = input.mode === "scheduled" ? this.scheduledDate(input.scheduledAt) : null;
-    const connection = await this.connection(userId);
+    const connection = await this.connection(userId, input.pageId);
     let media = input.media;
     if (input.file) media = await this.media.upload(userId, input.file);
     const status = input.mode === "now" ? "publishing" : input.mode;
@@ -180,9 +181,10 @@ export class FacebookPostService {
     try { return await this.publishPost(userId, record, connection); } catch (error) { return this.failPost(userId, record, error); }
   }
 
-  async updatePost(userId: string, postId: string, input: UpdatePostInput): Promise<FacebookPostResponse> {
+  async updatePost(userId: string, postId: string, input: UpdatePostInput, allowedPageIds?: string[]): Promise<FacebookPostResponse> {
     const current = await this.posts.findOne({ _id: postId, userId }).lean();
     if (!current) throw new AppError(404, "FACEBOOK_POST_NOT_FOUND", "Facebook post was not found");
+    if (allowedPageIds && !allowedPageIds.includes(current.pageId)) throw new AppError(404, "FACEBOOK_POST_NOT_FOUND", "Facebook post was not found");
     if (current.status !== "draft" && current.status !== "scheduled") throw new AppError(409, "FACEBOOK_POST_INVALID_STATE", "Facebook post cannot be updated in its current state");
     const update: Record<string, unknown> = {};
     if (input.message !== undefined) { if (!input.message.trim()) throw new AppError(400, "INVALID_REQUEST", "Post message is required"); update.message = input.message.trim(); }
@@ -227,16 +229,21 @@ export class FacebookPostService {
   }
 
   async listPosts(userId: string, filters: ListPostFilters): Promise<FacebookPostResponse[]> {
-    const rows = await this.posts.find({ userId, ...(filters.status ? { status: filters.status } : {}) }).sort({ createdAt: -1, _id: -1 }).lean();
+    const rows = await this.posts.find({
+      userId,
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.pageId ? { pageId: filters.pageId } : filters.pageIds ? { pageId: { $in: filters.pageIds } } : {})
+    }).sort({ createdAt: -1, _id: -1 }).lean();
     return rows.map(toResponse);
   }
 
-  async retryPost(userId: string, postId: string, mode: "now" | "scheduled"): Promise<FacebookPostResponse> {
+  async retryPost(userId: string, postId: string, mode: "now" | "scheduled", allowedPageIds?: string[]): Promise<FacebookPostResponse> {
     const current = await this.posts.findOne({ _id: postId, userId }).lean();
     if (!current) throw new AppError(404, "FACEBOOK_POST_NOT_FOUND", "Facebook post was not found");
+    if (allowedPageIds && !allowedPageIds.includes(current.pageId)) throw new AppError(404, "FACEBOOK_POST_NOT_FOUND", "Facebook post was not found");
     if (current.status !== "failed") throw new AppError(409, "FACEBOOK_POST_INVALID_STATE", "Only failed Facebook posts can be retried");
     if (mode === "scheduled" && (!current.scheduledAt || new Date(current.scheduledAt).getTime() <= this.clock().getTime())) throw new AppError(400, "FACEBOOK_POST_SCHEDULE_IN_PAST", "Scheduled time must be in the future");
-    const connection = await this.connection(userId);
+    const connection = await this.connection(userId, current.pageId);
     const publishing = await this.posts.findOneAndUpdate(
       { _id: postId, userId, status: "failed" },
       {
@@ -255,9 +262,9 @@ export class FacebookPostService {
     try { return await this.publishPost(userId, publishing, connection); } catch (error) { return this.failPost(userId, publishing, error); }
   }
 
-  async cancelPost(userId: string, postId: string): Promise<void> {
+  async cancelPost(userId: string, postId: string, allowedPageIds?: string[]): Promise<void> {
     // Xóa có điều kiện để trạng thái hợp lệ và snapshot media cùng được chốt trong một thao tác nguyên tử.
-    const deleted = await this.posts.findOneAndDelete({ _id: postId, userId, status: { $in: ["draft", "scheduled", "published", "failed"] } }).lean();
+    const deleted = await this.posts.findOneAndDelete({ _id: postId, userId, ...(allowedPageIds ? { pageId: { $in: allowedPageIds } } : {}), status: { $in: ["draft", "scheduled", "published", "failed"] } }).lean();
     if (!deleted) {
       throw new AppError(409, "FACEBOOK_POST_STATE_CHANGED", "Facebook post state changed while cancelling");
     }

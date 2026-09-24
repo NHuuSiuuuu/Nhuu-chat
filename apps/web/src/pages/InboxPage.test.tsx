@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { buildConversationListRequestPath, createAiSuggestionsRequestGuard, createOptimisticMessage, getConversationDraft, setConversationDraft, setMessageDeliveryStatus, shouldAutoRefreshAiSuggestions } from "./InboxPage.js";
+import { buildConversationListRequestPath, createAiSuggestionsRequestGuard, createOptimisticMessage, facebookMessengerSendErrorMessage, getConversationDraft, setConversationDraft, setMessageDeliveryStatus, shouldAutoRefreshAiSuggestions } from "./InboxPage.js";
 import * as inboxModule from "./InboxPage.js";
 import { filterConversationsByTag, getVisibleConversationTagCount, UNTAGGED_CONVERSATION_FILTER } from "../components/conversations/ConversationList.js";
 
@@ -70,6 +70,18 @@ describe("Inbox Tailwind migration", () => {
     expect(buildConversationListRequestPath("zalo_personal")).toBe("/api/v1/conversations?platform=zalo_personal");
     expect(buildConversationListRequestPath("telegram_personal")).toBe("/api/v1/conversations?platform=telegram_personal");
     expect(buildConversationListRequestPath()).toBe("/api/v1/conversations");
+  });
+
+  it("filters Facebook Inbox by Page and uses shared realtime and send paths", () => {
+    expect(buildConversationListRequestPath("facebook", "page/42")).toBe("/api/v1/conversations?platform=facebook&channelId=page%2F42");
+    const source = readFileSync(new URL("./InboxPage.tsx", import.meta.url), "utf8");
+    expect(source).toContain('"/api/v1/messages/send"');
+    expect(source).toContain("chatEvents.messageReceived");
+    expect(source).toContain("conversation.platform !== platform");
+    expect(source).toContain('active.platform === "facebook" && typeof initialPayload !== "string"');
+    expect(source).toContain("chatEvents.conversationUpdated");
+    expect(facebookMessengerSendErrorMessage("FACEBOOK_MESSENGER_PERMISSION_DENIED")).toBe("Facebook chưa cấp quyền nhắn tin cho Page này.");
+    expect(facebookMessengerSendErrorMessage("unknown-code")).toBe("Chưa gửi được tin nhắn Messenger. Hãy thử lại sau.");
   });
 
   it("keeps message drafts isolated by conversation", () => {

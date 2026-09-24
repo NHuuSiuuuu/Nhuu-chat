@@ -1,10 +1,13 @@
 import { CustomFile } from "telegram/client/uploads.js";
 import type { EntityLike } from "telegram/define.js";
 import { TelegramClient } from "../channels/telegram/telegram.client.js";
+import { facebookMessengerClient } from "../channels/facebook-messenger/facebook-messenger.client.js";
 import { AppError } from "../common/errors.js";
+import { decryptSecret } from "../common/crypto.js";
 import { describeExternalError } from "../common/external-error.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { MessageModel } from "../models/message.model.js";
+import { FacebookPageConnectionModel } from "../models/facebook-page-connection.model.js";
 import { pauseBot } from "../orchestration/bot-pause.service.js";
 import { canJoinConversation } from "../realtime/access.js";
 import type { AuthUser } from "./auth.service.js";
@@ -119,7 +122,7 @@ export async function sendOutboundMessage(
 ) {
   const { conversationId, content } = input;
   const conversation = await ConversationModel.findById(conversationId)
-    .populate("customerId", "name avatarUrl")
+    .populate("customerId", "name avatarUrl platformId")
     .lean();
   if (!conversation) {
     throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation was not found");
@@ -163,7 +166,42 @@ export async function sendOutboundMessage(
     : "text" as const;
   let deliveryStatus: "pending" | "sent" | "failed" = "sent";
   let externalMessageId: string | undefined;
-  if (conversation.platform === "telegram_personal") {
+  if (conversation.platform === "facebook") {
+    if (input.attachment) throw new AppError(400, "UNSUPPORTED_ATTACHMENT_CHANNEL", "Messenger replies currently support text only");
+    const customerPlatformId = getFacebookCustomerPlatformId(conversation.customerId);
+    const customerPrefix = `facebook:${conversation.channelId}:`;
+    if (!customerPlatformId?.startsWith(customerPrefix) || customerPlatformId.length <= customerPrefix.length) {
+      throw new AppError(409, "FACEBOOK_CUSTOMER_ID_INVALID", "Facebook customer identity is unavailable");
+    }
+    if (!conversation.ownerId) throw new AppError(409, "FACEBOOK_PAGE_NOT_CONNECTED", "Facebook Page is not connected");
+    const latestInbound = await MessageModel.findOne({
+      conversationId,
+      platform: "facebook",
+      senderType: "customer"
+    }).sort({ createdAt: -1 }).select("createdAt").lean();
+    const latestInboundAt = latestInbound?.createdAt instanceof Date
+      ? latestInbound.createdAt.getTime()
+      : new Date(latestInbound?.createdAt ?? Number.NaN).getTime();
+    if (!Number.isFinite(latestInboundAt) || Date.now() - latestInboundAt >= 24 * 60 * 60 * 1000) {
+      throw new AppError(422, "FACEBOOK_MESSENGER_POLICY_WINDOW_CLOSED", "The Messenger reply window is closed");
+    }
+    const pageConnection = await FacebookPageConnectionModel.findOne({
+      pageId: conversation.channelId,
+      userId: conversation.ownerId,
+      status: "connected"
+    }).select("+encryptedPageAccessToken").lean();
+    if (!pageConnection?.encryptedPageAccessToken) {
+      throw new AppError(409, "FACEBOOK_PAGE_NOT_CONNECTED", "Facebook Page is not connected");
+    }
+    const pageAccessToken = decryptSecret(pageConnection.encryptedPageAccessToken);
+    const delivery = await facebookMessengerClient.sendText({
+      pageId: conversation.channelId,
+      pageAccessToken,
+      psid: customerPlatformId.slice(customerPrefix.length),
+      text: content
+    });
+    externalMessageId = `facebook:${conversation.channelId}:${delivery.externalMessageId}`;
+  } else if (conversation.platform === "telegram_personal") {
     const userId = auth.id;
     // Connector cá nhân dùng toMessage cho tin đến; chỉ nạp khi gửi để tránh import vòng.
     const { getActivePersonalClient } = await import("./telegram-personal.service.js");
@@ -269,6 +307,16 @@ export async function sendOutboundMessage(
       externalMessageId,
       deliveryStatus
     })
+    : conversation.platform === "facebook"
+      ? await persistFacebookOutboundMessage({
+        conversationId,
+        platform: conversation.platform,
+        senderId: "agent",
+        content,
+        ...(input.clientMessageId ? { clientMessageId: input.clientMessageId } : {}),
+        externalMessageId,
+        deliveryStatus
+      })
     : await createOutboundMessage({
       conversationId,
       platform: conversation.platform,
@@ -297,6 +345,26 @@ export async function sendOutboundMessage(
       conversation.assignedAgentId ? String(conversation.assignedAgentId) : ""
     ]
   };
+}
+
+function getFacebookCustomerPlatformId(customer: unknown): string | undefined {
+  if (!customer || typeof customer !== "object" || !("platformId" in customer)) return undefined;
+  return typeof customer.platformId === "string" ? customer.platformId : undefined;
+}
+
+// Meta can deliver message_echoes before the Send API response; the shared external ID makes the webhook row authoritative.
+async function persistFacebookOutboundMessage(input: Parameters<typeof createOutboundMessage>[0]) {
+  try {
+    return await createOutboundMessage(input);
+  } catch (error) {
+    if (!isDuplicateKey(error) || !input.externalMessageId) throw error;
+    const existing = await MessageModel.findOne({ platform: "facebook", externalMessageId: input.externalMessageId }).lean();
+    if (!existing) throw error;
+    const metadata = input.clientMessageId
+      ? { ...(existing.metadata ?? {}), clientMessageId: input.clientMessageId }
+      : existing.metadata;
+    return { toObject: () => ({ ...existing, ...(metadata ? { metadata } : {}) }) };
+  }
 }
 
 function getConversationCustomerName(customer: unknown): string | undefined {

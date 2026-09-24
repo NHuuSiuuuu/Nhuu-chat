@@ -1,6 +1,6 @@
 # Nhuu-chat
 
-MVP quản lý inbox chăm sóc khách hàng Telegram và trợ lý RAG. MongoDB dùng MongoDB Atlas; Redis vẫn có thể chạy local bằng Docker.
+MVP quản lý inbox chăm sóc khách hàng Facebook Messenger và Telegram cùng trợ lý RAG. MongoDB dùng MongoDB Atlas; Redis vẫn có thể chạy local bằng Docker.
 
 ## Đã hoàn thành
 
@@ -14,6 +14,8 @@ MVP quản lý inbox chăm sóc khách hàng Telegram và trợ lý RAG. MongoDB
 - Telegram webhook có secret và idempotency.
 - Chatbot tự động dùng chung orchestration/delivery cho Telegram Bot và Telegram cá nhân, có template, RAG đúng owner, fallback và bàn giao.
 - REST conversation/message API và Socket.IO room authentication.
+- Inbox Facebook Messenger thủ công cho tin nhắn văn bản mới: webhook xác minh chữ ký, lưu riêng conversation theo PSID, cập nhật realtime và gửi trả lời qua Messenger Send API.
+- Workspace có vai trò owner/admin/staff; owner quản lý thành viên đã đăng ký, cấp quyền theo Facebook Page và có thể kết nối nhiều Page trong một Workspace.
 - CRUD danh mục thẻ hội thoại dùng chung cho admin/agent tại `/api/v1/conversation-tags`.
 - CRUD mẫu trả lời nhanh dùng chung cho admin/agent tại `/api/v1/quick-replies`, hỗ trợ lưu một ảnh đính kèm qua Cloudinary.
 - Knowledge chunking, TXT/Markdown/PDF/DOCX parser, provider-independent RAG.
@@ -83,7 +85,7 @@ Lượt gửi bot và chính sách pause của nhân viên dùng chung khóa ato
 
 Knowledge legacy thiếu owner được cách ly khỏi index: startup chỉ nạp chunk có owner khớp document có owner hợp lệ. Chunk thiếu owner, parent thiếu owner/không tồn tại hoặc owner không khớp không được đổi thành chuỗi `undefined`/`null` và không được truy xuất unscoped. Log `KNOWLEDGE_OWNER_QUARANTINED` chỉ ghi số chunk; dữ liệu gốc trong MongoDB giữ nguyên. Để phục hồi, người vận hành đọc các document/chunk thiếu owner hoặc sai liên kết, xác minh nguồn và chủ sở hữu ngoài hệ thống; đăng nhập bằng tài khoản admin của owner đã xác minh rồi gửi lại `title`/`content` qua `POST /api/v1/knowledge`. API lấy owner từ JWT, tạo document/chunk mới có scope; không dùng body `ownerId` hay tự nhận chủ cho bản ghi cũ. Nếu không xác minh được, tiếp tục cách ly. Không có migration xóa/đổi owner hàng loạt; re-ingestion phải là quyết định rõ ràng để tránh nhân bản nhiều lần.
 
-Index hội thoại mới dùng `(platform, channelId, ownerId)`, nhưng database đã tồn tại phải chạy migration Zalo bên dưới trước khi rollout. Index tin nhắn vẫn là `(platform, externalMessageId)`; connector Zalo cá nhân namespace ID inbound theo tài khoản, còn các connector khác vẫn cần đánh giá collision khi triển khai nhiều tài khoản. Facebook và Instagram chưa có adapter tự động gửi; Zalo cá nhân mới ở trạng thái thử nghiệm.
+Index hội thoại mới giữ uniqueness `(platform, channelId, ownerId)` cho các nền tảng hiện có; Facebook dùng thêm `customerId` để tách từng PSID trong cùng Page. Database cũ phải chạy migrations Facebook Page owner và Facebook conversation customer trước rollout Messenger như hướng dẫn tại [tài liệu triển khai](docs/deployment/vercel-railway.md); migration Zalo bên dưới vẫn áp dụng riêng. Index tin nhắn vẫn là `(platform, externalMessageId)`; connector Zalo cá nhân namespace ID inbound theo tài khoản, còn các connector khác vẫn cần đánh giá collision khi triển khai nhiều tài khoản. Instagram chưa có adapter gửi; Zalo cá nhân mới ở trạng thái thử nghiệm.
 
 ### Zalo cá nhân thử nghiệm
 
@@ -104,7 +106,7 @@ Với database đã tồn tại, thực hiện theo đúng thứ tự: sao lưu,
 MONGODB_URI='mongodb+srv://...' pnpm --filter api run migrate:zalo-personal-conversation-index
 ```
 
-Migration tạo unique index `(platform, channelId, ownerId)` trước khi xóa legacy `(platform, channelId)`, không tự chạy khi startup và có thể chạy lại. Nếu đã có owner-scoped index dùng `partialFilterExpression`, `sparse` hoặc `collation`, migration dừng mà không xóa legacy index; người vận hành phải kiểm tra và sửa index không tương thích trước khi chạy lại.
+Migration tạo unique index `(platform, channelId, ownerId)` trước khi xóa legacy `(platform, channelId)`, không tự chạy khi startup và có thể chạy lại. Nếu đã có owner-scoped index dùng `partialFilterExpression`, `sparse` hoặc `collation`, migration dừng mà không xóa legacy index; người vận hành phải kiểm tra và sửa index không tương thích trước khi chạy lại. Khi rollout Facebook Messenger, chạy migration này trước `migrate:facebook-conversation-customer-index`; tuyệt đối không chạy lại sau migration Facebook vì nó sẽ tạo ràng buộc toàn cục cản nhiều PSID trên cùng Page.
 
 ### Trả lời nhanh và ảnh Cloudinary
 
@@ -127,7 +129,9 @@ Các route `/api/v1/quick-replies` chỉ cho `admin` và `agent`, đồng thời
 
 ### Đăng bài Facebook Page V1
 
-V1 cho phép mỗi user kết nối đúng một Facebook Page và đăng bài gồm text bắt buộc cùng tối đa một ảnh. Có thể kết nối bằng OAuth từ Dashboard hoặc tiếp tục nhập thủ công `Page ID` và `Page access token` tại màn hình Đăng bài; backend gọi Graph API để kiểm tra Page trước khi mã hóa token và lưu vào MongoDB. Không đặt Page ID/token trong `.env`, frontend storage, log hoặc response. Token chỉ được giải mã trong memory ngay trước khi gọi Meta. Cần dùng HTTPS và giữ Page access token như credential có quyền đăng bài; khi nghi ngờ lộ token, thu hồi/cấp token mới tại Meta rồi kết nối lại.
+Workspace và quyền Facebook Page được mô tả tại [docs/wiki/workspace-page-access.md](docs/wiki/workspace-page-access.md). Database hiện hữu cần backup và chạy lần lượt `migrate:workspaces` cùng `migrate:facebook-page-multi-connection-index`; cả hai lệnh mặc định dry-run và chỉ ghi khi có `--apply`. Không áp dụng migration production trước khi operator duyệt báo cáo.
+
+Workspace owner có thể kết nối nhiều Facebook Page và chọn Page cho từng bài viết gồm text bắt buộc cùng tối đa một ảnh. Có thể kết nối bằng OAuth từ Dashboard hoặc nhập thủ công `Page ID` và `Page access token`; backend gọi Graph API để kiểm tra Page trước khi mã hóa token và lưu từng connection vào MongoDB. Không đặt Page ID/token trong `.env`, frontend storage, log hoặc response. Token chỉ được giải mã trong memory ngay trước khi gọi Meta. Cần dùng HTTPS và giữ Page access token như credential có quyền đăng bài; khi nghi ngờ lộ token, thu hồi/cấp token mới tại Meta rồi kết nối lại.
 
 Trước khi dùng, cấu hình Cloudinary đủ `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` và `CLOUDINARY_API_SECRET`. Ảnh được upload qua Cloudinary trước khi đăng; chỉ nhận `image/jpeg`, `image/png` hoặc `image/webp`, tối đa 5 MiB (5 × 1024 × 1024 byte), một ảnh cho mỗi bài. Text là bắt buộc. V1 dùng Meta Graph API `v26.0` mặc định (`META_GRAPH_API_VERSION` có thể đổi theo cấu hình). Có thể kết nối bằng OAuth qua Dashboard với `META_APP_ID`, `META_APP_SECRET`, `META_OAUTH_REDIRECT_URI` và `WEB_APP_URL`; luồng nhập thủ công Page ID/Page Access Token vẫn được giữ nguyên. Khi app còn ở Development Mode, chỉ người dùng, Page và vai trò được cấp trong app mới có thể dùng, nên chưa phải luồng production/public.
 
@@ -196,7 +200,7 @@ Test Mongo integration cần `MONGODB_TEST_URI` trỏ tới database test riêng
 - Chưa chạy Playwright E2E trên môi trường deploy thật.
 - Redis adapter và Mongo integration cần xác minh trên Atlas/CI sạch.
 - Vector store hiện là adapter in-memory cho MVP; Mongo Atlas Vector Search vẫn là lựa chọn production chưa triển khai.
-- Instagram OAuth và OAuth/webhook Facebook Messenger, Zalo cá nhân production UI/live smoke/reconnect đầy đủ, WebRTC và load test thực tế nằm ngoài MVP hiện tại. OAuth dùng để kết nối Facebook Page phục vụ đăng bài đã có, nhưng việc mở cho người dùng public vẫn phụ thuộc App Review và Live Mode của Meta.
+- Chưa nghiệm thu live với Meta test Page cho luồng Messenger inbound/reply; cần cấu hình webhook, quyền phù hợp và Page/tài khoản tester như [tài liệu triển khai](docs/deployment/vercel-railway.md). Việc mở tích hợp Facebook Page cho người dùng public vẫn phụ thuộc app mode, quyền truy cập và quy trình review của Meta. Instagram OAuth, Zalo cá nhân production UI/live smoke/reconnect đầy đủ, WebRTC và load test thực tế nằm ngoài MVP hiện tại.
 
 ## Lệnh kiểm tra
 

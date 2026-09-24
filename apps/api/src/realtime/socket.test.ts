@@ -24,6 +24,10 @@ const authMocks = vi.hoisted(() => ({ verifyAccessToken: vi.fn(), isAuthSessionA
 vi.mock("../services/auth.service.js", () => authMocks);
 const conversationMocks = vi.hoisted(() => ({ findById: vi.fn() }));
 vi.mock("../models/conversation.model.js", () => ({ ConversationModel: conversationMocks }));
+const workspaceMemberMocks = vi.hoisted(() => ({ findOne: vi.fn(), find: vi.fn() }));
+vi.mock("../models/workspace-member.model.js", () => ({ WorkspaceMemberModel: workspaceMemberMocks }));
+const workspaceMocks = vi.hoisted(() => ({ findById: vi.fn(), findOne: vi.fn() }));
+vi.mock("../models/workspace.model.js", () => ({ WorkspaceModel: workspaceMocks }));
 
 import { createRealtimeServer, disconnectAuthSession, disconnectAuthUser, emitInboxEventToRecipients } from "./socket.js";
 
@@ -33,6 +37,9 @@ describe("inbox realtime recipients", () => {
     socketMocks.to.mockReturnValue({ emit: socketMocks.emit });
     socketMocks.in.mockReturnValue({ disconnectSockets: socketMocks.disconnectSockets });
     authMocks.isAuthSessionActive.mockResolvedValue(true);
+    workspaceMemberMocks.findOne.mockReturnValue({ lean: () => Promise.resolve(null), sort: () => ({ lean: () => Promise.resolve(null) }) });
+    workspaceMemberMocks.find.mockReturnValue({ limit: () => ({ lean: () => Promise.resolve([]) }), select: () => ({ lean: () => Promise.resolve([]) }) });
+    workspaceMocks.findById.mockReturnValue({ select: () => ({ lean: () => Promise.resolve(null) }) });
     createRealtimeServer({} as never, "");
   });
 

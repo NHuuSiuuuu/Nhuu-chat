@@ -37,10 +37,12 @@ Cho phép nhân viên nhận tin nhắn văn bản mới từ một Facebook Pag
 
 - Send API dùng Page Access Token được cấp bởi người có tác vụ nhắn tin (`MESSAGE`) trên Page cùng quyền `pages_messaging`.
 - OAuth phải bổ sung quyền Messenger cần thiết, bao gồm `pages_messaging` và quyền quản lý metadata/subscription cần cho webhook; giữ các quyền đang dùng cho đăng bài.
-- Kết nối thủ công dùng cùng credential đã mã hóa. API xác thực phải báo thiếu quyền bằng mã lỗi an toàn, không lưu raw response hoặc token vào log.
+- Kết nối thủ công dùng cùng credential đã mã hóa và xác thực Page ID trước khi lưu. Không dùng Conversations API làm preflight quyền Messenger vì task cần cho đọc lịch sử khác với task Send API chấp nhận; webhook subscription và Send API phải trả mã lỗi quyền an toàn khi Meta từ chối thao tác. Không lưu raw response hoặc token vào log.
 - Tin trả lời chuẩn chỉ được gửi trong cửa sổ 24 giờ kể từ tin nhắn gần nhất do khách gửi. MVP không dùng message tag hoặc luồng gửi ngoài cửa sổ này.
 - Meta App Development Mode chỉ dùng để test với người/Page có vai trò được cấp. Dùng với Page của khách hàng bên ngoài phụ thuộc Advanced Access/App Review của Meta.
 - Page ID trong webhook phải ánh xạ chính xác tới một tài khoản NhuuChat. Không fan-out một sự kiện sang nhiều owner. Kết nối phải từ chối Page đã gắn với owner khác; trước khi thêm unique index cần kiểm tra dữ liệu kết nối hiện có và xử lý duplicate có kiểm soát.
+- Vòng đời subscription phải giữ unique Page ownership reservation trong suốt các lời gọi Meta: tạo reservation trước khi subscribe, chỉ đánh dấu kết nối hoạt động sau khi subscribe thành công, giữ Page cũ tới khi unsubscribe hoàn tất và chỉ xóa reservation sau khi gỡ subscription thành công. Webhook chỉ xử lý connection hoạt động.
+- Lỗi token/quyền xác định khi unsubscribe cho phép owner thử lại mà vẫn giữ reservation. Timeout/lỗi mơ hồ giữ reservation ở trạng thái lỗi để tránh chuyển Page khi Meta có thể vẫn hoàn tất lời gọi; cần reconciliation thủ công trước khi chuyển owner.
 
 ## Luồng nhận tin
 
@@ -48,11 +50,11 @@ Cho phép nhân viên nhận tin nhắn văn bản mới từ một Facebook Pag
 2. Với POST, backend xác minh chữ ký `X-Hub-Signature-256` từ raw request body bằng Meta App Secret trước khi đọc payload.
 3. Webhook chỉ xử lý Page ID đã kết nối và sự kiện tin nhắn Messenger được hỗ trợ. Tin echo được nhận diện để tránh tạo vòng lặp; sự kiện khác nằm ngoài MVP được bỏ qua an toàn.
 4. Chuẩn hóa `Page ID`, PSID, `mid`, thời gian và nội dung thành customer/conversation/message theo schema hiện có.
-5. Dùng external message ID có namespace Page, ví dụ `facebook:<pageId>:<mid>`, để unique index hiện tại chặn webhook retry ghi trùng.
-6. Upsert hội thoại theo `{ platform: facebook, channelId: pageId, ownerId }`; chỉ tăng unread một lần khi bản ghi tin nhắn mới thực sự được tạo.
+5. Dùng external message ID có namespace Page, ví dụ `facebook:<pageId>:<mid>`, để unique index hiện tại chặn webhook retry ghi trùng. Lưu event timestamp của Meta làm thời gian message để lịch sử vẫn đúng khi webhook đến trễ.
+6. Upsert hội thoại theo `{ platform: facebook, channelId: pageId, ownerId, customerId }` để mỗi PSID có hội thoại riêng trên cùng Page; chỉ tăng unread một lần khi bản ghi tin nhắn mới thực sự được tạo.
 7. Phát `chat:message_received` và `chat:conversation_updated` theo cơ chế realtime hiện có. Webhook chỉ trả thành công sau khi sự kiện được xử lý hoặc đã được lưu idempotent.
 
-Customer identity dùng khóa nội bộ `facebook:<pageId>:<PSID>` trong `Customer.platformId`, không gộp khách giữa các Page và tương thích unique index hiện tại. Facebook adapter tách PSID gốc từ khóa này trước khi gọi Meta; không gửi ID nội bộ đã namespace lên Graph API.
+Customer identity dùng khóa nội bộ `facebook:<pageId>:<PSID>` trong `Customer.platformId`, không gộp khách giữa các Page. Mỗi Facebook conversation dùng `customerId` trong unique key để không gộp hai PSID trên cùng Page; unique indexes cho các nền tảng còn lại giữ nguyên semantics hiện tại. Facebook adapter tách PSID gốc từ khóa này trước khi gọi Meta; không gửi ID nội bộ đã namespace lên Graph API.
 
 ## Luồng gửi tin
 
@@ -89,7 +91,7 @@ Customer identity dùng khóa nội bộ `facebook:<pageId>:<PSID>` trong `Custo
 ## Kiểm thử và nghiệm thu
 
 - OAuth: URL chứa quyền Messenger cần thiết; selection flow vẫn giữ token kín và Page đúng.
-- Connection: token sai Page, thiếu quyền, Page đã gắn owner khác và token bị thu hồi đều trả lỗi an toàn.
+- Connection: token sai Page, Page đã gắn owner khác và token bị thu hồi đều trả lỗi an toàn; lỗi thiếu quyền webhook/send cũng được chuẩn hóa an toàn tại thao tác tương ứng.
 - Webhook: GET challenge, chữ ký đúng/sai, Page chưa kết nối, customer message, echo, unsupported event, retry trùng và payload lỗi.
 - Persistence: customer identity theo Page, conversation upsert theo Page + owner, message unique, unread tăng đúng một lần.
 - Sender: request đúng Page/PSID, token không rò, success, lỗi quyền, hết 24 giờ, timeout và rate limit.
@@ -100,6 +102,7 @@ Customer identity dùng khóa nội bộ `facebook:<pageId>:<PSID>` trong `Custo
 ## Tiêu chí hoàn tất MVP
 
 - Tin nhắn văn bản mới từ Page test tạo đúng một hội thoại/tin nhắn và xuất hiện realtime.
+- Hai PSID nhắn cùng một Page tạo hai hội thoại khác nhau; trả lời mỗi hội thoại dùng đúng PSID.
 - Nhân viên có quyền gửi trả lời văn bản; status phản ánh kết quả thật của Meta.
 - Tin gửi tuân thủ cửa sổ nhắn tin của Meta.
 - Page ID luôn định tuyến về một owner duy nhất; token/secret không rò rỉ.

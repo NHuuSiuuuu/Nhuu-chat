@@ -5,7 +5,7 @@ import type { FacebookPageConnectionResponse, FacebookPostResponse } from "@nhuu
 import { DashboardTopbar } from "../components/dashboard/DashboardTopbar.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
 import { PostSkeleton } from "../components/posts/PostSkeleton.js";
-import { cancelFacebookPost, connectFacebookPage, createFacebookPost, FacebookPublishingApiError, getFacebookPageConnection, listFacebookPosts, removeFacebookPage, retryFacebookPost, updateFacebookPost } from "../lib/facebook-publishing.api.js";
+import { cancelFacebookPost, connectFacebookPage, createFacebookPost, FacebookPublishingApiError, getFacebookPageConnection, getFacebookPageConnections, listFacebookPosts, removeFacebookPage, retryFacebookPost, updateFacebookPost } from "../lib/facebook-publishing.api.js";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -21,6 +21,7 @@ const sidebarItems: Array<{ id: PublishingTab; label: string; icon: "edit" | "no
 
 export interface FacebookPublishingClient {
   getConnection: typeof getFacebookPageConnection;
+  listConnections?: typeof getFacebookPageConnections;
   connect: typeof connectFacebookPage;
   listPosts: typeof listFacebookPosts;
   remove: typeof removeFacebookPage;
@@ -30,15 +31,15 @@ export interface FacebookPublishingClient {
   cancel: typeof cancelFacebookPost;
 }
 
-const defaultClient: FacebookPublishingClient = { getConnection: getFacebookPageConnection, connect: connectFacebookPage, listPosts: listFacebookPosts, remove: removeFacebookPage, createPost: createFacebookPost, update: updateFacebookPost, retry: retryFacebookPost, cancel: cancelFacebookPost };
+const defaultClient: FacebookPublishingClient = { getConnection: getFacebookPageConnection, listConnections: getFacebookPageConnections, connect: connectFacebookPage, listPosts: listFacebookPosts, remove: removeFacebookPage, createPost: createFacebookPost, update: updateFacebookPost, retry: retryFacebookPost, cancel: cancelFacebookPost };
 
 export interface FacebookPublishingPageProps {
   onBack?: () => void;
-  onLogoClick?: React.ComponentProps<typeof DashboardTopbar>["onLogoClick"];
-  onNavigate?: React.ComponentProps<typeof DashboardTopbar>["onNavigate"];
-  user?: React.ComponentProps<typeof DashboardTopbar>["user"];
-  onLogout?: React.ComponentProps<typeof DashboardTopbar>["onLogout"];
-  onProfile?: React.ComponentProps<typeof DashboardTopbar>["onProfile"];
+  onLogoClick?: NonNullable<React.ComponentProps<typeof DashboardTopbar>>["onLogoClick"];
+  onNavigate?: NonNullable<React.ComponentProps<typeof DashboardTopbar>>["onNavigate"];
+  user?: NonNullable<React.ComponentProps<typeof DashboardTopbar>>["user"];
+  onLogout?: NonNullable<React.ComponentProps<typeof DashboardTopbar>>["onLogout"];
+  onProfile?: NonNullable<React.ComponentProps<typeof DashboardTopbar>>["onProfile"];
   client?: FacebookPublishingClient;
   initialConnection?: FacebookPageConnectionResponse | null;
   availablePages?: FacebookPageConnectionResponse[];
@@ -87,6 +88,7 @@ function facebookPostUrl(post: FacebookPostResponse): string | null {
 export function FacebookPublishingPage({ onBack, onLogoClick, onNavigate, user, onLogout, onProfile, client = defaultClient, initialConnection = null, availablePages = [], initialPosts = [], initialMessage = "", initialMode = "now", initialScheduledAt = "", initialImageUrl = null, initialLoading = true }: FacebookPublishingPageProps) {
   const [connection, setConnection] = useState<FacebookPageConnectionResponse | null>(initialConnection);
   const [selectedPageId, setSelectedPageId] = useState(initialConnection?.pageId ?? availablePages[0]?.pageId ?? "");
+  const [connectedPages, setConnectedPages] = useState(availablePages);
   const [connectionLoading, setConnectionLoading] = useState(initialLoading);
   const [isLoading, setIsLoading] = useState(initialLoading);
   const [pageId, setPageId] = useState("");
@@ -104,18 +106,19 @@ export function FacebookPublishingPage({ onBack, onLogoClick, onNavigate, user, 
   const [editScheduledAt, setEditScheduledAt] = useState("");
   const [editBusy, setEditBusy] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [showConnectForm, setShowConnectForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const loadPosts = useCallback(async () => {
+  const loadPosts = useCallback(async (pageId = selectedPageId) => {
     setIsLoading(true);
-    try { setPosts(await client.listPosts()); } catch (requestError) { setActionError(errorMessage(requestError)); } finally { setIsLoading(false); }
-  }, [client]);
+    try { setPosts(await client.listPosts(undefined, undefined, pageId || undefined)); } catch (requestError) { setActionError(errorMessage(requestError)); } finally { setIsLoading(false); }
+  }, [client, selectedPageId]);
 
   useEffect(() => {
     if (!initialLoading) return;
     let cancelled = false;
-    void client.getConnection().then((result) => { if (!cancelled) { setConnection(result); void loadPosts(); } }).catch((requestError) => {
+    void (client.listConnections ? client.listConnections() : client.getConnection().then((result) => [result])).then((results) => { if (!cancelled) { setConnectedPages(results); setConnection(results[0] ?? null); setSelectedPageId((current) => results.some((item) => item.pageId === current) ? current : results[0]?.pageId ?? ""); if (results[0]) void loadPosts(results[0].pageId); } }).catch((requestError) => {
       if (!cancelled) { setIsLoading(false); if (!(requestError instanceof FacebookPublishingApiError && requestError.code === "FACEBOOK_PAGE_NOT_CONNECTED")) setError(errorMessage(requestError)); }
     }).finally(() => { if (!cancelled) setConnectionLoading(false); });
     return () => { cancelled = true; };
@@ -127,7 +130,7 @@ export function FacebookPublishingPage({ onBack, onLogoClick, onNavigate, user, 
   const draftPosts = posts.filter((post) => post.status === "draft");
   const scheduledPosts = posts.filter((post) => post.status === "scheduled");
   const historyPosts = posts.filter((post) => post.status === "published" || post.status === "failed");
-  const pageOptions = useMemo(() => availablePages.length > 0 ? availablePages : connection ? [connection] : [], [availablePages, connection]);
+  const pageOptions = useMemo(() => connectedPages.length > 0 ? connectedPages : availablePages.length > 0 ? availablePages : connection ? [connection] : [], [connectedPages, availablePages, connection]);
   const selectedPage = pageOptions.find((page) => page.pageId === selectedPageId) ?? pageOptions[0] ?? connection;
 
   useEffect(() => {
@@ -144,7 +147,7 @@ export function FacebookPublishingPage({ onBack, onLogoClick, onNavigate, user, 
 
   async function connect(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(null); setBusy(true);
-    try { setConnection(await client.connect({ pageId: pageId.trim(), pageAccessToken })); setPageAccessToken(""); await loadPosts(); }
+    try { const connected = await client.connect({ pageId: pageId.trim(), pageAccessToken }); setConnectedPages((current) => [...current.filter((item) => item.pageId !== connected.pageId), connected]); setConnection(connected); setSelectedPageId(connected.pageId); setPageAccessToken(""); setPageId(""); setShowConnectForm(false); await loadPosts(connected.pageId); }
     catch (requestError) { setError(errorMessage(requestError)); } finally { setBusy(false); }
   }
 
@@ -154,7 +157,7 @@ export function FacebookPublishingPage({ onBack, onLogoClick, onNavigate, user, 
     if (mode === "scheduled" && !scheduledAt) { setError("Vui lòng chọn thời gian hẹn đăng."); return; }
     setError(null); setBusy(true);
     try {
-      await toast.promise(client.createPost({ message: message.trim(), mode, ...(mode === "scheduled" ? { scheduledAt } : {}), image }), {
+      await toast.promise(client.createPost({ message: message.trim(), mode, ...(selectedPage ? { pageId: selectedPage.pageId } : {}), ...(mode === "scheduled" ? { scheduledAt } : {}), image }), {
         loading: "Đang đăng bài...",
         success: "Đăng bài thành công",
         error: (requestError) => `Đăng bài thất bại: ${facebookPublishingToastError(requestError)}`
@@ -210,13 +213,13 @@ export function FacebookPublishingPage({ onBack, onLogoClick, onNavigate, user, 
   }
 
   function renderComposer() {
-    return <><section className="mb-6 flex items-center justify-between rounded-xl border border-gray-200 bg-white p-5"><div className="flex flex-col gap-1.5"><div className="flex items-center gap-3"><select className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900 font-semibold cursor-pointer min-w-[220px] focus:ring-2 focus:ring-blue-500 outline-none" aria-label="Chọn Facebook Page" value={selectedPage?.pageId ?? ""} onChange={(event) => setSelectedPageId(event.target.value)}>{pageOptions.map((page) => <option value={page.pageId} key={page.pageId}>{page.pageName ?? `Page ${page.pageId}`}</option>)}</select><span className="px-3 py-1 bg-teal-50 text-teal-700 text-sm font-medium rounded-full">Đã kết nối</span></div><p className="text-sm text-gray-500">Page ID: {selectedPage?.pageId ?? "—"}</p></div><button className="text-red-600 font-medium hover:bg-red-50 px-4 py-2 rounded-lg transition-colors cursor-pointer" type="button" onClick={() => { if (window.confirm("Gỡ kết nối Facebook Page?")) void runAction(() => client.remove(), () => setConnection(connectionAfterFacebookDisconnect(connection))); }}>Gỡ kết nối</button></section><div className="grid gap-6 xl:grid-cols-[1.1fr_.9fr]"><section className="rounded-2xl bg-white p-5 shadow-sm sm:p-6"><h2 className="text-lg font-semibold text-gray-900">Soạn bài</h2><form className="mt-4 grid gap-4" onSubmit={publish}><label className="grid gap-1.5 text-sm font-semibold text-gray-700">Nội dung<textarea className="min-h-40 rounded-xl border border-gray-200 p-3 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" maxLength={63206} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Bạn muốn chia sẻ điều gì?" /></label><label className="grid gap-1.5 text-sm font-semibold text-gray-700">Ảnh (tối đa 1 ảnh, 5 MiB)<input className="rounded-xl border border-gray-200 p-2 text-sm font-normal" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => selectImage(event.target.files?.[0])} /></label><fieldset className="grid gap-2"><legend className="text-sm font-semibold text-gray-700">Chế độ đăng</legend><label className="flex items-center gap-2 text-sm text-gray-600"><input type="radio" name="publish-mode" value="now" checked={mode === "now"} onChange={() => setMode("now")} />Đăng ngay</label><label className="flex items-center gap-2 text-sm text-gray-600"><input type="radio" name="publish-mode" value="draft" checked={mode === "draft"} onChange={() => setMode("draft")} />Lưu bản nháp</label><label className="flex items-center gap-2 text-sm text-gray-600"><input type="radio" name="publish-mode" value="scheduled" checked={mode === "scheduled"} onChange={() => setMode("scheduled")} />Hẹn đăng</label></fieldset>{mode === "scheduled" && <label className="grid gap-1.5 text-sm font-semibold text-gray-700">Thời gian (Asia/Ho_Chi_Minh)<input className="rounded-xl border border-gray-200 px-3 py-2.5 font-normal" type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} /></label>}{error && <p className="rounded-lg bg-rose-50 p-3 text-sm font-normal text-rose-700" role="alert">{error}</p>}<button className="w-fit rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer" type="submit" disabled={busy}>{busy ? "Đang xử lý..." : mode === "now" ? "Đăng ngay" : mode === "draft" ? "Lưu bản nháp" : "Hẹn đăng"}</button></form></section><section className="rounded-2xl bg-white p-5 shadow-sm sm:p-6"><h2 className="text-lg font-semibold text-gray-900">Xem trước</h2><article className="mt-4 overflow-hidden rounded-xl border border-gray-200"><div className="p-4"><p className="whitespace-pre-wrap text-sm text-gray-700">{previewText}</p></div>{imageUrl && <img className="max-h-80 w-full object-cover" src={imageUrl} alt="Xem trước ảnh bài viết" />}</article></section></div></>;
+    return <><section className="mb-6 flex items-center justify-between rounded-xl border border-gray-200 bg-white p-5"><div className="flex flex-col gap-1.5"><div className="flex items-center gap-3"><select className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900 font-semibold cursor-pointer min-w-[220px] focus:ring-2 focus:ring-blue-500 outline-none" aria-label="Chọn Facebook Page" value={selectedPage?.pageId ?? ""} onChange={(event) => { const nextPageId = event.target.value; setSelectedPageId(nextPageId); setConnection(pageOptions.find((page) => page.pageId === nextPageId) ?? null); void loadPosts(nextPageId); }}>{pageOptions.map((page) => <option value={page.pageId} key={page.pageId}>{page.pageName ?? `Page ${page.pageId}`}</option>)}</select><span className="px-3 py-1 bg-teal-50 text-teal-700 text-sm font-medium rounded-full">Đã kết nối</span></div><p className="text-sm text-gray-500">Page ID: {selectedPage?.pageId ?? "—"}</p></div><button className="text-red-600 font-medium hover:bg-red-50 px-4 py-2 rounded-lg transition-colors cursor-pointer" type="button" onClick={() => setShowConnectForm(true)}>Kết nối Page khác</button><button className="text-red-600 font-medium hover:bg-red-50 px-4 py-2 rounded-lg transition-colors cursor-pointer" type="button" onClick={() => { if (window.confirm("Gỡ kết nối Facebook Page?")) void runAction(() => client.remove(undefined, selectedPage?.pageId), () => { const remaining = connectedPages.filter((page) => page.pageId !== selectedPage?.pageId); setConnectedPages(remaining); setConnection(remaining[0] ?? null); setSelectedPageId(remaining[0]?.pageId ?? ""); }); }}>Gỡ kết nối</button></section><div className="grid gap-6 xl:grid-cols-[1.1fr_.9fr]"><section className="rounded-2xl bg-white p-5 shadow-sm sm:p-6"><h2 className="text-lg font-semibold text-gray-900">Soạn bài</h2><form className="mt-4 grid gap-4" onSubmit={publish}><label className="grid gap-1.5 text-sm font-semibold text-gray-700">Nội dung<textarea className="min-h-40 rounded-xl border border-gray-200 p-3 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" maxLength={63206} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Bạn muốn chia sẻ điều gì?" /></label><label className="grid gap-1.5 text-sm font-semibold text-gray-700">Ảnh (tối đa 1 ảnh, 5 MiB)<input className="rounded-xl border border-gray-200 p-2 text-sm font-normal" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => selectImage(event.target.files?.[0])} /></label><fieldset className="grid gap-2"><legend className="text-sm font-semibold text-gray-700">Chế độ đăng</legend><label className="flex items-center gap-2 text-sm text-gray-600"><input type="radio" name="publish-mode" value="now" checked={mode === "now"} onChange={() => setMode("now")} />Đăng ngay</label><label className="flex items-center gap-2 text-sm text-gray-600"><input type="radio" name="publish-mode" value="draft" checked={mode === "draft"} onChange={() => setMode("draft")} />Lưu bản nháp</label><label className="flex items-center gap-2 text-sm text-gray-600"><input type="radio" name="publish-mode" value="scheduled" checked={mode === "scheduled"} onChange={() => setMode("scheduled")} />Hẹn đăng</label></fieldset>{mode === "scheduled" && <label className="grid gap-1.5 text-sm font-semibold text-gray-700">Thời gian (Asia/Ho_Chi_Minh)<input className="rounded-xl border border-gray-200 px-3 py-2.5 font-normal" type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} /></label>}{error && <p className="rounded-lg bg-rose-50 p-3 text-sm font-normal text-rose-700" role="alert">{error}</p>}<button className="w-fit rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer" type="submit" disabled={busy}>{busy ? "Đang xử lý..." : mode === "now" ? "Đăng ngay" : mode === "draft" ? "Lưu bản nháp" : "Hẹn đăng"}</button></form></section><section className="rounded-2xl bg-white p-5 shadow-sm sm:p-6"><h2 className="text-lg font-semibold text-gray-900">Xem trước</h2><article className="mt-4 overflow-hidden rounded-xl border border-gray-200"><div className="p-4"><p className="whitespace-pre-wrap text-sm text-gray-700">{previewText}</p></div>{imageUrl && <img className="max-h-80 w-full object-cover" src={imageUrl} alt="Xem trước ảnh bài viết" />}</article></section></div></>;
   }
 
   const isConnected = connection?.status === "connected";
   const activeItems = activeTab === "draft" ? draftPosts : activeTab === "scheduled" ? scheduledPosts : historyPosts;
   return <main className="min-h-screen bg-gray-50 text-gray-800" aria-label="Quản lý bài viết Facebook"><DashboardTopbar onLogoClick={onLogoClick} onNavigate={onNavigate} user={user} onLogout={onLogout} onProfile={onProfile} /><div className="px-4 py-6 sm:px-6 lg:px-8"><div className="mx-auto flex max-w-7xl items-start gap-6 max-[900px]:flex-col"><aside className="w-full shrink-0 rounded-2xl bg-white p-3 shadow-sm lg:w-64" aria-label="Menu đăng bài Facebook"><div className="px-3 pb-3">
-    </div><nav className="grid gap-1" aria-label="Các mục đăng bài">{sidebarItems.map((item) => <button className={"flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition  cursor-pointer" + (activeTab === item.id ? "bg-gray-200 font-semibold text-gray-900 shadow-sm cursor-pointer" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 cursor-pointer")} aria-current={activeTab === item.id ? "page" : undefined} key={item.id} type="button" onClick={() => setActiveTab(item.id)}><InboxIcon name={item.icon} size={17} /><span>{item.label}</span>{item.id === "draft" && draftPosts.length > 0 && <small className="ml-auto rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-500">{draftPosts.length}</small>}</button>)}</nav></aside><section className="min-w-0 flex-1">{error && !isConnected && <p className="mb-5 rounded-lg bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</p>}{connectionLoading || isLoading ? renderPostSkeletons() : !isConnected ? <section className="rounded-2xl bg-white p-6 shadow-sm"><h2 className="text-lg font-semibold text-gray-900">Kết nối Facebook Page</h2><p className="mt-1 text-sm text-gray-500">Token chỉ được gửi tới máy chủ qua kết nối bảo mật và không được lưu trong trình duyệt.</p><form className="mt-5 grid max-w-xl gap-4" onSubmit={connect}><label className="grid gap-1.5 text-sm font-semibold text-gray-700">Page ID<input className="rounded-xl border border-gray-200 px-3 py-2.5 font-normal" value={pageId} onChange={(event) => setPageId(event.target.value)} required /></label><label className="grid gap-1.5 text-sm font-semibold text-gray-700">Page access token<input className="rounded-xl border border-gray-200 px-3 py-2.5 font-normal" type="password" value={pageAccessToken} onChange={(event) => setPageAccessToken(event.target.value)} required autoComplete="off" /></label><button className="w-fit rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed" type="submit" disabled={busy}>{busy ? "Đang kết nối..." : "Kết nối Page"}</button></form></section> : activeTab === "compose" ? renderComposer() : <section>
+    </div><nav className="grid gap-1" aria-label="Các mục đăng bài">{sidebarItems.map((item) => <button className={"flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition  cursor-pointer" + (activeTab === item.id ? "bg-gray-200 font-semibold text-gray-900 shadow-sm cursor-pointer" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 cursor-pointer")} aria-current={activeTab === item.id ? "page" : undefined} key={item.id} type="button" onClick={() => setActiveTab(item.id)}><InboxIcon name={item.icon} size={17} /><span>{item.label}</span>{item.id === "draft" && draftPosts.length > 0 && <small className="ml-auto rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-500">{draftPosts.length}</small>}</button>)}</nav></aside><section className="min-w-0 flex-1">{error && !isConnected && <p className="mb-5 rounded-lg bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</p>}{connectionLoading || isLoading ? renderPostSkeletons() : (!isConnected || showConnectForm) ? <section className="rounded-2xl bg-white p-6 shadow-sm"><h2 className="text-lg font-semibold text-gray-900">{isConnected ? "Kết nối thêm Facebook Page" : "Kết nối Facebook Page"}</h2><p className="mt-1 text-sm text-gray-500">Token chỉ được gửi tới máy chủ qua kết nối bảo mật và không được lưu trong trình duyệt.</p><form className="mt-5 grid max-w-xl gap-4" onSubmit={connect}><label className="grid gap-1.5 text-sm font-semibold text-gray-700">Page ID<input className="rounded-xl border border-gray-200 px-3 py-2.5 font-normal" value={pageId} onChange={(event) => setPageId(event.target.value)} required /></label><label className="grid gap-1.5 text-sm font-semibold text-gray-700">Page access token<input className="rounded-xl border border-gray-200 px-3 py-2.5 font-normal" type="password" value={pageAccessToken} onChange={(event) => setPageAccessToken(event.target.value)} required autoComplete="off" /></label><button className="w-fit rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed" type="submit" disabled={busy}>{busy ? "Đang kết nối..." : "Kết nối Page"}</button></form></section> : activeTab === "compose" ? renderComposer() : <section>
         {renderList(activeItems, activeTab === "draft" ? "Chưa có bài viết nháp." : activeTab === "scheduled" ? "Chưa có bài viết nào được lên lịch." : "Chưa có lịch sử đăng bài.")}</section>}</section></div></div>{editingPost && <EditPostModal busy={editBusy} message={editMessage} mode={editMode} scheduledAt={editScheduledAt} onClose={closeEditor} onMessageChange={setEditMessage} onModeChange={setEditMode} onScheduledAtChange={setEditScheduledAt} onSubmit={saveEdit} />}</main>;
 }
 

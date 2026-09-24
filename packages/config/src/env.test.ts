@@ -52,6 +52,14 @@ describe("environment configuration", () => {
     expect(env.FACEBOOK_POST_LEASE_MS).toBe(180000);
   });
 
+  it("parses the optional Messenger webhook verify token and ignores an empty value", async () => {
+    const configured = await importEnv({ META_WEBHOOK_VERIFY_TOKEN: "verify-secret" });
+    expect(configured.env.META_WEBHOOK_VERIFY_TOKEN).toBe("verify-secret");
+
+    const blank = await importEnv({ META_WEBHOOK_VERIFY_TOKEN: "" });
+    expect(blank.env.META_WEBHOOK_VERIFY_TOKEN).toBeUndefined();
+  });
+
   it("accepts the supported secure database protocols", async () => {
     const { env } = await importEnv({
       MONGODB_URI: "mongodb+srv://cluster.example.com/nhuu-chat",

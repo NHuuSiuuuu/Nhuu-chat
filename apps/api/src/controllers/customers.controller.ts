@@ -3,6 +3,9 @@ import type { RequestHandler } from "express";
 import { AppError } from "../common/errors.js";
 import { customerIdSchema, customerTagsSchema } from "../schemas/customers.schemas.js";
 import { updateCustomerTags as updateTags } from "../services/customer.service.js";
+import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
+import { ConversationModel } from "../models/conversation.model.js";
+import { conversationAccessFilter } from "../realtime/access.js";
 
 export const updateCustomerTags: RequestHandler = async (request, response, next) => {
   try {
@@ -21,6 +24,10 @@ export const updateCustomerTags: RequestHandler = async (request, response, next
     }
 
     const tags = [...new Set(body.data.tags)];
+    const authRequest = request as AuthenticatedRequest;
+    if (!authRequest.auth || !(await ConversationModel.exists({ customerId: params.data.id, ...conversationAccessFilter({ ...authRequest.auth, workspace: authRequest.workspace }) }))) {
+      throw new AppError(404, "CUSTOMER_NOT_FOUND", "Customer was not found");
+    }
     response.json(await updateTags(params.data.id, tags));
   } catch (error) {
     next(error);

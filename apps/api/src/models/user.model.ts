@@ -35,7 +35,7 @@ const userSchema = new Schema(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     name: { type: String, required: true, trim: true },
     passwordHash: { type: String, required: true, select: false },
-    role: { type: String, enum: roles, required: true },
+    role: { type: String, enum: roles, required: true, default: "customer" },
     refreshTokenHash: { type: String, default: null, select: false },
     authSessionRevision: { type: Number, default: 0, select: false },
     aiSettings: { type: aiSettingsSchema, default: () => ({}) },

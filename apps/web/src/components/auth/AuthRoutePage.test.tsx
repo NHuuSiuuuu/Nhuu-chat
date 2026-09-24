@@ -13,7 +13,9 @@ describe("AuthRoutePage", () => {
       );
     });
 
-    expect(renderer.root.findByProps({ "aria-label": "NhuuChat - về đầu trang" }).props.href).toBe("/");
+    const brandLinks = renderer.root.findAllByProps({ "aria-label": "NhuuChat - về đầu trang" });
+    expect(brandLinks).toHaveLength(2);
+    expect(brandLinks[0].props.href).toBe("/");
     expect(JSON.stringify(renderer.toJSON())).toContain("Tạo tài khoản mới");
     const loginButton = renderer.root.findAllByType("button").find(button => button.props["aria-label"] === "Đăng nhập");
     act(() => loginButton?.props.onClick());

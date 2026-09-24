@@ -4,9 +4,11 @@ import { AppError } from "../common/errors.js";
 import { ACCESS_COOKIE_NAME, readCookie } from "./auth.cookies.js";
 import type { Role } from "../models/user.model.js";
 import { verifyAccessToken, type AuthPrincipal } from "../services/auth.service.js";
+import type { WorkspaceContext } from "./workspace.middleware.js";
 
 export interface AuthenticatedRequest extends Request {
   auth?: AuthPrincipal;
+  workspace?: WorkspaceContext;
 }
 
 function bearerToken(authorization: string | undefined): string {

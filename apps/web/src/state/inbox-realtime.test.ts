@@ -84,6 +84,21 @@ describe("inbox realtime message correlation", () => {
     expect(appendUniqueMessage([response], socketCopy)).toEqual([socketCopy]);
   });
 
+  it("collapses an echo-first socket bubble and optimistic bubble when the HTTP result arrives", () => {
+    const optimistic = outboundMessage({ id: "optimistic:client-1", clientMessageId: "client-1", deliveryStatus: "pending" });
+    const echo = outboundMessage({ id: "server-1", deliveryStatus: "sent" });
+    const authoritativeResponse = outboundMessage({ id: "server-1", clientMessageId: "client-1", deliveryStatus: "sent" });
+
+    expect(appendUniqueMessage([optimistic, echo], authoritativeResponse)).toEqual([authoritativeResponse]);
+  });
+
+  it("sorts delayed realtime messages by source creation time", () => {
+    const newer = outboundMessage({ id: "newer", createdAt: "2026-09-17T07:00:00.000Z" });
+    const delayedOlder = outboundMessage({ id: "older", createdAt: "2026-09-17T06:00:00.000Z" });
+
+    expect(appendUniqueMessage([newer], delayedOlder).map((item) => item.id)).toEqual(["older", "newer"]);
+  });
+
   it("keeps unrelated messages while merging and sorting by creation time", () => {
     const current = [
       outboundMessage({ id: "old", content: "Cũ", createdAt: "2026-09-17T06:00:00.000Z" }),

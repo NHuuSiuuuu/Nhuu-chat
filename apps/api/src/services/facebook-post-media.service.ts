@@ -1,5 +1,5 @@
-import type { FacebookPostMedia } from "@nhuu-chat/contracts";
-import { CloudinaryMediaService, type MediaUploadResult } from "../media/cloudinary.service.js";
+import type { FacebookPostMedia, QuickReplyAttachmentContract } from "@nhuu-chat/contracts";
+import { CloudinaryMediaService } from "../media/cloudinary.service.js";
 
 const FACEBOOK_POST_MEDIA_FOLDER = "nhuu-chat/facebook-posts";
 const ACCEPTED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -13,7 +13,10 @@ export type FacebookPostMediaServiceDependencies = {
   destroyMedia?: ImageUploader["destroyMedia"];
 };
 
-function toFacebookPostMedia(result: MediaUploadResult): FacebookPostMedia {
+function toFacebookPostMedia(result: QuickReplyAttachmentContract): FacebookPostMedia {
+  if (result.resourceType !== "image") {
+    throw new Error("Facebook post upload returned a non-image asset");
+  }
   return {
     secureUrl: result.secureUrl,
     publicId: result.publicId,

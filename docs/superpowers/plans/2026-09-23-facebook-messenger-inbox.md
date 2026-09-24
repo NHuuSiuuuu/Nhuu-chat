@@ -20,6 +20,7 @@
 - Send API dùng Page Access Token được cấp bởi người có tác vụ nhắn tin (`MESSAGE`) trên Page cùng quyền `pages_messaging`.
 - Tin trả lời chuẩn chỉ được gửi trong cửa sổ 24 giờ kể từ tin nhắn gần nhất do khách gửi. MVP không dùng message tag hoặc luồng gửi ngoài cửa sổ này.
 - Customer identity dùng khóa nội bộ `facebook:<pageId>:<PSID>` trong `Customer.platformId`; Facebook adapter tách PSID gốc trước khi gọi Meta.
+- Mỗi Facebook PSID phải có một conversation riêng trong Page; giữ `channelId` là Page ID để Inbox vẫn lọc được theo Page.
 - Page ID trong webhook phải ánh xạ chính xác tới một tài khoản NhuuChat. Không fan-out một sự kiện sang nhiều owner.
 - Không đưa App Secret, Page Access Token hoặc webhook verify token vào API response/log.
 - Composer của Facebook MVP chỉ bật gửi văn bản. Không hiển thị trạng thái gửi thành công nếu Meta trả lỗi.
@@ -33,10 +34,14 @@
 - Create `apps/api/src/channels/facebook-messenger/facebook-messenger.client.ts` and `.test.ts`: Graph Send API call, Page webhook subscription and safe error mapping with injected fetch.
 - Create `apps/api/src/channels/facebook-messenger/facebook-messenger.normalizer.ts` and `.test.ts`: convert supported customer messages and echoes to the existing platform/message contract; namespace customer and external IDs.
 - Create `apps/api/src/channels/facebook-messenger/facebook-messenger.webhook.ts` and integration tests: verify GET challenge and POST raw-body signature; resolve connected Page; persist idempotently; update unread once; emit existing realtime events.
+- Modify `apps/api/src/models/conversation.model.ts` and create `apps/api/src/db/migrate-facebook-conversation-customer-index.ts` with tests: include `customerId` in Facebook conversation uniqueness while preserving non-Facebook uniqueness semantics.
+- Persist Meta provider event time as message `createdAt`, which the current API contract and history ordering already use.
 - Create `apps/api/src/routes/facebook-messenger-webhook.routes.ts`; modify `apps/api/src/app.ts` for raw-body signature access and route registration without changing JSON parsing for other routes.
 - Modify `apps/api/src/services/message.service.ts` and `apps/api/src/services/outbound-message.service.test.ts`: route Facebook text through sender, use owner+Page connection, decrypt token only in memory, enforce 24-hour window, persist Meta message ID and safe delivery state.
 - Modify `packages/contracts/src/index.ts` only if current message/conversation contracts cannot carry the required Facebook-safe metadata; add focused contract tests where applicable.
+- Modify `apps/web/src/components/dashboard/ConnectModal.tsx` and its tests to display/use the OAuth `canMessage` capability while preserving the separate `canPublish` state.
 - Modify `apps/web/src/pages/InboxPage.tsx`, `apps/web/src/components/conversations/MessageComposer.tsx`, and focused tests only where the shared Inbox needs Facebook platform filtering or text-only composer restrictions.
+- Modify the existing Facebook OAuth safe-error mapping in the dashboard connection flow so a Page lacking messaging permission gets a clear Vietnamese explanation.
 - Modify `CHANGELOG.md` and deployment configuration documentation for required Meta webhook/app secrets after implementation.
 
 ### Task 1: Confirm persistence and identity constraints
@@ -68,11 +73,11 @@
 **Interfaces:**
 - OAuth authorization scope retains `pages_show_list,pages_read_engagement,pages_manage_posts` and adds `pages_messaging` plus the Meta permission required to manage Page webhook subscriptions.
 - OAuth Page listing records messaging eligibility separately from `canPublish`; selection rejects a Page without a messaging-capable task.
-- `FacebookPageService.connect(userId, { pageId, pageAccessToken })` persists only after Graph confirms Page identity and the required Messenger capability.
-- Manual token entry remains usable for internal testing and returns safe missing-permission errors.
+- `FacebookPageService.connect(userId, { pageId, pageAccessToken })` persists only after Graph confirms Page identity; OAuth selection separately enforces the Page messaging task.
+- Manual token entry remains usable for internal testing. Messenger-specific permission errors are checked and returned safely by the actual Page subscription and Send API operations; do not use the Conversations API as a preflight because its task requirements differ from Send API eligibility.
 
-- [ ] Add failing tests for OAuth scope preservation/additions, Page task parsing, manual token lacking `pages_messaging`, Page ID mismatch, and no token/ciphertext exposure.
-- [ ] Implement eligibility parsing and validation using the current Graph API version and injected Graph fetch seam.
+- [ ] Add failing tests for OAuth scope preservation/additions, Page task parsing, manual token Page ID mismatch, and no token/ciphertext exposure.
+- [ ] Implement eligibility parsing using the current Graph API version; keep manual token validation to Page identity and leave permission-specific checks to the webhook subscription and Send API operations.
 - [ ] Keep post publishing eligibility separate from messaging eligibility so a valid publishing Page is not incorrectly treated as Messenger-ready.
 - [ ] Run Facebook OAuth/Page connection tests and commit the connection slice.
 
@@ -81,17 +86,19 @@
 **Files:**
 - Create: `apps/api/src/channels/facebook-messenger/facebook-messenger.client.ts`.
 - Create: `apps/api/src/channels/facebook-messenger/facebook-messenger.client.test.ts`.
-- Modify: `apps/api/src/services/facebook-page.service.ts` and its tests to subscribe/unsubscribe after validated connect/remove.
+- Modify: `apps/api/src/services/facebook-page.service.ts` and its tests to reserve Page ownership before subscribe, CAS-finalize connection state, and retain the reservation until unsubscribe completes.
 - Modify: environment schema and tests only if `META_WEBHOOK_VERIFY_TOKEN` is not already represented by deployment environment parsing.
 
 **Interfaces:**
 - `FacebookMessengerClient.sendText({ pageId, pageAccessToken, psid, text }): Promise<{ externalMessageId: string }>`.
 - `FacebookMessengerClient.subscribePage({ pageId, pageAccessToken }): Promise<void>` subscribes only to `messages` and `message_echoes`.
 - Client maps permission, token, policy-window, rate-limit, and timeout failures to safe stable codes; raw Meta bodies and tokens never escape.
+- Connection reserves the new Page in Mongo before subscribing. A replacement keeps the old Page claim until its unsubscribe completes; removal releases a Page claim only after unsubscribe succeeds.
+- Definitive provider failures remain retryable by the same owner while retaining the Page claim. Ambiguous timeouts remain fail-closed and require reconciliation before another owner can claim that Page.
 
 - [ ] Write failing client tests for the exact Send API URL/body, Page subscription fields, success ID parsing, missing permission, timeout, malformed response, and token redaction.
 - [ ] Implement the client with injected fetch, bounded request timeout, and `META_GRAPH_API_VERSION`.
-- [ ] Add connection lifecycle tests proving webhook subscription happens only after valid credentials and removal unsubscribes best-effort without leaking secrets.
+- [ ] Add connection lifecycle tests proving valid Page ownership is reserved before subscription, replacement/removal use CAS while retaining Page claims through unsubscribe, definitive failures are retryable by that owner, ambiguous outcomes cannot release the claim, and secrets remain hidden.
 - [ ] Run the focused client/connection tests and commit the Graph integration boundary.
 
 ### Task 4: Implement verified, idempotent inbound webhook
@@ -107,10 +114,13 @@
 - `GET` compares `hub.mode`, `hub.verify_token` and returns `hub.challenge` only when configured verify token matches.
 - `POST` accepts raw bytes and validates `X-Hub-Signature-256` with HMAC-SHA256 using `META_APP_SECRET` before JSON parsing.
 - Webhook processor resolves `entry.id` to exactly one connection owner and ignores unsupported events safely.
-- Message persistence upserts by namespaced external ID; unread increments only when a new customer message is inserted; echo never creates a duplicate outbound message.
+- Conversation persistence upserts by `{ platform: "facebook", channelId: pageId, ownerId, customerId }`, keeping each PSID in a separate thread while preserving Page filtering.
+- Message persistence upserts by namespaced external ID and stores provider event time as `createdAt`; unread increments only when a new customer message is inserted; echo never creates a duplicate outbound message.
 
 - [ ] Add failing route tests for valid/invalid challenge, valid/invalid signature, malformed JSON, missing secret and unknown Page.
-- [ ] Add failing processor tests for supported text, unsupported attachment/event, echo, duplicate retry, Page ownership collision and malformed payload.
+- [ ] Add failing processor tests for two PSIDs on one Page creating separate conversations, supported text, unsupported attachment/event, echo, duplicate retry, Page ownership collision and malformed payload.
+- [ ] Add migration tests proving Facebook uniqueness adds `customerId` while non-Facebook uniqueness remains unchanged and the old index is replaced idempotently.
+- [ ] Add message history coverage proving delayed webhook messages sort by provider event time.
 - [ ] Implement normalizer and processor using existing customer/conversation/message schemas and realtime emit helpers; persist before returning webhook success.
 - [ ] Assert duplicate delivery leaves message count and unread count unchanged and each emitted event is scoped to the resolved conversation.
 - [ ] Run webhook unit/integration tests and commit the inbound slice.
@@ -136,6 +146,8 @@
 ### Task 6: Connect Facebook messages to the shared Inbox
 
 **Files:**
+- Modify: `apps/web/src/components/dashboard/ConnectModal.tsx` and `apps/web/src/components/dashboard/ConnectModal.test.tsx` for Messenger-capable Page selection.
+- Modify: the existing Dashboard Facebook OAuth error mapping and focused tests for `FACEBOOK_OAUTH_PAGE_NOT_MESSAGING_CAPABLE`.
 - Modify: `apps/web/src/pages/InboxPage.tsx` and its tests only as needed for Facebook conversation selection and realtime updates.
 - Modify: `apps/web/src/components/conversations/MessageComposer.tsx` and tests to keep Facebook composer text-only and disable unsupported attachment/quick-reply media paths.
 - Modify: shared contracts only if API payload currently lacks a field the UI needs.
@@ -143,8 +155,10 @@
 **Interfaces:**
 - Existing conversations/messages API and Socket.IO events provide Facebook items; no Facebook-specific frontend API endpoint is added.
 - Facebook channel selection uses existing platform and `channelId` values.
+- OAuth Page selection is enabled only for `canMessage` Pages; `canPublish` is still rendered as its own capability because publishing eligibility and Messenger eligibility are distinct.
 - Facebook composer sends plain text and preserves normal composer behavior for all other channels.
 
+- [ ] Add failing OAuth modal tests for a messaging-capable Page without publish permission, a publish-capable Page without messaging permission, and safe localized permission errors.
 - [ ] Add failing Inbox tests for Facebook platform selection, inbound realtime update, and sending a text reply through the existing endpoint.
 - [ ] Add failing composer tests proving Facebook cannot attach a file or insert a media quick reply while other platforms retain current behavior.
 - [ ] Implement the smallest platform-aware UI changes and safe Vietnamese delivery error messages.
@@ -165,6 +179,7 @@
 ## Acceptance Gate
 
 - Text received from a connected test Page creates exactly one customer message and appears in Inbox in real time.
+- Two customers messaging the same Page remain in separate conversations and replies use the corresponding PSID.
 - An authorized employee can send text and sees success only after Meta accepts it; policy-window and Meta errors are shown safely.
 - A Page ID resolves to one NhuuChat owner; access tokens and app secrets remain server-side.
 - Focused tests, relevant full suites, production build, type checks, and `git diff --check` pass; any pre-existing unrelated failures are documented.

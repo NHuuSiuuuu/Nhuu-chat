@@ -74,6 +74,7 @@ const adminAuth = { id: "admin-1", email: "admin@example.com", role: "admin" } a
 describe("conversation controller", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    conversationModelMocks.exists.mockResolvedValue(true);
   });
 
   it("rejects unauthenticated AI suggestion requests", async () => {
@@ -352,6 +353,7 @@ describe("conversation controller", () => {
     const next = vi.fn();
 
     await updateAssignment({
+      auth: adminAuth,
       params: { id: "conversation-1" },
       body: { assignedAgentId: "agent-1" }
     } as never, response as never, next);
@@ -370,6 +372,7 @@ describe("conversation controller", () => {
     const next = vi.fn();
 
     await updateAssignment({
+      auth: adminAuth,
       params: { id: "conversation-1" },
       body: { assignedAgentId: 7 }
     } as never, response as never, next);
@@ -386,6 +389,7 @@ describe("conversation controller", () => {
     const next = vi.fn();
 
     await updateAssignment({
+      auth: adminAuth,
       params: { id: "conversation-1" },
       body: { assignedAgentId: "agent-1" }
     } as never, response as never, next);
@@ -403,6 +407,7 @@ describe("conversation controller", () => {
     const next = vi.fn();
 
     await updateStatus({
+      auth: adminAuth,
       params: { id: "conversation-1" },
       body: { status: "closed" }
     } as never, response as never, next);
@@ -447,6 +452,7 @@ describe("conversation controller", () => {
     const next = vi.fn();
 
     await updateStatus({
+      auth: adminAuth,
       params: { id: "conversation-1" },
       body: { status: "archived" }
     } as never, response as never, next);
@@ -463,6 +469,7 @@ describe("conversation controller", () => {
     const next = vi.fn();
 
     await updateStatus({
+      auth: adminAuth,
       params: { id: "conversation-1" },
       body: { status: "closed" }
     } as never, response as never, next);

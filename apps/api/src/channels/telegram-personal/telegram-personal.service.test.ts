@@ -149,13 +149,13 @@ describe("Telegram personal inbound chatbot integration", () => {
     expect(telegram.sendMessage).toHaveBeenCalledExactlyOnceWith("456", { message: "Chào từ tài khoản cá nhân" });
   });
 
-  it("retains the customer message and records a failed handoff when the personal send fails", async () => {
+  it("retains the customer message and records delivery failure without claiming handoff", async () => {
     const { event } = await connect();
     telegram.sendMessage.mockRejectedValue(new Error("private session failure"));
     await telegram.listener!(event);
     await telegram.listener!(event);
     expect(await MessageModel.countDocuments({ senderType: "customer", deliveryStatus: "delivered" })).toBe(1);
-    expect(await MessageModel.findOne({ senderType: "bot" }).lean()).toMatchObject({ deliveryStatus: "failed", metadata: { handoff: true, errorCode: "DELIVERY_FAILED" } });
+    expect(await MessageModel.findOne({ senderType: "bot" }).lean()).toMatchObject({ deliveryStatus: "failed", metadata: { handoff: false, errorCode: "DELIVERY_FAILED" } });
     expect(await ConversationModel.findOne().lean()).toMatchObject({ status: "open", botPausedUntil: null, unreadCount: 1 });
     expect(await BotProcessingModel.findOne().lean()).toMatchObject({ status: "failed" });
     expect(telegram.sendMessage).toHaveBeenCalledOnce();

@@ -1,18 +1,25 @@
 import type { FacebookPageConnectionResponse } from "@nhuu-chat/contracts";
 import { env } from "@nhuu-chat/config";
 
-import { encryptSecret } from "../common/crypto.js";
+import { decryptSecret, encryptSecret } from "../common/crypto.js";
 import { AppError } from "../common/errors.js";
+import { facebookMessengerClient } from "../channels/facebook-messenger/facebook-messenger.client.js";
 import { FacebookPageConnectionModel } from "../models/facebook-page-connection.model.js";
 import { recordSettingHistory } from "./setting-history.service.js";
 
 const FACEBOOK_GRAPH_REQUEST_TIMEOUT_MS = 10_000;
+const SUBSCRIBE_PENDING = "FACEBOOK_MESSENGER_SUBSCRIBE_PENDING";
+const SUBSCRIBE_CONFIRM_FAILED = "FACEBOOK_MESSENGER_SUBSCRIBE_CONFIRM_FAILED";
+const REMOVE_PENDING = "FACEBOOK_MESSENGER_REMOVE_PENDING";
+const REMOVE_RETRYABLE = "FACEBOOK_MESSENGER_REMOVE_RETRYABLE";
 
 type GraphFetch = (input: string, init?: RequestInit) => Promise<Response>;
 
 interface FacebookPageConnectionRecord {
   _id: unknown;
+  userId?: unknown;
   pageId: string;
+  encryptedPageAccessToken?: string;
   pageName?: string | null;
   avatarUrl?: string | null;
   status: "connected" | "invalid";
@@ -22,17 +29,34 @@ interface FacebookPageConnectionRecord {
   updatedAt: Date;
 }
 
+interface ValidatedPageValues {
+  pageId: string;
+  pageName: string | null;
+  avatarUrl: string | null;
+  encryptedPageAccessToken: string;
+  lastValidatedAt: Date;
+}
+
 interface ConnectionModel {
-  findOne(filter: { userId: string }): { lean(): Promise<FacebookPageConnectionRecord | null> };
+  findOne(filter: Record<string, unknown>): {
+    select(selection: string): { sort(sort: Record<string, number>): { lean(): Promise<FacebookPageConnectionRecord | null> }; lean(): Promise<FacebookPageConnectionRecord | null> };
+    sort(sort: Record<string, number>): { lean(): Promise<FacebookPageConnectionRecord | null> };
+    lean(): Promise<FacebookPageConnectionRecord | null>;
+  };
+  find(filter: Record<string, unknown>): { sort(sort: Record<string, number>): { lean(): Promise<FacebookPageConnectionRecord[]> } };
   findOneAndUpdate(filter: Record<string, unknown>, update: Record<string, unknown>, options: Record<string, unknown>): Promise<FacebookPageConnectionRecord | null>;
   create(input: Record<string, unknown>): Promise<FacebookPageConnectionRecord>;
-  findOneAndDelete(filter: { userId: string }): Promise<FacebookPageConnectionRecord | null>;
+  findOneAndDelete(filter: Record<string, unknown>): Promise<FacebookPageConnectionRecord | null>;
 }
+
+type MessengerSubscriptionClient = Pick<typeof facebookMessengerClient, "subscribePage" | "unsubscribePage">;
 
 export interface FacebookPageServiceDependencies {
   model?: ConnectionModel;
   fetchGraph?: GraphFetch;
   encryptSecret?: (value: string) => string;
+  decryptSecret?: (value: string) => string;
+  messengerClient?: MessengerSubscriptionClient;
   graphApiVersion?: string;
   graphRequestTimeoutMs?: number;
 }
@@ -64,6 +88,79 @@ function toHistoryMetadata(record: FacebookPageConnectionRecord | null) {
   };
 }
 
+function pageOwnershipError(): AppError {
+  return new AppError(409, "FACEBOOK_PAGE_ALREADY_CONNECTED", "Facebook Page is already connected");
+}
+
+function connectionStateError(): AppError {
+  return new AppError(409, "FACEBOOK_PAGE_CONNECTION_BUSY", "Facebook Page connection is being updated");
+}
+
+function connectionPersistenceError(): AppError {
+  return new AppError(503, "FACEBOOK_PAGE_CONNECTION_FAILED", "Facebook Page connection could not be saved");
+}
+
+function safeMessengerError(error: unknown, operation: "SUBSCRIBE" | "UNSUBSCRIBE"): AppError {
+  if (error instanceof AppError && /^FACEBOOK_MESSENGER_[A-Z_]+$/.test(error.code)) {
+    return new AppError(error.statusCode, error.code, "Facebook Messenger request failed");
+  }
+  return new AppError(502, `FACEBOOK_MESSENGER_${operation}_FAILED`, "Facebook Messenger request failed");
+}
+
+function isDefinitiveMetaRejection(code: string): boolean {
+  return ["FACEBOOK_MESSENGER_TOKEN_INVALID", "FACEBOOK_MESSENGER_PERMISSION_DENIED", "FACEBOOK_MESSENGER_RATE_LIMITED"].includes(code);
+}
+
+// Hydrated Mongoose Documents giữ schema fields trong _doc, nên sao chép từng getter cần cho CAS.
+function connectionSnapshot(record: FacebookPageConnectionRecord, encryptedPageAccessToken?: string): FacebookPageConnectionRecord {
+  const snapshot: FacebookPageConnectionRecord = {
+    _id: record._id,
+    userId: record.userId,
+    pageId: record.pageId,
+    pageName: record.pageName,
+    avatarUrl: record.avatarUrl,
+    encryptedPageAccessToken: encryptedPageAccessToken ?? record.encryptedPageAccessToken,
+    status: record.status,
+    lastValidatedAt: record.lastValidatedAt,
+    lastErrorCode: record.lastErrorCode,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt
+  };
+  if (snapshot._id === undefined || snapshot._id === null || typeof snapshot.pageId !== "string" || !snapshot.pageId
+    || (snapshot.status !== "connected" && snapshot.status !== "invalid")
+    || typeof snapshot.encryptedPageAccessToken !== "string" || !snapshot.encryptedPageAccessToken) {
+    throw connectionPersistenceError();
+  }
+  return snapshot;
+}
+
+function claimFilter(userId: string, record: FacebookPageConnectionRecord): Record<string, unknown> {
+  const claim = connectionSnapshot(record);
+  return {
+    _id: claim._id,
+    userId,
+    pageId: claim.pageId,
+    pageName: claim.pageName ?? null,
+    status: claim.status,
+    lastErrorCode: claim.lastErrorCode ?? null,
+    encryptedPageAccessToken: claim.encryptedPageAccessToken
+  };
+}
+
+function isTransition(record: FacebookPageConnectionRecord): boolean {
+  return [SUBSCRIBE_PENDING, REMOVE_PENDING].includes(record.lastErrorCode ?? "");
+}
+
+function isPageDuplicate(error: unknown): boolean {
+  const conflict = error as { code?: number; keyPattern?: { pageId?: number } } | null;
+  return conflict?.code === 11000 && conflict.keyPattern?.pageId === 1;
+}
+
+function isLegacyUserIndexConflict(error: unknown): boolean {
+  const conflict = error as { code?: number; keyPattern?: { userId?: number } } | null;
+  return conflict?.code === 11000 && conflict.keyPattern?.userId === 1;
+}
+
 function recordSettingHistorySafely(input: Parameters<typeof recordSettingHistory>[0]): void {
   void recordSettingHistory(input).catch((error) => {
     console.error("Failed to record setting history", {
@@ -93,17 +190,44 @@ function graphPictureUrl(body: unknown): string | null {
   return typeof url === "string" && url.length > 0 ? url : null;
 }
 
+async function fetchGraphResponse(fetchGraph: GraphFetch, url: URL, timeoutMs: number): Promise<{ response: Response; body: unknown }> {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      (async () => {
+        const response = await fetchGraph(url.toString(), { method: "GET", signal: controller.signal });
+        return { response, body: await response.json() };
+      })(),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          controller.abort();
+          reject(new Error("Facebook Page validation timed out"));
+        }, timeoutMs);
+      })
+    ]);
+  } catch {
+    throw new AppError(400, "FACEBOOK_PAGE_VALIDATION_FAILED", "Facebook Page credentials could not be validated");
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export class FacebookPageService {
   private readonly model: ConnectionModel;
   private readonly fetchGraph: GraphFetch;
   private readonly encrypt: (value: string) => string;
+  private readonly decrypt: (value: string) => string;
+  private readonly messengerClient: MessengerSubscriptionClient;
   private readonly graphApiVersion: string;
   private readonly graphRequestTimeoutMs: number;
 
   constructor(dependencies: FacebookPageServiceDependencies = {}) {
-    this.model = dependencies.model ?? FacebookPageConnectionModel;
+    this.model = dependencies.model ?? FacebookPageConnectionModel as unknown as ConnectionModel;
     this.fetchGraph = dependencies.fetchGraph ?? fetch;
     this.encrypt = dependencies.encryptSecret ?? encryptSecret;
+    this.decrypt = dependencies.decryptSecret ?? decryptSecret;
+    this.messengerClient = dependencies.messengerClient ?? facebookMessengerClient;
     this.graphApiVersion = dependencies.graphApiVersion ?? env.META_GRAPH_API_VERSION;
     this.graphRequestTimeoutMs = dependencies.graphRequestTimeoutMs ?? FACEBOOK_GRAPH_REQUEST_TIMEOUT_MS;
   }
@@ -114,28 +238,7 @@ export class FacebookPageService {
     url.searchParams.set("fields", "id,name,picture.type(large)");
     url.searchParams.set("access_token", input.pageAccessToken);
 
-    let response: Response;
-    let body: unknown;
-    const controller = new AbortController();
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    try {
-      ({ response, body } = await Promise.race([
-        (async () => {
-          const graphResponse = await this.fetchGraph(url.toString(), { method: "GET", signal: controller.signal });
-          return { response: graphResponse, body: await graphResponse.json() };
-        })(),
-        new Promise<never>((_resolve, reject) => {
-          timeout = setTimeout(() => {
-            controller.abort();
-            reject(new Error("Facebook Page validation timed out"));
-          }, this.graphRequestTimeoutMs);
-        })
-      ]));
-    } catch {
-      throw new AppError(400, "FACEBOOK_PAGE_VALIDATION_FAILED", "Facebook Page credentials could not be validated");
-    } finally {
-      if (timeout) clearTimeout(timeout);
-    }
+    const { response, body } = await fetchGraphResponse(this.fetchGraph, url, this.graphRequestTimeoutMs);
 
     if (!response.ok || graphErrorCode(body) !== undefined) {
       const code = graphErrorCode(body);
@@ -151,39 +254,81 @@ export class FacebookPageService {
     }
 
     const encryptedPageAccessToken = this.encrypt(input.pageAccessToken);
-    const values = {
+    const values: ValidatedPageValues = {
       pageId: input.pageId,
       pageName: typeof metadata.name === "string" ? metadata.name : null,
       avatarUrl: graphPictureUrl(body),
       encryptedPageAccessToken,
-      status: "connected",
-      lastValidatedAt: new Date(),
-      lastErrorCode: null
+      lastValidatedAt: new Date()
     };
     let existing: FacebookPageConnectionRecord | null;
-    let saved: FacebookPageConnectionRecord;
-    // Chỉ ghi khi toàn bộ metadata audit còn khớp; đọc lại nếu kết nối bị thay hoặc xóa.
+    let reserved: FacebookPageConnectionRecord;
+    // Mongo giữ Page claim trước mọi tác động Meta; unique index phân xử kết nối cạnh tranh.
     for (;;) {
-      existing = await this.model.findOne({ userId }).lean();
+      existing = await this.model.findOne({ userId, pageId: input.pageId }).select("+encryptedPageAccessToken").lean();
+      const otherOwner = await this.model.findOne({ pageId: input.pageId, userId: { $ne: userId } }).lean();
+      if (otherOwner && (otherOwner.userId === undefined || stringId(otherOwner.userId) !== userId)) {
+        throw pageOwnershipError();
+      }
       if (existing) {
-        const updated = await this.model.findOneAndUpdate(
-          { userId, _id: existing._id, ...toHistoryMetadata(existing) },
-          { $set: values },
-          { returnDocument: "after" }
-        );
-        if (!updated) continue;
-        saved = updated;
-        break;
+        if (isTransition(existing)) throw connectionStateError();
+        try {
+          const updated = await this.model.findOneAndUpdate(
+            claimFilter(userId, existing),
+            { $set: { ...values, status: "invalid", lastErrorCode: SUBSCRIBE_PENDING } },
+            { returnDocument: "after" }
+          );
+          if (!updated) continue;
+          reserved = connectionSnapshot(updated, encryptedPageAccessToken);
+          break;
+        } catch (error) {
+          if (isPageDuplicate(error)) throw pageOwnershipError();
+          throw error;
+        }
       }
       try {
-        saved = await this.model.create({ userId, platform: "facebook", ...values });
+        reserved = await this.model.create({
+          userId, platform: "facebook", ...values, status: "invalid", lastErrorCode: SUBSCRIBE_PENDING
+        });
+        reserved = connectionSnapshot(reserved, encryptedPageAccessToken);
         break;
       } catch (error) {
-        // Index userId duy nhất phân xử hai lần kết nối đầu tiên; lỗi khác vẫn được trả về.
-        const conflict = error as { code?: number; keyPattern?: { userId?: number } } | null;
-        if (conflict?.code !== 11000 || conflict.keyPattern?.userId !== 1) throw error;
+        if (isPageDuplicate(error)) throw pageOwnershipError();
+        if (isLegacyUserIndexConflict(error)) {
+          throw new AppError(503, "FACEBOOK_PAGE_MULTI_CONNECTION_MIGRATION_REQUIRED", "Facebook Page storage requires migration");
+        }
+        throw error;
       }
     }
+    try {
+      await this.messengerClient.subscribePage({ pageId: input.pageId, pageAccessToken: input.pageAccessToken });
+    } catch (error) {
+      const safeError = safeMessengerError(error, "SUBSCRIBE");
+      if (isDefinitiveMetaRejection(safeError.code)) {
+        await this.model.findOneAndUpdate(
+          { ...claimFilter(userId, reserved), lastErrorCode: SUBSCRIBE_PENDING },
+          { $set: { lastErrorCode: safeError.code } },
+          { returnDocument: "after" }
+        ).catch(() => undefined);
+      }
+      throw safeError;
+    }
+    let saved: FacebookPageConnectionRecord | null;
+    try {
+      saved = await this.model.findOneAndUpdate(
+        { ...claimFilter(userId, reserved), lastErrorCode: SUBSCRIBE_PENDING },
+        { $set: { status: "connected", lastErrorCode: null } },
+        { returnDocument: "after" }
+      );
+    } catch {
+      await this.model.findOneAndUpdate(
+        { ...claimFilter(userId, reserved), lastErrorCode: SUBSCRIBE_PENDING },
+        { $set: { lastErrorCode: SUBSCRIBE_CONFIRM_FAILED } },
+        { returnDocument: "after" }
+      ).catch(() => undefined);
+      throw connectionPersistenceError();
+    }
+    if (!saved) throw connectionStateError();
     const result = toResponse(saved);
     recordSettingHistorySafely({
       userId,
@@ -196,13 +341,49 @@ export class FacebookPageService {
   }
 
   async get(userId: string): Promise<FacebookPageConnectionResponse | null> {
-    const connection = await this.model.findOne({ userId }).lean();
+    const connection = await this.model.findOne({ userId }).sort({ createdAt: 1, _id: 1 }).lean();
     return connection ? toResponse(connection) : null;
   }
 
-  async remove(userId: string): Promise<void> {
-    const existing = await this.model.findOneAndDelete({ userId });
+  async list(userId: string): Promise<FacebookPageConnectionResponse[]> {
+    const connections = await this.model.find({ userId }).sort({ createdAt: 1, _id: 1 }).lean();
+    return connections.map(toResponse);
+  }
+
+  async remove(userId: string, pageId?: string): Promise<void> {
+    const existing = await this.model.findOne({ userId, ...(pageId ? { pageId } : {}) })
+      .select("+encryptedPageAccessToken").lean();
     if (!existing) return;
+    if (isTransition(existing) || existing.lastErrorCode === SUBSCRIBE_PENDING) throw connectionStateError();
+    const removing = await this.model.findOneAndUpdate(
+      claimFilter(userId, existing),
+      { $set: { status: "invalid", lastErrorCode: REMOVE_PENDING } },
+      { returnDocument: "after" }
+    );
+    if (!removing) throw connectionStateError();
+    if (!existing.encryptedPageAccessToken) throw connectionPersistenceError();
+    const removingSnapshot = connectionSnapshot(removing, existing.encryptedPageAccessToken);
+    try {
+      await this.messengerClient.unsubscribePage({
+        pageId: existing.pageId,
+        pageAccessToken: this.decrypt(existing.encryptedPageAccessToken)
+      });
+    } catch (error) {
+      const safeError = safeMessengerError(error, "UNSUBSCRIBE");
+      if (isDefinitiveMetaRejection(safeError.code)) {
+        await this.model.findOneAndUpdate(
+          { ...claimFilter(userId, removingSnapshot), lastErrorCode: REMOVE_PENDING },
+          { $set: { lastErrorCode: REMOVE_RETRYABLE } },
+          { returnDocument: "after" }
+        ).catch(() => undefined);
+      }
+      throw safeError;
+    }
+    const deleted = await this.model.findOneAndDelete({
+      ...claimFilter(userId, removingSnapshot),
+      lastErrorCode: REMOVE_PENDING
+    });
+    if (!deleted) throw connectionStateError();
     recordSettingHistorySafely({
       userId,
       actionType: "DISCONNECT_FACEBOOK_PAGE",

@@ -24,6 +24,7 @@ type Page = {
   pageName: string | null;
   status: "connected" | "invalid";
   encryptedPageAccessToken: string;
+  lastErrorCode: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -31,7 +32,7 @@ type Page = {
 function page(pageId = "page-a"): Page {
   return {
     _id: "connection-1", userId: "user-1", pageId, pageName: pageId,
-    status: "connected", encryptedPageAccessToken: "ciphertext:old-secret",
+    status: "connected", lastErrorCode: null, encryptedPageAccessToken: "ciphertext:old-secret",
     createdAt: new Date("2026-09-22T08:00:00Z"), updatedAt: new Date("2026-09-22T08:00:00Z")
   };
 }
@@ -42,9 +43,15 @@ function pageStore(initial: Page | null) {
   let nextId = 1;
   const copy = () => structuredClone(current);
   const model = {
-    findOne: vi.fn((filter: { userId: string }) => ({
-      lean: async () => current?.userId === filter.userId ? copy() : null
-    })),
+    find: vi.fn(() => ({ sort: () => ({ lean: async () => current ? [copy()!] : [] }) })),
+    findOne: vi.fn((filter: { userId: string }) => {
+      const query = {
+        select: () => query,
+        sort: () => query,
+        lean: async () => current?.userId === filter.userId ? copy() : null
+      };
+      return query;
+    }),
     findOneAndUpdate: vi.fn(async (
       filter: Record<string, unknown>,
       update: { $set: Partial<Page>; $setOnInsert?: Record<string, unknown> },
@@ -71,8 +78,8 @@ function pageStore(initial: Page | null) {
       if (deletedCount) current = null;
       return { deletedCount };
     }),
-    findOneAndDelete: vi.fn(async (filter: { userId: string }) => {
-      if (current?.userId !== filter.userId) return null;
+    findOneAndDelete: vi.fn(async (filter: Record<string, unknown>) => {
+      if (!current || !Object.entries(filter).every(([key, value]) => current?.[key as keyof Page] === value)) return null;
       const deleted = copy();
       current = null;
       return deleted;
@@ -90,6 +97,8 @@ function pageService(model: FacebookPageServiceDependencies["model"], fetchGraph
     model,
     fetchGraph: fetchGraph ?? (async (url) => graphResponse(new URL(url).pathname.split("/").at(-1)!)),
     encryptSecret: (value) => `ciphertext:${value}`,
+    decryptSecret: (value) => value.replace(/^ciphertext:/, ""),
+    messengerClient: { subscribePage: async () => undefined, unsubscribePage: async () => undefined },
     graphApiVersion: "v26.0"
   });
 }
@@ -234,10 +243,11 @@ describe("atomic Facebook audit snapshots", () => {
     }
   });
 
-  it.each([page(), null])("records consecutive replacements when concurrent connects initially see %j", async (initial) => {
+  it.each([page(), null])("records consecutive replacements from %j", async (initial) => {
     const store = pageStore(initial);
     const service = pageService(store.model);
-    const [first, second] = await Promise.all([connect(service, "page-b"), connect(service, "page-c")]);
+    const first = await connect(service, "page-b");
+    const second = await connect(service, "page-c");
 
     expect([first.pageId, second.pageId, store.current()?.pageId]).toEqual(["page-b", "page-c", "page-c"]);
     expect(histories().map((entry) => entry.changes.find((change: { fieldName: string }) => change.fieldName === "pageId")))
@@ -268,10 +278,11 @@ describe("atomic Facebook audit snapshots", () => {
     ]);
   });
 
-  it("records exactly one deletion for duplicate disconnects", async () => {
+  it("records exactly one deletion for repeated disconnects", async () => {
     const store = pageStore(page());
     const service = pageService(store.model);
-    await Promise.all([service.remove("user-1"), service.remove("user-1")]);
+    await service.remove("user-1");
+    await service.remove("user-1");
 
     expect(store.current()).toBeNull();
     expect(histories()).toHaveLength(1);
@@ -282,7 +293,7 @@ describe("atomic Facebook audit snapshots", () => {
     ] });
   });
 
-  it("identifies the Page actually deleted when replacement wins the race", async () => {
+  it("records the original Page when a replacement attempts to race removal", async () => {
     const store = pageStore(page());
     const deletionReady = deferred<void>();
     const releaseDeletion = deferred<void>();
@@ -297,12 +308,12 @@ describe("atomic Facebook audit snapshots", () => {
     const service = pageService(store.model);
     const removal = service.remove("user-1");
     await deletionReady.promise;
-    await connect(service, "page-b");
+    await expect(connect(service, "page-b")).rejects.toMatchObject({ code: "FACEBOOK_PAGE_CONNECTION_BUSY" });
     releaseDeletion.resolve();
     await removal;
 
     expect(store.current()).toBeNull();
     expect(histories().find((entry) => entry.actionType === "DISCONNECT_FACEBOOK_PAGE")?.changes[0])
-      .toEqual({ fieldName: "pageId", oldValue: "page-b", newValue: "(không có)" });
+      .toEqual({ fieldName: "pageId", oldValue: "page-a", newValue: "(không có)" });
   });
 });

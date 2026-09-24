@@ -150,7 +150,7 @@ export interface ConversationContract {
 export interface QuickReplyAttachmentContract {
   secureUrl: string;
   publicId: string;
-  resourceType: "image" | "video" | "raw";
+  resourceType: "image" | "video";
   mimeType: string;
   bytes: number;
   width?: number;

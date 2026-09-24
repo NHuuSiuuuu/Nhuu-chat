@@ -5,6 +5,7 @@ const scheduledAt = z.string().trim().min(1).max(64);
 export const facebookPostCreateSchema = z.object({
   message: z.string().trim().min(1).max(63206),
   mode: z.enum(["draft", "now", "scheduled"]),
+  pageId: z.string().trim().min(1).max(255).optional(),
   scheduledAt: scheduledAt.optional()
 }).superRefine((value, context) => {
   if (value.mode === "scheduled" && !value.scheduledAt) {
@@ -24,7 +25,8 @@ export const facebookPostUpdateSchema = z.object({
 });
 
 export const facebookPostListSchema = z.object({
-  status: z.enum(["draft", "scheduled", "publishing", "published", "failed"]).optional()
+  status: z.enum(["draft", "scheduled", "publishing", "published", "failed"]).optional(),
+  pageId: z.string().trim().min(1).max(255).optional()
 });
 
 export const facebookPostRetrySchema = z.object({ mode: z.enum(["now", "scheduled"]) });

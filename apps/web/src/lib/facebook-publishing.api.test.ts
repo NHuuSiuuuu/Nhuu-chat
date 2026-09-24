@@ -159,6 +159,21 @@ describe("Facebook publishing API", () => {
     fetchMock.mockRestore();
   });
 
+  it("maps Messenger send and permission errors to safe localized messages", async () => {
+    for (const [code, message] of [
+      ["FACEBOOK_OAUTH_PAGE_NOT_MESSAGING_CAPABLE", "Page này chưa có quyền nhắn tin qua Messenger."],
+      ["FACEBOOK_MESSENGER_PERMISSION_DENIED", "Facebook chưa cấp quyền nhắn tin cho Page này."],
+      ["FACEBOOK_MESSENGER_POLICY_WINDOW_CLOSED", "Đã quá thời hạn cho phép trả lời khách hàng trên Messenger."],
+      ["FACEBOOK_MESSENGER_RATE_LIMITED", "Facebook đang giới hạn gửi tin. Hãy thử lại sau."],
+      ["FACEBOOK_MESSENGER_TIMEOUT", "Facebook chưa xác nhận tin nhắn đã gửi. Hãy kiểm tra lại trước khi thử lại."],
+      ["FACEBOOK_MESSENGER_SEND_FAILED", "Chưa gửi được tin nhắn Messenger. Hãy thử lại sau."]
+    ]) {
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ error: { code, message: "provider secret" } }), { status: 400 }));
+      await expect(connectFacebookPage({ pageId: "page-1", pageAccessToken: "secret" }, "/api")).rejects.toMatchObject({ code, message });
+      fetchMock.mockRestore();
+    }
+  });
+
   it.each([
     ["remove", () => removeFacebookPage("/api"), "FACEBOOK_PAGE_NOT_CONNECTED"],
     ["cancel", () => cancelFacebookPost("post-1", "/api"), "FACEBOOK_POST_INVALID_STATE"],

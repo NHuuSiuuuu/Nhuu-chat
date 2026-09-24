@@ -143,7 +143,7 @@ describe("MessageComposer accessibility", () => {
 
     expect(source).toContain("setContent(value)");
     expect(source).toContain("onClick={() => selectSuggestion(suggestion)}");
-    expect(source).toContain("onSend(selectedFile ?");
+    expect(source).toContain("onSend(selectedFile && !textOnly ?");
   });
 
   it("builds a backend quick-reply draft without sending it", () => {
@@ -168,6 +168,26 @@ describe("MessageComposer accessibility", () => {
         attachmentUrl: "https://res.cloudinary.com/nhuu/image/upload/bang-gia.png"
       });
     }
+  });
+
+  it("removes media from Facebook quick-reply drafts while retaining text", () => {
+    expect(composerModule.createQuickReplyDraft({
+      id: "media-reply", shortcut: "catalog", message: "Xem danh mục", attachment: {
+        secureUrl: "https://example.test/catalog.png", publicId: "catalog", resourceType: "image", mimeType: "image/png", bytes: 42, width: 2, height: 2
+      }
+    }, false)).toEqual({ content: "Xem danh mục", attachmentUrl: null });
+  });
+
+  it("recognizes Facebook as a text-only composer platform", () => {
+    expect(composerModule.isFacebookTextOnly("facebook")).toBe(true);
+    expect(composerModule.isFacebookTextOnly("telegram_personal")).toBe(false);
+    expect(composerModule.createQuickReplyDraft({ id: "other", shortcut: "file", message: "Có ảnh", attachment: {
+      secureUrl: "https://example.test/image.png", publicId: "image", resourceType: "image", mimeType: "image/png", bytes: 42, width: 2, height: 2
+    } })).toMatchObject({ attachmentUrl: "https://example.test/image.png" });
+    const source = readFileSync(new URL("./MessageComposer.tsx", import.meta.url), "utf8");
+    expect(source).toContain("!textOnly && <>");
+    expect(source).toContain("quickReplies.map((reply) => ({ ...reply, attachment: undefined }))");
+    expect(source).toContain("disabled={disabled}");
   });
 
   it("lists backend shortcuts and exposes the selected attachment URL", () => {

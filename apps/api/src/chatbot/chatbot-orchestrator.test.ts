@@ -23,7 +23,8 @@ beforeEach(resetBotDatabase);
 afterEach(() => vi.restoreAllMocks());
 
 function harness(options: { greetingDelayMs?: number; waitForGreetingDelay?: (delayMs: number) => Promise<void> } = {}) {
-  const sendText = vi.fn().mockResolvedValue({ externalMessageId: "remote-1" });
+  let nextRemoteMessageId = 0;
+  const sendText = vi.fn().mockImplementation(async () => ({ externalMessageId: `remote-${++nextRemoteMessageId}` }));
   const reply = vi
     .fn()
     .mockResolvedValue({ answer: "Có bảo hành 12 tháng.", handoff: false, sources: [] });
@@ -257,7 +258,7 @@ describe("chatbot orchestration", () => {
       expect(await ConversationModel.findById(input.conversationId)).toMatchObject({
         status: "open",
         botPausedUntil: null,
-        unreadCount: 1
+        unreadCount: 2
       });
       expect(await BotProcessingModel.findOne()).toMatchObject({ status: "sent" });
       expect(await MessageModel.countDocuments({ senderType: "bot" })).toBe(1);
@@ -268,6 +269,7 @@ describe("chatbot orchestration", () => {
     const { input } = await seedBotConversation();
     const { orchestrator, reply, sendText } = harness();
     reply.mockResolvedValue({ answer: "Em sẽ chuyển anh/chị đến nhân viên.", handoff: false, sources: [] });
+    await MessageModel.updateOne({ _id: input.customerMessageId }, { $set: { content: "Gặp nhân viên" } });
 
     expect(await orchestrator.process({ ...input, content: "Gặp nhân viên" })).toEqual({ status: "handed_off" });
     expect(reply).not.toHaveBeenCalled();

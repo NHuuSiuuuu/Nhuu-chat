@@ -112,6 +112,8 @@ export class ChatbotOrchestrator {
         // Cả truy xuất và provider dùng chung hạn chờ, không để claim treo vì dịch vụ bên ngoài.
         result = await withBotTimeout(async (signal) => {
           const content = message.content.trim().slice(0, 2_000);
+          if (customerRequestedAgent(content))
+            return { answer: assistant.fallbackMessage, handoff: false, sources: [] };
           if (!content)
             return {
               answer: "Bạn vui lòng mô tả yêu cầu bằng văn bản để mình hỗ trợ nhé.",
@@ -189,7 +191,9 @@ export class ChatbotOrchestrator {
         processingId,
         assistantId: assistant.id,
         handoff,
-        content: handoff ? assistant.fallbackMessage : result.answer
+        content: handoff || result.handoff || !result.answer.trim()
+          ? assistant.fallbackMessage
+          : result.answer
       });
     } catch {
       if (processingId) {

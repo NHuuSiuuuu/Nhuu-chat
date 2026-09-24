@@ -10,8 +10,12 @@ export function getDisplayedAiSuggestions(aiSuggestions: string[] | null | undef
   return isLoading || !aiSuggestions?.length ? [] : aiSuggestions;
 }
 
-export function createQuickReplyDraft(reply: QuickReplyContract): { content: string; attachmentUrl: string | null } {
-  return { content: reply.message, attachmentUrl: reply.attachment?.secureUrl ?? null };
+export function isFacebookTextOnly(platform?: string): boolean {
+  return platform === "facebook";
+}
+
+export function createQuickReplyDraft(reply: QuickReplyContract, allowAttachment = true): { content: string; attachmentUrl: string | null } {
+  return { content: reply.message, attachmentUrl: allowAttachment ? reply.attachment?.secureUrl ?? null : null };
 }
 
 // Giữ lựa chọn bàn phím trong vùng nhìn thấy mà không chuyển focus khỏi ô soạn tin.
@@ -84,7 +88,7 @@ export function processComposerKey(state: ComposerBehaviorState, event: { key: s
   return { state, preventDefault: false };
 }
 
-export function MessageComposer({ onSend, quickReplies, disabled = false, draft, onDraftChange, aiSuggestions, aiSuggestionsEnabled = true, isAiSuggestionsLoading = false, aiSuggestionsError, onRefreshAiSuggestions, availableTags = [], conversationTags = [], onTagsChange }: { onSend: (content: ComposerSendPayload) => Promise<boolean>; quickReplies: QuickReplyContract[]; disabled?: boolean; draft?: string; onDraftChange?: (content: string) => void; aiSuggestions?: string[] | null; aiSuggestionsEnabled?: boolean; isAiSuggestionsLoading?: boolean; aiSuggestionsError?: string | null; onRefreshAiSuggestions?: () => void; availableTags?: ConversationTagContract[]; conversationTags?: ConversationTagContract[]; onTagsChange?: (tags: ConversationTagContract[]) => Promise<void> }) {
+export function MessageComposer({ onSend, quickReplies, disabled = false, draft, onDraftChange, aiSuggestions, aiSuggestionsEnabled = true, isAiSuggestionsLoading = false, aiSuggestionsError, onRefreshAiSuggestions, availableTags = [], conversationTags = [], onTagsChange, platform }: { onSend: (content: ComposerSendPayload) => Promise<boolean>; quickReplies: QuickReplyContract[]; disabled?: boolean; draft?: string; onDraftChange?: (content: string) => void; aiSuggestions?: string[] | null; aiSuggestionsEnabled?: boolean; isAiSuggestionsLoading?: boolean; aiSuggestionsError?: string | null; onRefreshAiSuggestions?: () => void; availableTags?: ConversationTagContract[]; conversationTags?: ConversationTagContract[]; onTagsChange?: (tags: ConversationTagContract[]) => Promise<void>; platform?: string }) {
   const [content, setContent] = useState("");
   const [selectedAttachmentUrl, setSelectedAttachmentUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -96,6 +100,8 @@ export function MessageComposer({ onSend, quickReplies, disabled = false, draft,
   const composerRef = useRef<HTMLFormElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textOnly = isFacebookTextOnly(platform);
+  const availableQuickReplies = textOnly ? quickReplies.map((reply) => ({ ...reply, attachment: undefined })) : quickReplies;
 
   useEffect(() => {
     if (draft === undefined || !onDraftChange || draft === content) return;
@@ -105,6 +111,13 @@ export function MessageComposer({ onSend, quickReplies, disabled = false, draft,
     setAttachmentError(null);
     setSuggestionKind(null);
   }, [draft, content]);
+
+  useEffect(() => {
+    if (!textOnly) return;
+    setSelectedAttachmentUrl(null);
+    setSelectedFile(null);
+    setAttachmentError(null);
+  }, [textOnly]);
 
   useEffect(() => {
     if (!selectedFile?.type.startsWith("image/")) {
@@ -136,8 +149,8 @@ export function MessageComposer({ onSend, quickReplies, disabled = false, draft,
   }
 
   async function submitMessage() {
-    if (disabled || (!content.trim() && !selectedFile)) return;
-    const sent = await onSend(selectedFile ? { content: content.trim(), attachment: selectedFile } : content.trim());
+    if (disabled || (textOnly && (selectedFile || selectedAttachmentUrl)) || (!content.trim() && !selectedFile)) return;
+    const sent = await onSend(selectedFile && !textOnly ? { content: content.trim(), attachment: selectedFile } : content.trim());
     if (!sent) return;
     if (draft === undefined) setContent("");
     setSelectedAttachmentUrl(null);
@@ -166,17 +179,8 @@ export function MessageComposer({ onSend, quickReplies, disabled = false, draft,
     setSuggestionKind(null);
   }
 
-  function selectQuickReply(reply: QuickReplyContract) {
-    const draft = createQuickReplyDraft(reply);
-    setContent(draft.content);
-    onDraftChange?.(draft.content);
-    setSelectedAttachmentUrl(draft.attachmentUrl);
-    setSelectedFile(null);
-    setSuggestionKind(null);
-  }
-
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
-    const result = processComposerKey({ content, attachmentUrl: selectedAttachmentUrl, suggestionKind, suggestionIndex }, { key: event.key, shiftKey: event.shiftKey }, quickReplies, () => { void submitMessage(); });
+    const result = processComposerKey({ content, attachmentUrl: selectedAttachmentUrl, suggestionKind, suggestionIndex }, { key: event.key, shiftKey: event.shiftKey }, availableQuickReplies, () => { void submitMessage(); });
     if (result.preventDefault) event.preventDefault();
     setContent(result.state.content);
     onDraftChange?.(result.state.content);
@@ -184,6 +188,15 @@ export function MessageComposer({ onSend, quickReplies, disabled = false, draft,
     setSuggestionKind(result.state.suggestionKind);
     setSuggestionIndex(result.state.suggestionIndex);
     if (event.key === "Escape") setIsShortcutModalOpen(false);
+  }
+
+  function handleQuickReply(reply: QuickReplyContract) {
+    const draft = createQuickReplyDraft(reply, !textOnly);
+    setContent(draft.content);
+    onDraftChange?.(draft.content);
+    setSelectedAttachmentUrl(draft.attachmentUrl);
+    setSelectedFile(null);
+    setSuggestionKind(null);
   }
 
   return <>
@@ -206,7 +219,7 @@ export function MessageComposer({ onSend, quickReplies, disabled = false, draft,
         {displayedAiSuggestions.map((suggestion) => <button className="min-w-[190px] max-w-[250px] shrink-0 truncate rounded-full border border-violet-200 bg-violet-50 px-4 py-2 text-left text-xs font-semibold text-violet-700 transition hover:border-violet-300 hover:bg-violet-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-300 cursor-pointer" type="button" key={suggestion} onClick={() => selectSuggestion(suggestion)} title={suggestion}>{suggestion}</button>)}
       </div>}
       <div className="relative px-3 py-1.5">
-        {suggestionKind && <ComposerSuggestionMenu kind={suggestionKind} quickReplies={quickReplies} activeIndex={suggestionIndex} onQuickReply={selectQuickReply} onMember={selectSuggestion} />}
+        {suggestionKind && <ComposerSuggestionMenu kind={suggestionKind} quickReplies={availableQuickReplies} activeIndex={suggestionIndex} onQuickReply={handleQuickReply} onMember={selectSuggestion} />}
         <textarea className="min-h-12 w-full resize-none border-0 bg-transparent text-sm leading-5 text-gray-800 outline-none placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-1" aria-label="Tin nhắn" value={content} onChange={(event) => { const next = syncComposerContent({ content, attachmentUrl: selectedAttachmentUrl, suggestionKind, suggestionIndex }, event.target.value); setContent(next.content); onDraftChange?.(next.content); setSuggestionKind(next.suggestionKind); }} onKeyDown={handleKeyDown} placeholder="Nhập tin nhắn... (gõ / để chèn mẫu trả lời nhanh, Shift+Enter để xuống dòng)" disabled={disabled} rows={1} />
       </div>
       {selectedAttachmentUrl && <div className="mx-3 mb-1 flex min-w-0 items-center gap-2 rounded-lg text-gray-900  px-3 py-2 text-xs text-gray-900"><InboxIcon name="image" size={16} /><span className="shrink-0 font-semibold">Ảnh đính kèm:</span><a className="min-w-0 truncate underline cursor-pointer transition-opacity hover:opacity-80" href={selectedAttachmentUrl} target="_blank" rel="noreferrer">{selectedAttachmentUrl}</a><button className="ml-auto shrink-0 rounded p-1 hover:bg-sky-100 cursor-pointer" type="button" aria-label="Xoá ảnh đính kèm" onClick={() => setSelectedAttachmentUrl(null)}><InboxIcon name="close" size={14} /></button></div>}
@@ -216,10 +229,10 @@ export function MessageComposer({ onSend, quickReplies, disabled = false, draft,
         <button className="grid size-8 place-items-center rounded-full bg-gray-100 text-gray-500 transition hover:bg-gray-200 hover:text-gray-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 cursor-pointer" type="button" onClick={() => setIsShortcutModalOpen(true)} aria-label="Mở phím tắt" title="Phím tắt & hướng dẫn"><span className="text-sm font-bold">?</span></button>
         <div className="flex items-center gap-1">
           {/* <button className="grid size-8 place-items-center rounded-md text-gray-500 transition hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300" type="button" aria-label="Thêm ghi chú"><InboxIcon name="note" size={17} /></button> */}
-          <input ref={fileInputRef} className="hidden" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,*/*" aria-label="Chọn tệp đính kèm" onChange={(event) => selectFile(event.target.files?.[0])} />
+          {!textOnly && <><input ref={fileInputRef} className="hidden" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,*/*" aria-label="Chọn tệp đính kèm" onChange={(event) => selectFile(event.target.files?.[0])} />
           <input ref={imageInputRef} className="hidden" type="file" accept="image/jpeg,image/png,image/gif,image/webp" aria-label="Chọn hình ảnh đính kèm" onChange={(event) => selectFile(event.target.files?.[0])} />
           <button className="grid size-8 place-items-center rounded-md text-gray-500 transition hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 cursor-pointer disabled:cursor-not-allowed" type="button" aria-label="Đính kèm tệp" title="Video và tài liệu" onClick={() => fileInputRef.current?.click()} disabled={disabled}><InboxIcon name="paperclip" size={17} /></button>
-          <button className="grid size-8 place-items-center rounded-md text-gray-500 transition hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 cursor-pointer disabled:cursor-not-allowed" type="button" aria-label="Đính kèm hình ảnh" title="Hình ảnh" onClick={() => imageInputRef.current?.click()} disabled={disabled}><InboxIcon name="image" size={17} /></button>
+          <button className="grid size-8 place-items-center rounded-md text-gray-500 transition hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 cursor-pointer disabled:cursor-not-allowed" type="button" aria-label="Đính kèm hình ảnh" title="Hình ảnh" onClick={() => imageInputRef.current?.click()} disabled={disabled}><InboxIcon name="image" size={17} /></button></>}
           <button className="grid size-8 place-items-center rounded-md text-gray-500 transition hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 cursor-pointer" type="button" onClick={() => { setSuggestionKind("quick-reply"); setSuggestionIndex(0); }} aria-label="Mở mẫu trả lời" title="Mẫu trả lời nhanh"><InboxIcon name="template" size={17} /></button>
           <button className="grid size-8 place-items-center rounded-md bg-blue-600 text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 cursor-pointer" type="submit" aria-label="Gửi tin nhắn" title="Gửi tin nhắn" disabled={disabled}><InboxIcon name="send" size={17} /></button>
         </div>

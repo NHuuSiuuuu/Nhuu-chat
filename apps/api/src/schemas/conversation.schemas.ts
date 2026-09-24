@@ -43,4 +43,4 @@ export const conversationTagsSchema = z.object({
 
 export const aiSuggestionRequestSchema = z.object({
   trigger: z.enum(["manual", "conversation_open", "customer_message"]).default("manual")
-}).default({});
+}).default({ trigger: "manual" });

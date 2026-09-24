@@ -1,6 +1,7 @@
 import { AppError } from "../common/errors.js";
 import { describeExternalError } from "../common/external-error.js";
 import { ConversationModel } from "../models/conversation.model.js";
+import { WorkspaceMemberModel } from "../models/workspace-member.model.js";
 import { UserModel } from "../models/user.model.js";
 import { isValidObjectId } from "mongoose";
 import type { AuthUser } from "./auth.service.js";
@@ -46,8 +47,12 @@ export async function listConversations(query: {
   };
 }
 
-export async function updateAssignment(id: string, assignedAgentId: string | null) {
-  if (assignedAgentId !== null && (!isValidObjectId(assignedAgentId) || !(await UserModel.exists({ _id: assignedAgentId, role: "agent" })))) {
+export async function updateAssignment(id: string, assignedAgentId: string | null, workspaceId?: string) {
+  const isSystemAgent = assignedAgentId !== null && isValidObjectId(assignedAgentId) && await UserModel.exists({ _id: assignedAgentId, role: "agent" });
+  const isWorkspaceMember = assignedAgentId !== null && workspaceId && isValidObjectId(assignedAgentId)
+    ? await WorkspaceMemberModel.exists({ workspaceId, userId: assignedAgentId })
+    : false;
+  if (assignedAgentId !== null && !isSystemAgent && !isWorkspaceMember) {
     throw new AppError(400, "INVALID_AGENT", "assignedAgentId must identify an agent");
   }
   const update = assignedAgentId === null

@@ -43,8 +43,11 @@ describe("password reset routes", () => {
     });
 
     expect(response.status).toBe(204);
-    expect(response.headers["set-cookie"]).toHaveLength(2);
-    expect((response.headers["set-cookie"] as string[]).every((cookie) => cookie.includes("Max-Age=0"))).toBe(true);
+    const cookies = response.headers["set-cookie"];
+    expect(Array.isArray(cookies)).toBe(true);
+    if (!Array.isArray(cookies)) throw new Error("Expected both password-reset cookies to be cleared");
+    expect(cookies).toHaveLength(2);
+    expect(cookies.every((cookie) => cookie.includes("Max-Age=0"))).toBe(true);
     expect(serviceMocks.resetPassword).toHaveBeenCalledWith("raw-reset-token", "new-password-123");
   });
 

@@ -2,6 +2,7 @@ import { Router, type RequestHandler } from "express";
 import multer from "multer";
 
 import { requireRole } from "../auth/auth.middleware.js";
+import { resolveWorkspaceContext } from "../auth/workspace.middleware.js";
 import { AppError } from "../common/errors.js";
 import { inboxAccessRoles } from "../auth/inbox-access.js";
 import { sendMessage } from "../controllers/messages.controller.js";
@@ -41,4 +42,4 @@ const receiveAttachment: RequestHandler = (request, response, next) => {
   });
 };
 
-messageRouter.post("/send", requireRole(...inboxAccessRoles), receiveAttachment, sendMessage);
+messageRouter.post("/send", requireRole(...inboxAccessRoles), resolveWorkspaceContext, receiveAttachment, sendMessage);

@@ -35,6 +35,7 @@ const appEnvSchema = z.object({
   WEB_ALLOWED_ORIGINS: z.string().default("http://localhost:5173"),
   META_APP_ID: optionalCloudinaryEnv,
   META_APP_SECRET: optionalCloudinaryEnv,
+  META_WEBHOOK_VERIFY_TOKEN: optionalCloudinaryEnv,
   META_OAUTH_REDIRECT_URI: optionalCloudinaryEnv,
   WEB_APP_URL: optionalCloudinaryEnv,
   AUTH_COOKIE_SAME_SITE: z.enum(["lax", "strict", "none"]).optional(),

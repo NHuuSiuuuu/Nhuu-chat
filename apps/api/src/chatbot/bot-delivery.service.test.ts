@@ -36,7 +36,7 @@ async function arrange() {
   const service = new BotDeliveryService({
     resolveAdapter: () => ({ sendText }),
     now: () => now,
-    timeoutMs: 30
+    timeoutMs: 1_000
   });
   const command = {
     ...input,

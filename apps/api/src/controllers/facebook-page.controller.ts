@@ -12,9 +12,15 @@ export function authenticatedUserId(request: AuthenticatedRequest): string {
   return id;
 }
 
+function workspaceOwnerId(request: AuthenticatedRequest): string {
+  if (!request.workspace) throw new AppError(400, "WORKSPACE_SELECTION_REQUIRED", "Select a Workspace before continuing");
+  if (request.workspace.role !== "owner") throw new AppError(403, "WORKSPACE_OWNER_REQUIRED", "Only the Workspace owner can manage Facebook connections");
+  return request.workspace.ownerUserId;
+}
+
 export const startFacebookOAuth: RequestHandler = async (request, response, next) => {
   try {
-    response.json(await facebookOAuthService.start(authenticatedUserId(request as AuthenticatedRequest)));
+    response.json(await facebookOAuthService.start(workspaceOwnerId(request as AuthenticatedRequest)));
   } catch (error) {
     next(error);
   }
@@ -44,7 +50,7 @@ export const listFacebookOAuthPages: RequestHandler = async (request, response, 
   try {
     const selection = typeof request.query.selection === "string" ? request.query.selection : "";
     if (!selection) throw new AppError(400, "FACEBOOK_OAUTH_SELECTION_INVALID", "Facebook Page selection is invalid or expired");
-    response.json(await facebookOAuthService.getSelection(authenticatedUserId(request as AuthenticatedRequest), selection));
+    response.json(await facebookOAuthService.getSelection(workspaceOwnerId(request as AuthenticatedRequest), selection));
   } catch (error) {
     next(error);
   }
@@ -56,7 +62,7 @@ export const selectFacebookOAuthPage: RequestHandler = async (request, response,
     const pageId = typeof request.body?.pageId === "string" ? request.body.pageId : "";
     if (!selection || !pageId) throw new AppError(400, "INVALID_REQUEST", "Facebook Page selection is invalid");
     response.status(201).json(await facebookOAuthService.select(
-      authenticatedUserId(request as AuthenticatedRequest),
+      workspaceOwnerId(request as AuthenticatedRequest),
       selection,
       pageId,
       (userId, input) => facebookPageService.connect(userId, input)
@@ -68,7 +74,16 @@ export const selectFacebookOAuthPage: RequestHandler = async (request, response,
 
 export const getFacebookPage: RequestHandler = async (request, response, next) => {
   try {
-    const connection = await facebookPageService.get(authenticatedUserId(request as AuthenticatedRequest));
+    const authRequest = request as AuthenticatedRequest;
+    const allConnections = await facebookPageService.list(authRequest.workspace?.ownerUserId ?? authenticatedUserId(authRequest));
+    const connections = authRequest.workspace?.allowedPages.length
+      ? allConnections.filter((item) => authRequest.workspace?.allowedPages.includes(item.pageId))
+      : allConnections;
+    if (request.path === "/connections") {
+      response.json({ connections });
+      return;
+    }
+    const connection = connections[0] ?? null;
     if (!connection) {
       response.status(404).json({ error: { code: "FACEBOOK_PAGE_NOT_CONNECTED", message: "Facebook Page is not connected" } });
       return;
@@ -83,7 +98,7 @@ export const connectFacebookPage: RequestHandler = async (request, response, nex
   try {
     const input = facebookPageConnectionSchema.safeParse(request.body);
     if (!input.success) throw new AppError(400, "INVALID_REQUEST", "Facebook Page connection data is invalid");
-    response.status(201).json(await facebookPageService.connect(authenticatedUserId(request as AuthenticatedRequest), input.data));
+    response.status(201).json(await facebookPageService.connect(workspaceOwnerId(request as AuthenticatedRequest), input.data));
   } catch (error) {
     next(error);
   }
@@ -91,7 +106,8 @@ export const connectFacebookPage: RequestHandler = async (request, response, nex
 
 export const removeFacebookPage: RequestHandler = async (request, response, next) => {
   try {
-    await facebookPageService.remove(authenticatedUserId(request as AuthenticatedRequest));
+    const authRequest = request as AuthenticatedRequest;
+    await facebookPageService.remove(workspaceOwnerId(authRequest), typeof request.params?.pageId === "string" ? request.params.pageId : undefined);
     response.status(204).send();
   } catch (error) {
     next(error);

@@ -16,14 +16,24 @@ describe("Facebook page connection model", () => {
     });
   });
 
-  it("hides the encrypted access token and limits each user to one connection", () => {
+  it("hides the encrypted access token without limiting connections per user", () => {
     expect(FacebookPageConnectionModel.schema.path("encryptedPageAccessToken").options.select).toBe(false);
 
     const uniqueUserIndex = FacebookPageConnectionModel.schema.indexes().find(([fields, options]) =>
       fields.userId === 1 && options?.unique === true
     );
 
-    expect(uniqueUserIndex).toBeDefined();
+    expect(uniqueUserIndex).toBeUndefined();
+    expect(FacebookPageConnectionModel.schema.indexes()).toContainEqual([
+      { userId: 1 }, expect.not.objectContaining({ unique: true })
+    ]);
+  });
+
+  it("declares a unique Page ID so concurrent owners cannot claim the same Page", () => {
+    expect(FacebookPageConnectionModel.schema.indexes()).toContainEqual([
+      { pageId: 1 },
+      expect.objectContaining({ unique: true })
+    ]);
   });
 
   it("uses the Facebook platform and connected status by default", () => {

@@ -20,7 +20,7 @@ export async function startTestDatabase(): Promise<void> {
 
   try {
     replicaSet = await MongoMemoryReplSet.create({
-      binary: { version: "4.4.29" },
+      binary: { version: "7.0.14" },
       replSet: { count: 1, storageEngine: "wiredTiger" }
     });
     await mongoose.connect(replicaSet.getUri("nhuu-chat-test"));
@@ -28,7 +28,7 @@ export async function startTestDatabase(): Promise<void> {
     await replicaSet?.stop().catch(() => undefined);
     replicaSet = undefined;
     throw new Error(
-      `No usable Mongo test database. Set MONGODB_TEST_URI to a Docker replica set or provide a compatible MongoMemoryReplSet runtime (MongoDB 4.4.29 requires OpenSSL 1.1). Original error: ${
+      `No usable Mongo test database. Set MONGODB_TEST_URI to a Docker replica set or provide a compatible MongoMemoryReplSet runtime. Original error: ${
         error instanceof Error ? error.message : "unknown error"
       }`
     );

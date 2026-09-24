@@ -1,0 +1,366 @@
+import { beforeAll, describe, expect, it, vi } from "vitest";
+
+vi.mock("./setting-history.service.js", () => ({ recordSettingHistory: vi.fn().mockResolvedValue(undefined) }));
+
+import { AppError } from "../common/errors.js";
+
+let FacebookPageService: typeof import("./facebook-page.service.js").FacebookPageService;
+
+beforeAll(async () => {
+  vi.stubEnv("NODE_ENV", "test");
+  vi.stubEnv("MONGODB_URI", "mongodb://localhost:27017/nhuu-chat");
+  vi.stubEnv("REDIS_URL", "redis://localhost:6379");
+  vi.stubEnv("JWT_SECRET", "a-jwt-secret-that-is-at-least-32-characters");
+  vi.stubEnv("ENCRYPTION_KEY", "an-encryption-key-that-is-32-characters");
+  vi.stubEnv("TELEGRAM_BOT_TOKEN", "123456789:test-token");
+  vi.stubEnv("TELEGRAM_WEBHOOK_SECRET", "a-telegram-webhook-secret");
+  ({ FacebookPageService } = await import("./facebook-page.service.js"));
+});
+
+type PageRow = {
+  _id: string;
+  userId: string;
+  pageId: string;
+  encryptedPageAccessToken: string;
+  pageName: string;
+  status: "connected" | "invalid";
+  lastErrorCode: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  lastValidatedAt: Date | null;
+};
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+function pageRow(userId: string, pageId: string): PageRow {
+  return {
+    _id: `connection-${userId}-${pageId}`,
+    userId,
+    pageId,
+    pageName: pageId,
+    encryptedPageAccessToken: `ciphertext:old-${userId}`,
+    status: "connected",
+    lastErrorCode: null,
+    createdAt: new Date("2026-09-23T00:00:00Z"),
+    updatedAt: new Date("2026-09-23T00:00:00Z"),
+    lastValidatedAt: new Date("2026-09-23T00:00:00Z")
+  };
+}
+
+function hydratedPage(row: PageRow): PageRow {
+  const document = { _doc: structuredClone(row) } as { _doc: PageRow } & Partial<PageRow>;
+  for (const key of Object.keys(row) as Array<keyof PageRow>) {
+    Object.defineProperty(document, key, { get: () => document._doc[key], enumerable: false });
+  }
+  return document as PageRow;
+}
+
+// Mô phỏng unique pageId và CAS theo từng kết nối của Mongo.
+function pageStore(initial: PageRow[] = []) {
+  const rowKey = (row: PageRow) => `${row.userId}:${row.pageId}`;
+  const rows = new Map(initial.map((row) => [rowKey(row), structuredClone(row)]));
+  let sequence = 0;
+  let failConnectedUpdate = false;
+  let hideTokenOnUpdate = false;
+  let hydrateResults = false;
+  let dropClaimOnPageSwap = false;
+  const copy = (row: PageRow | undefined) => row ? structuredClone(row) : null;
+  const matches = (row: PageRow, filter: Record<string, unknown>) => Object.entries(filter).every(([key, value]) => {
+    if (key === "userId" && value && typeof value === "object" && "$ne" in value) {
+      return row.userId !== (value as { $ne: string }).$ne;
+    }
+    return row[key as keyof PageRow] === value;
+  });
+  const find = (filter: Record<string, unknown>) => [...rows.values()].find((row) => matches(row, filter));
+  const model = {
+    findOne: vi.fn((filter: Record<string, unknown>) => {
+      const query = { select: () => query, sort: () => query, lean: async () => copy(find(filter)) };
+      return query;
+    }),
+    create: vi.fn(async (input: Record<string, unknown>) => {
+      const candidate = input as Omit<PageRow, "_id" | "createdAt" | "updatedAt">;
+      if ([...rows.values()].some((row) => row.pageId === candidate.pageId)) {
+        throw { code: 11000, keyPattern: { pageId: 1 } };
+      }
+      const row: PageRow = {
+        ...candidate,
+        _id: `connection-${++sequence}`,
+        createdAt: new Date("2026-09-23T00:00:00Z"),
+        updatedAt: new Date("2026-09-23T00:00:00Z")
+      };
+      rows.set(rowKey(row), row);
+      return hydrateResults ? hydratedPage(row) : copy(row);
+    }),
+    findOneAndUpdate: vi.fn(async (filter: Record<string, unknown>, update: { $set: Partial<PageRow> }) => {
+      const row = find(filter);
+      if (!row) return null;
+      if (failConnectedUpdate && update.$set.status === "connected") {
+        failConnectedUpdate = false;
+        throw new Error("database unavailable after Meta subscription");
+      }
+      const next = { ...row, ...update.$set };
+      if (dropClaimOnPageSwap && next.pageId !== row.pageId) {
+        rows.delete(rowKey(row));
+        throw new Error("database claim disappeared during Page swap");
+      }
+      if ([...rows.values()].some((other) => other.userId !== row.userId && other.pageId === next.pageId)) {
+        throw { code: 11000, keyPattern: { pageId: 1 } };
+      }
+      rows.set(rowKey(next), next);
+      const result = copy(next);
+      if (hideTokenOnUpdate && result) delete (result as Partial<PageRow>).encryptedPageAccessToken;
+      return result && hydrateResults ? hydratedPage(result) : result;
+    }),
+    findOneAndDelete: vi.fn(async (filter: Record<string, unknown>) => {
+      const row = find(filter);
+      if (!row) return null;
+      rows.delete(rowKey(row));
+      return copy(row);
+    })
+  };
+  return {
+    model,
+    current: (userId: string, pageId?: string) => copy(pageId
+      ? rows.get(`${userId}:${pageId}`)
+      : [...rows.values()].find((row) => row.userId === userId)),
+    failNextConnectedUpdate: () => { failConnectedUpdate = true; },
+    hideTokenOnUpdate: () => { hideTokenOnUpdate = true; },
+    hydrateResults: () => { hydrateResults = true; },
+    dropClaimOnPageSwap: () => { dropClaimOnPageSwap = true; },
+    insertExternal: (row: PageRow) => { rows.set(rowKey(row), structuredClone(row)); }
+  };
+}
+
+function service(store: ReturnType<typeof pageStore>, messengerClient: {
+  subscribePage: (input: { pageId: string; pageAccessToken: string }) => Promise<void>;
+  unsubscribePage: (input: { pageId: string; pageAccessToken: string }) => Promise<void>;
+}) {
+  let encryptionSequence = 0;
+  return new FacebookPageService({
+    model: store.model as never,
+    fetchGraph: async (input) => {
+      const pageId = new URL(input).pathname.split("/").at(-1);
+      return new Response(JSON.stringify({ id: pageId, name: pageId }), { status: 200 });
+    },
+    messengerClient,
+    encryptSecret: (value) => `ciphertext:${++encryptionSequence}:${value}`,
+    decryptSecret: (value) => value.replace(/^ciphertext:(?:\d+:)?/, ""),
+    graphApiVersion: "v26.0"
+  });
+}
+
+describe("Facebook Page subscription ownership lifecycle", () => {
+  it("uses exact CAS predicates when create and update return hydrated documents", async () => {
+    const store = pageStore();
+    store.hydrateResults();
+    const messengerClient = { subscribePage: vi.fn().mockResolvedValue(undefined), unsubscribePage: vi.fn().mockResolvedValue(undefined) };
+    const connection = service(store, messengerClient);
+
+    await expect(connection.connect("owner-1", { pageId: "page-a", pageAccessToken: "owner-token" }))
+      .resolves.toMatchObject({ pageId: "page-a", status: "connected" });
+    const finalization = store.model.findOneAndUpdate.mock.calls.find(([, update]) => update.$set.status === "connected");
+    expect(finalization?.[0]).toMatchObject({
+      _id: "connection-1", userId: "owner-1", pageId: "page-a", status: "invalid",
+      lastErrorCode: "FACEBOOK_MESSENGER_SUBSCRIBE_PENDING", encryptedPageAccessToken: "ciphertext:1:owner-token"
+    });
+
+    await expect(connection.remove("owner-1")).resolves.toBeUndefined();
+    expect(store.model.findOneAndDelete.mock.calls[0]?.[0]).toMatchObject({
+      _id: "connection-1", userId: "owner-1", pageId: "page-a", status: "invalid",
+      lastErrorCode: "FACEBOOK_MESSENGER_REMOVE_PENDING", encryptedPageAccessToken: "ciphertext:1:owner-token"
+    });
+  });
+
+  it("adds another Page without replacing an existing connection", async () => {
+    const store = pageStore([pageRow("owner-1", "page-a")]);
+    store.hydrateResults();
+    const messengerClient = { subscribePage: vi.fn().mockResolvedValue(undefined), unsubscribePage: vi.fn().mockResolvedValue(undefined) };
+    const connection = service(store, messengerClient);
+
+    await expect(connection.connect("owner-1", { pageId: "page-b", pageAccessToken: "new-token" }))
+      .resolves.toMatchObject({ pageId: "page-b", status: "connected" });
+    expect(store.current("owner-1", "page-a")).toMatchObject({ status: "connected" });
+    expect(store.current("owner-1", "page-b")).toMatchObject({ status: "connected" });
+    expect(messengerClient.unsubscribePage).not.toHaveBeenCalled();
+  });
+
+  it("rejects an incomplete reservation before a Meta call or CAS query", async () => {
+    const store = pageStore();
+    store.model.create.mockResolvedValueOnce({
+      pageId: "page-a", status: "invalid", encryptedPageAccessToken: "ciphertext:1:owner-token",
+      lastErrorCode: "FACEBOOK_MESSENGER_SUBSCRIBE_PENDING"
+    } as never);
+    const messengerClient = { subscribePage: vi.fn().mockResolvedValue(undefined), unsubscribePage: vi.fn().mockResolvedValue(undefined) };
+    const connection = service(store, messengerClient);
+
+    await expect(connection.connect("owner-1", { pageId: "page-a", pageAccessToken: "owner-token" }))
+      .rejects.toMatchObject({ code: "FACEBOOK_PAGE_CONNECTION_FAILED" });
+    expect(messengerClient.subscribePage).not.toHaveBeenCalled();
+    expect(store.model.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it("finalizes connect and removal when update results hide the encrypted token", async () => {
+    const store = pageStore();
+    store.hideTokenOnUpdate();
+    const messengerClient = { subscribePage: vi.fn().mockResolvedValue(undefined), unsubscribePage: vi.fn().mockResolvedValue(undefined) };
+    const connection = service(store, messengerClient);
+
+    await expect(connection.connect("owner-1", { pageId: "page-a", pageAccessToken: "owner-token" }))
+      .resolves.toMatchObject({ pageId: "page-a", status: "connected" });
+    await expect(connection.remove("owner-1")).resolves.toBeUndefined();
+    expect(store.current("owner-1")).toBeNull();
+  });
+
+  it("adds a Page when update results hide the encrypted token", async () => {
+    const store = pageStore([pageRow("owner-1", "page-a")]);
+    store.hideTokenOnUpdate();
+    const messengerClient = { subscribePage: vi.fn().mockResolvedValue(undefined), unsubscribePage: vi.fn().mockResolvedValue(undefined) };
+    const connection = service(store, messengerClient);
+
+    await expect(connection.connect("owner-1", { pageId: "page-b", pageAccessToken: "new-token" }))
+      .resolves.toMatchObject({ pageId: "page-b", status: "connected" });
+    expect(store.current("owner-1", "page-b")?.encryptedPageAccessToken).toContain("new-token");
+  });
+
+  it("keeps a Page reserved and resumable when persistence fails after Meta subscribes", async () => {
+    const store = pageStore();
+    store.failNextConnectedUpdate();
+    const messengerClient = { subscribePage: vi.fn().mockResolvedValue(undefined), unsubscribePage: vi.fn().mockResolvedValue(undefined) };
+    const connection = service(store, messengerClient);
+
+    await expect(connection.connect("owner-1", { pageId: "page-a", pageAccessToken: "owner-token" })).rejects.toBeDefined();
+
+    expect(store.current("owner-1")).toMatchObject({ pageId: "page-a", status: "invalid" });
+    await expect(connection.connect("owner-2", { pageId: "page-a", pageAccessToken: "other-token" }))
+      .rejects.toMatchObject({ code: "FACEBOOK_PAGE_ALREADY_CONNECTED" });
+    expect(messengerClient.unsubscribePage).not.toHaveBeenCalled();
+    await expect(connection.connect("owner-1", { pageId: "page-a", pageAccessToken: "owner-token" }))
+      .resolves.toMatchObject({ pageId: "page-a", status: "connected" });
+  });
+
+  it("keeps an ambiguous timed-out subscription reserved from removal", async () => {
+    const store = pageStore();
+    const messengerClient = {
+      subscribePage: vi.fn().mockRejectedValue(new AppError(504, "FACEBOOK_MESSENGER_TIMEOUT", "private-token Meta timeout")),
+      unsubscribePage: vi.fn().mockResolvedValue(undefined)
+    };
+    const connection = service(store, messengerClient);
+
+    await expect(connection.connect("owner-1", { pageId: "page-a", pageAccessToken: "private-token" }))
+      .rejects.toMatchObject({ code: "FACEBOOK_MESSENGER_TIMEOUT" });
+    expect(store.current("owner-1")).toMatchObject({
+      pageId: "page-a", status: "invalid", lastErrorCode: "FACEBOOK_MESSENGER_SUBSCRIBE_PENDING"
+    });
+    await expect(connection.remove("owner-1")).rejects.toMatchObject({ code: "FACEBOOK_PAGE_CONNECTION_BUSY" });
+    expect(messengerClient.unsubscribePage).not.toHaveBeenCalled();
+  });
+
+  it("holds a new Page claim while its Meta subscribe call is delayed", async () => {
+    const store = pageStore();
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const messengerClient = {
+      subscribePage: vi.fn(async () => { entered.resolve(); await release.promise; }),
+      unsubscribePage: vi.fn().mockResolvedValue(undefined)
+    };
+    const connection = service(store, messengerClient);
+
+    const pending = connection.connect("owner-1", { pageId: "page-a", pageAccessToken: "owner-token" });
+    await entered.promise;
+    expect(store.current("owner-1")).toMatchObject({ pageId: "page-a", status: "invalid" });
+    await expect(connection.connect("owner-2", { pageId: "page-a", pageAccessToken: "other-token" }))
+      .rejects.toMatchObject({ code: "FACEBOOK_PAGE_ALREADY_CONNECTED" });
+    release.resolve();
+    await expect(pending).resolves.toMatchObject({ pageId: "page-a", status: "connected" });
+  });
+
+  it("retries removal after a definitive token rejection while retaining the Page claim", async () => {
+    const store = pageStore([pageRow("owner-1", "page-a")]);
+    const messengerClient = {
+      subscribePage: vi.fn().mockResolvedValue(undefined),
+      unsubscribePage: vi.fn().mockRejectedValueOnce(new AppError(401, "FACEBOOK_MESSENGER_TOKEN_INVALID", "private-token Meta body"))
+        .mockResolvedValueOnce(undefined)
+    };
+    const connection = service(store, messengerClient);
+
+    await expect(connection.remove("owner-1")).rejects.toMatchObject({ code: "FACEBOOK_MESSENGER_TOKEN_INVALID" });
+    expect(store.current("owner-1")).toMatchObject({
+      pageId: "page-a", status: "invalid", lastErrorCode: "FACEBOOK_MESSENGER_REMOVE_RETRYABLE"
+    });
+    await expect(connection.connect("owner-2", { pageId: "page-a", pageAccessToken: "other-token" }))
+      .rejects.toMatchObject({ code: "FACEBOOK_PAGE_ALREADY_CONNECTED" });
+    await expect(connection.remove("owner-1")).resolves.toBeUndefined();
+    expect(store.current("owner-1")).toBeNull();
+  });
+
+  it("accepts a refreshed token for the reserved Page after a definitive removal failure", async () => {
+    const store = pageStore([pageRow("owner-1", "page-a")]);
+    const messengerClient = {
+      subscribePage: vi.fn().mockResolvedValue(undefined),
+      unsubscribePage: vi.fn().mockRejectedValueOnce(new AppError(401, "FACEBOOK_MESSENGER_TOKEN_INVALID", "private-token Meta body"))
+        .mockResolvedValueOnce(undefined)
+    };
+    const connection = service(store, messengerClient);
+
+    await expect(connection.remove("owner-1")).rejects.toMatchObject({ code: "FACEBOOK_MESSENGER_TOKEN_INVALID" });
+    await expect(connection.connect("owner-1", { pageId: "page-a", pageAccessToken: "fresh-token" }))
+      .resolves.toMatchObject({ pageId: "page-a", status: "connected" });
+    await expect(connection.remove("owner-1")).resolves.toBeUndefined();
+    expect(messengerClient.unsubscribePage).toHaveBeenLastCalledWith({ pageId: "page-a", pageAccessToken: "fresh-token" });
+  });
+
+  it("blocks retry after an ambiguous unsubscribe timeout", async () => {
+    const store = pageStore([pageRow("owner-1", "page-a")]);
+    const messengerClient = {
+      subscribePage: vi.fn().mockResolvedValue(undefined),
+      unsubscribePage: vi.fn().mockRejectedValue(new AppError(504, "FACEBOOK_MESSENGER_TIMEOUT", "private-token Meta timeout"))
+    };
+    const connection = service(store, messengerClient);
+
+    await expect(connection.remove("owner-1")).rejects.toMatchObject({ code: "FACEBOOK_MESSENGER_TIMEOUT" });
+    expect(store.current("owner-1")).toMatchObject({
+      pageId: "page-a", status: "invalid", lastErrorCode: "FACEBOOK_MESSENGER_REMOVE_PENDING"
+    });
+    await expect(connection.remove("owner-1")).rejects.toMatchObject({ code: "FACEBOOK_PAGE_CONNECTION_BUSY" });
+    expect(messengerClient.unsubscribePage).toHaveBeenCalledOnce();
+  });
+
+  it("does not delete a reconnect attempted while removal waits for Meta", async () => {
+    const store = pageStore([pageRow("owner-1", "page-a")]);
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const messengerClient = {
+      subscribePage: vi.fn().mockResolvedValue(undefined),
+      unsubscribePage: vi.fn(async () => { entered.resolve(); await release.promise; })
+    };
+    const connection = service(store, messengerClient);
+
+    const removal = connection.remove("owner-1");
+    await entered.promise;
+    expect(store.current("owner-1")).toMatchObject({ pageId: "page-a", status: "invalid" });
+    await expect(connection.connect("owner-1", { pageId: "page-a", pageAccessToken: "new-token" }))
+      .rejects.toMatchObject({ statusCode: 409 });
+    release.resolve();
+    await removal;
+    expect(store.current("owner-1")).toBeNull();
+    await expect(connection.connect("owner-1", { pageId: "page-a", pageAccessToken: "new-token" }))
+      .resolves.toMatchObject({ pageId: "page-a", status: "connected" });
+    expect(store.current("owner-1")?.encryptedPageAccessToken).toContain("new-token");
+  });
+
+  it("does not delete a changed connection when removal's final CAS loses", async () => {
+    const store = pageStore([pageRow("owner-1", "page-a")]);
+    const messengerClient = {
+      subscribePage: vi.fn().mockResolvedValue(undefined),
+      unsubscribePage: vi.fn(async () => { store.insertExternal(pageRow("owner-1", "page-b")); })
+    };
+    const connection = service(store, messengerClient);
+
+    await expect(connection.remove("owner-1", "page-a")).resolves.toBeUndefined();
+    expect(store.current("owner-1")).toMatchObject({ pageId: "page-b", status: "connected" });
+  });
+});

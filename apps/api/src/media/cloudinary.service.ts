@@ -7,7 +7,9 @@ import { AppError } from "../common/errors.js";
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
-export type MediaUploadResult = QuickReplyAttachmentContract;
+export type MediaUploadResult = Omit<QuickReplyAttachmentContract, "resourceType"> & {
+  resourceType: "image" | "raw";
+};
 
 type CloudinaryConfiguration = Pick<
   AppEnv,
@@ -70,13 +72,20 @@ function toMediaUploadResult(response: CloudinaryUploadResponse, mimeType: strin
   };
 }
 
+// Không cho upload ảnh trả về metadata raw để hợp đồng mẫu trả lời luôn đúng loại media.
+function toImageUploadResult(response: CloudinaryUploadResponse, mimeType: string): QuickReplyAttachmentContract {
+  const result = toMediaUploadResult(response, mimeType);
+  if (result.resourceType !== "image") throw new Error("Cloudinary image upload returned a non-image asset");
+  return { ...result, resourceType: "image" };
+}
+
 function createDefaultUploader(): CloudinaryUploader {
   return {
     upload_stream(options, callback) {
       return cloudinary.uploader.upload_stream(options, callback);
     },
     destroy(publicId, options) {
-      return cloudinary.uploader.destroy(publicId, options as { resource_type: "image" | "video" });
+      return cloudinary.uploader.destroy(publicId, options);
     }
   };
 }
@@ -110,7 +119,7 @@ export class CloudinaryMediaService {
     mimeType: string;
     userId: string;
     folder: string;
-  }): Promise<MediaUploadResult> {
+  }): Promise<QuickReplyAttachmentContract> {
     if (!input.mimeType.startsWith("image/")) {
       throw new Error("Unsupported image MIME type");
     }
@@ -121,7 +130,7 @@ export class CloudinaryMediaService {
 
     this.configureCloudinary();
 
-    return new Promise<MediaUploadResult>((resolve, reject) => {
+    return new Promise<QuickReplyAttachmentContract>((resolve, reject) => {
       const stream = this.uploader.upload_stream({
         folder: `${input.folder}/${input.userId}`,
         resource_type: "image",
@@ -140,7 +149,7 @@ export class CloudinaryMediaService {
         }
 
         try {
-          resolve(toMediaUploadResult(response, input.mimeType));
+          resolve(toImageUploadResult(response, input.mimeType));
         } catch (resultError) {
           reject(resultError);
         }

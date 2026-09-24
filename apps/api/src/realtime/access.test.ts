@@ -53,4 +53,21 @@ describe("conversation realtime access", () => {
       assignedAgentId: null
     })).toBe(true);
   });
+
+  it("limits Workspace staff to their owner's allowed Facebook Pages", () => {
+    const staff = { id: "staff-1", role: "customer", workspace: { ownerUserId: "owner-1", allowedPages: ["page-a"] } };
+    expect(canJoinConversation(staff, { platform: "facebook", ownerId: "owner-1", channelId: "page-a" })).toBe(true);
+    expect(canJoinConversation(staff, { platform: "facebook", ownerId: "owner-1", channelId: "page-b" })).toBe(false);
+    expect(canJoinConversation(staff, { platform: "facebook", ownerId: "owner-2", channelId: "page-a" })).toBe(false);
+    expect(conversationAccessFilter(staff)).toEqual({ $or: [
+      { platform: "facebook", ownerId: "owner-1", channelId: { $in: ["page-a"] } },
+      { platform: { $ne: "facebook" }, ownerId: "staff-1" }
+    ] });
+  });
+
+  it("treats an empty Page list as all Workspace Facebook Pages without widening another Workspace", () => {
+    const owner = { id: "owner-1", role: "customer", workspace: { ownerUserId: "owner-1", allowedPages: [] } };
+    expect(canJoinConversation(owner, { platform: "facebook", ownerId: "owner-1", channelId: "page-b" })).toBe(true);
+    expect(canJoinConversation(owner, { platform: "facebook", ownerId: "owner-2", channelId: "page-b" })).toBe(false);
+  });
 });

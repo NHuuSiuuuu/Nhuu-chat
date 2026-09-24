@@ -10,6 +10,8 @@ import { verifyAccessToken } from "../services/auth.service.js";
 import { UserModel } from "../models/user.model.js";
 import { AuthSessionModel } from "../models/auth-session.model.js";
 import { PasswordResetTokenModel } from "../models/password-reset-token.model.js";
+import { WorkspaceMemberModel } from "../models/workspace-member.model.js";
+import { WorkspaceModel } from "../models/workspace.model.js";
 import { startTestDatabase, stopTestDatabase } from "../test/mongo-repl-set.js";
 
 process.env.JWT_SECRET ??= "test-jwt-secret-that-is-at-least-32-characters";
@@ -27,12 +29,16 @@ describe("authentication and roles", () => {
     await UserModel.syncIndexes();
     await AuthSessionModel.syncIndexes();
     await PasswordResetTokenModel.syncIndexes();
+    await WorkspaceModel.syncIndexes();
+    await WorkspaceMemberModel.syncIndexes();
   }, 120_000);
 
   beforeEach(async () => {
     await UserModel.deleteMany({});
     await AuthSessionModel.deleteMany({});
     await PasswordResetTokenModel.deleteMany({});
+    await WorkspaceModel.deleteMany({});
+    await WorkspaceMemberModel.deleteMany({});
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -67,6 +73,10 @@ describe("authentication and roles", () => {
     expect(document?.role).toBe("customer");
     expect(document?.passwordHash).not.toBe("correct horse battery staple");
     expect(await AuthSessionModel.countDocuments({ userId: document?._id })).toBe(1);
+    const workspace = await WorkspaceModel.findOne({ ownerUserId: document?._id }).lean();
+    expect(workspace?.name).toBe("New Customer");
+    await expect(WorkspaceMemberModel.findOne({ workspaceId: workspace?._id, userId: document?._id }).lean())
+      .resolves.toMatchObject({ role: "owner", allowedPages: [] });
   });
 
   it("rejects invalid registration fields", async () => {

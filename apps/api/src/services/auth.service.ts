@@ -7,6 +7,7 @@ import mongoose from "mongoose";
 import { AppError } from "../common/errors.js";
 import { AuthSessionModel } from "../models/auth-session.model.js";
 import { UserModel, type Role } from "../models/user.model.js";
+import { workspaceService } from "./workspace.service.js";
 
 const ACCESS_TOKEN_TTL = "15m";
 const REFRESH_TOKEN_TTL = "7d";
@@ -191,6 +192,7 @@ export async function register(
     passwordHash: await hashPassword(password),
     role: "customer"
   });
+  await workspaceService.ensurePersonalWorkspace(document.id, name.trim());
 
   const user: AuthUser = {
     id: document.id,

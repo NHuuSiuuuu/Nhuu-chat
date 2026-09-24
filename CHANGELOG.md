@@ -5,6 +5,14 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Thêm Workspace owner/admin/staff, quản lý thành viên và giới hạn quyền Inbox Facebook theo Page; hỗ trợ kết nối nhiều Facebook Page, chọn Page để đăng bài và migration riêng cho dữ liệu Workspace cùng index Page.
+- Bổ sung bộ chọn Workspace toàn ứng dụng và giao diện Cài đặt → Thành viên; giữ quyền hệ thống `User.role` và hành vi các kênh không phải Facebook hiện có.
+- Bổ sung hướng dẫn triển khai Inbox Messenger: callback HTTPS, verify token và app secret, quyền OAuth, migration MongoDB và quản lý secret backend.
+- Hỗ trợ thay thế đồng thời bubble optimistic và echo Messenger bằng cùng bản tin đã lưu; sắp xếp tin realtime theo thời điểm tạo và migration xử lý legacy unique index `(platform, channelId)`.
+- Làm rõ kiểm tra quyền Messenger tại thao tác đăng ký webhook/gửi tin, tránh dùng Conversations API làm điều kiện kết nối Page.
+- Giữ khóa sở hữu Page trong Mongo qua các lần đăng ký/gỡ webhook Messenger; thao tác đồng thời dùng compare-and-swap và lỗi xác định có thể thử lại an toàn.
+- Tách hội thoại Facebook theo từng PSID dưới cùng Page và lưu thời điểm sự kiện từ Meta làm thời gian tin nhắn.
+- Ổn định kiểm thử bot delivery bằng cách nới timeout fixture thông thường để không bị hết giờ trong thao tác MongoDB chậm.
 - Hỗ trợ đăng nhập nhiều thiết bị với refresh/logout theo từng phiên và thu hồi kết nối Socket.IO tương ứng; đặt lại mật khẩu thu hồi mọi phiên.
 - Tránh treo màn hình khởi tạo vô hạn khi API xác thực không phản hồi; thêm timeout và thao tác thử lại.
 - Đặc tả phiên đăng nhập độc lập theo thiết bị, refresh/logout theo từng phiên và thu hồi socket tương ứng.

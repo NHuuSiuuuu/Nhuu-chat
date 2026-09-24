@@ -432,7 +432,7 @@ describe("Settings page", () => {
     const settingsSource = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
     const topbarSource = readFileSync(new URL("../components/dashboard/DashboardTopbar.tsx", import.meta.url), "utf8");
 
-    expect(settingsModule.mobileSettingsItems).toEqual(["Giới thiệu", "Cài đặt chung", "Trợ lý AI", "Giao diện"]);
+    expect(settingsModule.mobileSettingsItems).toEqual(["Giới thiệu", "Cài đặt chung", "Thành viên", "Trợ lý AI", "Giao diện"]);
     expect(settingsSource).toContain("settingsSubmenuItems={mobileSettingsItems}");
     expect(settingsSource).toContain("onSettingsSubmenuNavigate={handleTabChange}");
     expect(topbarSource).toContain('aria-controls="mobile-settings-submenu"');
@@ -467,7 +467,7 @@ describe("Settings page", () => {
     const source = readFileSync(new URL("./SettingsPage.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("function SettingsLayout");
-    expect(source.match(/<SettingsLayout/g)?.length).toBe(6);
+    expect(source.match(/<SettingsLayout/g)?.length).toBe(7);
     expect(source).not.toContain('if (activeTab === "Trợ lý AI") return <main');
     expect(source).not.toContain('if (activeTab === "Hỗ trợ trả lời") return <main');
   });

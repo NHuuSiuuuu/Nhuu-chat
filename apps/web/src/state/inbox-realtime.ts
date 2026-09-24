@@ -5,9 +5,8 @@ function sameMessage(left: ChatMessageContract, right: ChatMessageContract): boo
 }
 
 export function appendUniqueMessage(messages: ChatMessageContract[], message: ChatMessageContract): ChatMessageContract[] {
-  const existingIndex = messages.findIndex((item) => sameMessage(item, message));
-  if (existingIndex < 0) return [...messages, message];
-  return messages.map((item, index) => index === existingIndex ? message : item);
+  return [...messages.filter((item) => !sameMessage(item, message)), message]
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
 }
 
 export function setMessageDeliveryStatus(messages: ChatMessageContract[], messageId: string, deliveryStatus: ChatMessageContract["deliveryStatus"]): ChatMessageContract[] {

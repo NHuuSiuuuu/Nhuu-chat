@@ -55,6 +55,30 @@ https://api.example.com/api/v1/facebook-page/oauth/callback
 
 Register the same callback URL in the Meta app settings and set Vercel `VITE_API_URL`, Railway `WEB_APP_URL`, and `WEB_ALLOWED_ORIGINS` consistently with the two domains above.
 
+## Facebook Messenger Inbox
+
+The Messenger webhook is separate from Facebook Login OAuth. Configure the Meta app's **Webhooks > Page** callback as:
+
+```text
+https://api.example.com/api/v1/webhooks/facebook/messenger
+```
+
+Use HTTPS and configure the same public URL in Meta and Railway routing. Set `META_WEBHOOK_VERIFY_TOKEN` in Railway; generate a high-entropy value and enter the same value in Meta's webhook verification form. Subscribe to the Page fields `messages` and `message_echoes`. Keep `META_APP_SECRET` set to the app secret already used by Facebook Login: the API verifies `X-Hub-Signature-256` against the raw webhook body with this secret. Missing or mismatched values prevent Meta verification or event delivery.
+
+The Dashboard OAuth flow requests `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `pages_messaging`, and `pages_manage_metadata`. The first three preserve existing Page listing and publishing; the last two support Messenger messaging and webhook subscription. The connected Page and authorizing user must be eligible for messaging and hold the required Page task. The API registers the Page subscription when a Page connection is established; reconnect after enabling the Page webhook in the Meta app. Meta app mode, permission access level, and review requirements determine which accounts can authorize and use this integration.
+
+Before deploying the Messenger release to an existing Atlas database, take a backup and run the applicable index migrations against production during a maintenance window. They do not run automatically at API startup:
+
+```bash
+pnpm --filter api exec tsx src/db/migrate-facebook-page-owner-index.ts
+pnpm --filter api run migrate:zalo-personal-conversation-index
+pnpm --filter api run migrate:facebook-conversation-customer-index
+```
+
+Run these from a maintenance shell where `MONGODB_URI` is securely injected from the Railway environment or a secret manager; do not paste the production URI into the command or shell history. The first migration detects Page IDs owned by multiple NhuuChat accounts and stops without changing ownership when conflicts need manual resolution. Resolve them through an audited operational decision, then rerun it. The second is the legacy owner-scoped conversation migration; run it only before the Facebook migration when upgrading a database that has not applied it yet. The final command installs Facebook per-customer uniqueness while preserving non-Facebook uniqueness and removes supported legacy indexes. Never run `migrate:zalo-personal-conversation-index` after `migrate:facebook-conversation-customer-index`, because it recreates a global owner-scoped index that blocks multiple Messenger customers on one Page. Verify applicable commands succeed before deploying/restarting the API.
+
+Keep `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, Page access tokens, `MONGODB_URI`, and other credentials only in Railway backend secret variables. Never place them in Vercel/Vite variables, frontend code/storage, webhook URLs, logs, screenshots, or repository files. If exposed, rotate the verify token in both Meta and Railway; rotate the app secret in Meta and Railway together and verify delivery again. Page access tokens remain encrypted in MongoDB and are decrypted only server-side for Meta API calls.
+
 ## Smoke verification
 
 1. Confirm Vercel and Railway report successful deployments from the intended commit.
