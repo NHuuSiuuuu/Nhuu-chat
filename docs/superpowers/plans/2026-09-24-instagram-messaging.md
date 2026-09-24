@@ -120,10 +120,10 @@
 - Disconnect removes access/directory visibility without changing other Instagram accounts or channels.
 - OAuth callback retries and duplicate disconnect requests cannot create duplicate history entries.
 
-- [ ] Add failing tests for listing multiple Instagram accounts, owner/staff channel filtering, disconnect visibility, and exactly-once safe history metadata.
-- [ ] Run focused Workspace directory/access/realtime tests and confirm expected failures.
-- [ ] Implement directory source and history integration, preserving the existing Facebook and personal-channel behavior.
-- [ ] Run focused Workspace, history, REST access, and Socket tests.
+- [x] Add failing tests for listing multiple Instagram accounts, owner/staff channel filtering, disconnect visibility, and exactly-once safe history metadata.
+- [x] Run focused Workspace directory/access/realtime tests and confirm expected failures.
+- [x] Implement directory source and history integration, preserving the existing Facebook and personal-channel behavior.
+- [x] Run focused Workspace, history, REST access, and Socket tests.
 
 ### Task 6: Connect modal, dashboard account state, and Inbox experience
 

@@ -39,7 +39,11 @@ describe("Instagram account lifecycle", () => {
     expect(meta.subscribe).toHaveBeenCalledWith("123", "long-secret");
     expect(result).not.toHaveProperty("encryptedAccessToken");
     expect(JSON.stringify(result)).not.toContain("secret");
-    expect(history).toHaveBeenCalledWith(expect.objectContaining({ actionType: "CONNECT_CHANNEL", newValue: expect.not.objectContaining({ accessToken: expect.anything() }) }));
+    expect(history).toHaveBeenCalledTimes(1);
+    expect(history).toHaveBeenCalledWith({
+      userId: "owner-1", actionType: "CONNECT_CHANNEL", actionTitle: "Kết nối Instagram",
+      oldValue: {}, newValue: { platform: "instagram", channelId: "123", username: "business" }
+    });
   });
 
   it("rejects an account already claimed by another owner", async () => {
@@ -76,10 +80,9 @@ describe("Instagram account lifecycle", () => {
   it("re-authorizes an existing owner connection with a fresh encrypted token without duplicate history", async () => {
     const { service, rows, history, input } = fixture();
     await service.connect("owner-1", input);
-    history.mockClear();
     await service.connect("owner-1", { ...input, accessToken: "fresh-secret" });
     expect(rows[0].encryptedAccessToken).toBe("encrypted:fresh-secret");
-    expect(history).not.toHaveBeenCalled();
+    expect(history).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the prior credential active if re-authorization subscription fails", async () => {
@@ -100,7 +103,10 @@ describe("Instagram account lifecycle", () => {
     expect(await service.disconnect("owner-1", "1")).toEqual({ disconnected: false });
     expect(meta.unsubscribe).toHaveBeenCalledTimes(1);
     expect(history).toHaveBeenCalledTimes(1);
-    expect(history).toHaveBeenCalledWith(expect.objectContaining({ actionType: "DISCONNECT_CHANNEL" }));
+    expect(history).toHaveBeenCalledWith({
+      userId: "owner-1", actionType: "DISCONNECT_CHANNEL", actionTitle: "Ngắt kết nối Instagram",
+      oldValue: { platform: "instagram", channelId: "123", username: "business" }, newValue: {}
+    });
   });
 
   it.each(["throws", "returns null"] as const)("retries local deletion after unsubscribe succeeds and deletion %s", async (failure) => {

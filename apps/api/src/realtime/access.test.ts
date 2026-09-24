@@ -79,6 +79,19 @@ describe("conversation realtime access", () => {
     ] });
   });
 
+  it("grants staff realtime access only to the assigned Instagram account", () => {
+    const staff = { id: "staff-1", role: "customer", workspace: {
+      ownerUserId: "owner-1", allowedChannels: [{ platform: "instagram" as const, channelId: "ig-1" }]
+    } };
+    expect(canJoinConversation(staff, { platform: "instagram", ownerId: "owner-1", channelId: "ig-1" })).toBe(true);
+    expect(canJoinConversation(staff, { platform: "instagram", ownerId: "owner-1", channelId: "ig-2" })).toBe(false);
+    expect(canJoinConversation(staff, { platform: "instagram", ownerId: "owner-2", channelId: "ig-1" })).toBe(false);
+    expect(conversationAccessFilter(staff)).toEqual({ $or: [
+      { ownerId: "owner-1", platform: "instagram", channelId: "ig-1" },
+      { platform: { $nin: ["facebook", "instagram", "zalo", "telegram", "zalo_personal", "telegram_personal"] }, ownerId: "staff-1" }
+    ] });
+  });
+
   it("allows assigned staff into only the Workspace owner's assigned personal account platform", () => {
     const staff = { id: "staff-1", role: "customer", workspace: {
       ownerUserId: "owner-1", allowedPages: [], allowedChannels: [{ platform: "telegram_personal", channelId: "owner-1" }]

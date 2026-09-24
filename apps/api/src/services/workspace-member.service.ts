@@ -3,6 +3,7 @@ import type { WorkspaceChannelPlatform, WorkspaceChannelRef } from "@nhuu-chat/c
 import { effectiveAllowedChannels, isWorkspaceChannelPlatform, workspaceChannelPlatforms } from "../auth/workspace-channel-access.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { FacebookPageConnectionModel } from "../models/facebook-page-connection.model.js";
+import { InstagramAccountConnectionModel } from "../models/instagram-account-connection.model.js";
 import { TelegramPersonalSessionModel } from "../channels/telegram-personal/telegram-personal.model.js";
 import { ZaloPersonalSessionModel } from "../channels/zalo-personal/zalo-personal.model.js";
 import { UserModel } from "../models/user.model.js";
@@ -121,8 +122,9 @@ const defaultDependencies: WorkspaceMemberDependencies = {
     // Liệt kê mọi nguồn kênh dùng chung và các phiên cá nhân đang hoạt động của chủ Workspace.
     async listOwned(ownerUserId) {
       const sharedPlatforms = workspaceChannelPlatforms.filter((platform) => platform !== "zalo_personal" && platform !== "telegram_personal");
-      const [pageRows, conversationRows, telegramSession, zaloSession] = await Promise.all([
+      const [pageRows, instagramRows, conversationRows, telegramSession, zaloSession] = await Promise.all([
         FacebookPageConnectionModel.find({ userId: ownerUserId, status: "connected" }).select("pageId pageName avatarUrl").lean(),
+        InstagramAccountConnectionModel.find({ ownerUserId, status: "connected" }).select("instagramUserId username displayName avatarUrl").lean(),
         ConversationModel.aggregate<{ _id: { platform: string; channelId: string }; name?: string }>([
           { $match: { ownerId: ownerUserId, platform: { $in: sharedPlatforms.filter((platform) => platform !== "facebook") } } },
           { $sort: { updatedAt: 1 } },
@@ -135,6 +137,11 @@ const defaultDependencies: WorkspaceMemberDependencies = {
       for (const page of pageRows) channels.set(`facebook:${page.pageId}`, {
         platform: "facebook", channelId: page.pageId, name: page.pageName ?? page.pageId,
         ...(page.avatarUrl ? { avatarUrl: page.avatarUrl } : {})
+      });
+      for (const account of instagramRows) channels.set(`instagram:${account.instagramUserId}`, {
+        platform: "instagram", channelId: account.instagramUserId,
+        name: account.displayName?.trim() || account.username?.trim() || account.instagramUserId,
+        ...(account.avatarUrl ? { avatarUrl: account.avatarUrl } : {})
       });
       for (const row of conversationRows) {
         if (!isWorkspaceChannelPlatform(row._id.platform)) continue;
