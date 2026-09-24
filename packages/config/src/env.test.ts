@@ -35,6 +35,7 @@ describe("environment configuration", () => {
       PORT: 3000,
       GEMINI_CHAT_MODEL: "gemini-3.5-flash-lite",
       META_GRAPH_API_VERSION: "v26.0",
+      INSTAGRAM_GRAPH_API_VERSION: "v26.0",
       FACEBOOK_POST_SCHEDULER_INTERVAL_MS: 30000,
       FACEBOOK_POST_LEASE_MS: 120000
     });
@@ -50,6 +51,13 @@ describe("environment configuration", () => {
     expect(env.META_GRAPH_API_VERSION).toBe("v27.0");
     expect(env.FACEBOOK_POST_SCHEDULER_INTERVAL_MS).toBe(45000);
     expect(env.FACEBOOK_POST_LEASE_MS).toBe(180000);
+  });
+
+  it("validates optional Instagram Login configuration", async () => {
+    const { env } = await importEnv({ INSTAGRAM_APP_ID: "instagram-id", INSTAGRAM_APP_SECRET: "instagram-secret", INSTAGRAM_OAUTH_REDIRECT_URI: "https://api.example.com/api/v1/instagram/oauth/callback", INSTAGRAM_GRAPH_API_VERSION: "v27.0" });
+    expect(env.INSTAGRAM_APP_ID).toBe("instagram-id");
+    expect(env.INSTAGRAM_GRAPH_API_VERSION).toBe("v27.0");
+    await expect(importEnv({ INSTAGRAM_GRAPH_API_VERSION: "latest" })).rejects.toThrow(/INSTAGRAM_GRAPH_API_VERSION/);
   });
 
   it("parses the optional Messenger webhook verify token and ignores an empty value", async () => {

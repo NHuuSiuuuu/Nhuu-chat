@@ -63,9 +63,9 @@
 - `DELETE /api/v1/instagram/connections/:connectionId` disconnects only a connection owned by caller and records history after success.
 - Reuse shared encryption primitives and connection/history conventions where appropriate, not Facebook-specific database records or OAuth states.
 
-- [ ] Add failing tests for valid/cancelled/expired/replayed OAuth state, wrong-user callback, account already claimed, token encryption, provider failure, and ownership-checked disconnect.
-- [ ] Confirm focused tests fail before implementation.
-- [ ] Implement bounded Meta HTTP calls, callback-safe error handling, masked logs, token encryption, safe DTOs, and idempotent disconnect.
+- [x] Add failing tests for valid/cancelled/expired/replayed OAuth state, wrong-user callback, account already claimed, token encryption, provider failure, and ownership-checked disconnect.
+- [x] Confirm focused tests fail before implementation.
+- [x] Implement bounded Meta HTTP calls, callback-safe error handling, masked logs, token encryption, safe DTOs, and idempotent disconnect.
 - [ ] Use scopes `instagram_business_basic,instagram_business_manage_messages`; verify the exact authorization/token/profile endpoints and long-lived token refresh against official Meta docs and development-app responses before setting defaults.
 
 ### Task 3: Instagram webhook verification, event normalization, and persistence

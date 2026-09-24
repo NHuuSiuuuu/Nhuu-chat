@@ -18,6 +18,7 @@ import { generalSettingsRouter } from "./routes/general-settings.routes.js";
 import { quickReplyRouter } from "./routes/quick-reply.routes.js";
 import { assistantRouter } from "./routes/assistants.routes.js";
 import { facebookPageRouter } from "./routes/facebook-page.routes.js";
+import { instagramRouter } from "./routes/instagram.routes.js";
 import { facebookPostRouter } from "./routes/facebook-post.routes.js";
 import { facebookMessengerWebhookRouter } from "./routes/facebook-messenger-webhook.routes.js";
 import { settingHistoryRouter } from "./routes/setting-history.routes.js";
@@ -61,6 +62,7 @@ export function createApp(): Express {
   app.use("/api/v1/quick-replies", quickReplyRouter);
   app.use("/api/v1/assistants", assistantRouter);
   app.use("/api/v1/facebook-page", facebookPageRouter);
+  app.use("/api/v1/instagram", instagramRouter);
   app.use("/api/v1/facebook-page/posts", facebookPostRouter);
   app.use("/api/v1/setting-histories", settingHistoryRouter);
   app.use("/api/v1/workspaces", workspacesRouter);
