@@ -140,8 +140,8 @@ export function emitInboxEvent(event: string, ownerId: string | null, payload: u
 export function emitInboxEventToRecipients(event: string, recipientIds: string[], payload: unknown): void {
   if (!activeServer) return;
   const payloadRecord = payload && typeof payload === "object" ? payload as Record<string, unknown> : null;
-  const conversationId = typeof payloadRecord?.id === "string" ? payloadRecord.id
-    : typeof payloadRecord?.conversationId === "string" ? payloadRecord.conversationId : null;
+  const conversationId = typeof payloadRecord?.conversationId === "string" ? payloadRecord.conversationId
+    : typeof payloadRecord?.id === "string" ? payloadRecord.id : null;
   if (conversationId && isWorkspaceChannelPlatform(payloadRecord?.platform)) {
     const server = activeServer;
     const lookup = event === chatEvents.conversationDeleted

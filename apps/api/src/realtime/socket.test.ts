@@ -29,7 +29,7 @@ vi.mock("../models/workspace-member.model.js", () => ({ WorkspaceMemberModel: wo
 const workspaceMocks = vi.hoisted(() => ({ findById: vi.fn(), findOne: vi.fn() }));
 vi.mock("../models/workspace.model.js", () => ({ WorkspaceModel: workspaceMocks }));
 
-import { createRealtimeServer, disconnectAuthSession, disconnectAuthUser, emitInboxEventToRecipients } from "./socket.js";
+import { createRealtimeServer, disconnectAuthSession, disconnectAuthUser, emitChatEvent, emitInboxEventToRecipients } from "./socket.js";
 
 describe("inbox realtime recipients", () => {
   beforeEach(() => {
@@ -74,6 +74,22 @@ describe("inbox realtime recipients", () => {
     await vi.waitFor(() => expect(socketMocks.to).toHaveBeenCalledWith(["inbox:admins", "inbox:owner-1"]));
     expect(socketMocks.to).toHaveBeenCalledWith(["inbox:admins", "inbox:owner-1"]);
     expect(socketMocks.emit).toHaveBeenCalledWith("chat:conversation_updated", payload);
+  });
+
+  it("routes incoming message notifications using conversationId rather than the message id", async () => {
+    const conversation = { ownerId: "owner-1", platform: "facebook", channelId: "page-1" };
+    conversationMocks.findById.mockImplementation((id: string) => ({
+      select: () => ({ lean: () => Promise.resolve(id === "conversation-1" ? conversation : null) })
+    }));
+    workspaceMocks.findOne.mockReturnValue({ select: () => ({ lean: () => Promise.resolve(null) }) });
+    const message = { id: "message-1", conversationId: "conversation-1", platform: "facebook", senderType: "customer" };
+
+    emitChatEvent("chat:message_received", "conversation-1", message);
+
+    await vi.waitFor(() => expect(socketMocks.to).toHaveBeenCalledWith(["inbox:admins", "inbox:owner-1"]));
+    expect(socketMocks.emit).toHaveBeenCalledWith("chat:incoming_message", message);
+    expect(conversationMocks.findById).toHaveBeenCalledWith("conversation-1");
+    expect(conversationMocks.findById).not.toHaveBeenCalledWith("message-1");
   });
 
   it("adds only Workspace members permitted for the shared platform and channel", async () => {

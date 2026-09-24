@@ -5,6 +5,8 @@ Mọi thay đổi đáng chú ý của project sẽ được ghi lại trong fil
 
 ## [Unreleased]
 
+- Sửa định tuyến Socket thông báo tin mới để dùng `conversationId`, giúp Toast toàn cục hoạt động ngoài phòng chat đang mở.
+
 - Tách điều kiện phát âm thanh tin nhắn khỏi quyền thông báo trên trình duyệt.
 
 - Ngăn deep link của hội thoại đang mở kích hoạt chọn lại và gọi lặp API đánh dấu đã đọc.
