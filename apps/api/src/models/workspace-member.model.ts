@@ -13,6 +13,10 @@ const workspaceMemberSchema = new Schema(
     allowedChannels: {
       type: [{ _id: false, platform: { type: String, enum: workspaceChannelPlatforms, required: true }, channelId: { type: String, required: true, trim: true } }],
       default: undefined
+    },
+    revokedChannels: {
+      type: [{ _id: false, platform: { type: String, enum: workspaceChannelPlatforms, required: true }, channelId: { type: String, required: true, trim: true } }],
+      default: []
     }
   },
   { timestamps: true }

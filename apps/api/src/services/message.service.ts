@@ -37,7 +37,7 @@ export type UploadedOutboundFile = {
 };
 
 type MessageAuth = AuthUser & {
-  workspace?: { ownerUserId: string; role?: string; allowedPages?: readonly string[] | null; allowedChannels?: WorkspaceChannelRef[] };
+  workspace?: { ownerUserId: string; role?: string; allowedPages?: readonly string[] | null; allowedChannels?: WorkspaceChannelRef[]; revokedChannels?: WorkspaceChannelRef[]; activeInstagramChannelIds?: string[] };
 };
 
 type PersistedAttachment = {
@@ -158,9 +158,6 @@ export async function sendOutboundMessage(
   if (conversation.platform === "instagram") {
     const workspace = auth.workspace;
     if (!workspace || String(conversation.ownerId) !== workspace.ownerUserId) {
-      throw new AppError(403, "FORBIDDEN", "You do not have access to this Instagram channel");
-    }
-    if (workspace.role === "staff" && !workspace.allowedChannels?.some((channel) => channel.platform === "instagram" && channel.channelId === conversation.channelId)) {
       throw new AppError(403, "FORBIDDEN", "You do not have access to this Instagram channel");
     }
     if (input.attachment) throw new AppError(400, "UNSUPPORTED_ATTACHMENT_CHANNEL", "Instagram replies currently support text only");

@@ -66,7 +66,7 @@ describe("conversation realtime access", () => {
   });
 
   it("limits Workspace staff by platform and channel ID and preserves personal account isolation", () => {
-    const staff = { id: "staff-1", role: "customer", workspace: {
+    const staff: Parameters<typeof canJoinConversation>[0] = { id: "staff-1", role: "customer", workspace: {
       ownerUserId: "owner-1", allowedPages: [], allowedChannels: [{ platform: "telegram" as const, channelId: "same-id" }]
     } };
     expect(canJoinConversation(staff, { platform: "telegram", ownerId: "owner-1", channelId: "same-id" })).toBe(true);
@@ -92,9 +92,50 @@ describe("conversation realtime access", () => {
     ] });
   });
 
+  it("denies an explicitly revoked Instagram channel while preserving unrestricted access to other channels", () => {
+    const staff: Parameters<typeof canJoinConversation>[0] = { id: "staff-1", role: "customer", workspace: {
+      ownerUserId: "owner-1", allowedChannels: [], allowedPages: [],
+      revokedChannels: [{ platform: "instagram" as const, channelId: "ig-disconnected" }]
+    } };
+    expect(canJoinConversation(staff, { platform: "instagram", ownerId: "owner-1", channelId: "ig-disconnected" })).toBe(false);
+    expect(canJoinConversation(staff, { platform: "instagram", ownerId: "owner-1", channelId: "ig-other" })).toBe(true);
+    expect(canJoinConversation(staff, { platform: "telegram", ownerId: "owner-1", channelId: "chat-1" })).toBe(true);
+    expect(conversationAccessFilter(staff)).toEqual({ $or: [
+      { $and: [
+        { ownerId: "owner-1", platform: { $in: ["facebook", "instagram", "zalo", "telegram", "zalo_personal", "telegram_personal"] } },
+        { $nor: [{ ownerId: "owner-1", platform: "instagram", channelId: "ig-disconnected" }] }
+      ] },
+      { platform: { $nin: ["facebook", "instagram", "zalo", "telegram", "zalo_personal", "telegram_personal"] }, ownerId: "staff-1" }
+    ] });
+  });
+
+  it("denies historical Instagram to unrestricted staff when the account is no longer connected", () => {
+    const staff: Parameters<typeof canJoinConversation>[0] = { id: "staff-new", role: "customer", workspace: {
+      role: "staff", ownerUserId: "owner-1", allowedChannels: [], activeInstagramChannelIds: [], revokedChannels: []
+    } };
+    expect(canJoinConversation(staff, { platform: "instagram", ownerId: "owner-1", channelId: "ig-disconnected" })).toBe(false);
+    expect(canJoinConversation(staff, { platform: "telegram", ownerId: "owner-1", channelId: "chat-1" })).toBe(true);
+    expect(conversationAccessFilter(staff)).toEqual({ $or: [
+      { ownerId: "owner-1", platform: { $in: ["facebook", "zalo", "telegram", "zalo_personal", "telegram_personal"] } },
+      { platform: { $nin: ["facebook", "instagram", "zalo", "telegram", "zalo_personal", "telegram_personal"] }, ownerId: "staff-new" }
+    ] });
+  });
+
+  it("requires an exact Instagram grant for connected accounts even when other channels are unrestricted", () => {
+    const staff: Parameters<typeof canJoinConversation>[0] = { id: "staff-new", role: "customer", workspace: {
+      role: "staff", ownerUserId: "owner-1", allowedChannels: [], activeInstagramChannelIds: ["ig-active"], revokedChannels: []
+    } };
+    expect(canJoinConversation(staff, { platform: "instagram", ownerId: "owner-1", channelId: "ig-active" })).toBe(false);
+    expect(canJoinConversation(staff, { platform: "telegram", ownerId: "owner-1", channelId: "chat-1" })).toBe(true);
+    expect(conversationAccessFilter(staff)).toEqual({ $or: [
+      { ownerId: "owner-1", platform: { $in: ["facebook", "zalo", "telegram", "zalo_personal", "telegram_personal"] } },
+      { platform: { $nin: ["facebook", "instagram", "zalo", "telegram", "zalo_personal", "telegram_personal"] }, ownerId: "staff-new" }
+    ] });
+  });
+
   it("allows assigned staff into only the Workspace owner's assigned personal account platform", () => {
-    const staff = { id: "staff-1", role: "customer", workspace: {
-      ownerUserId: "owner-1", allowedPages: [], allowedChannels: [{ platform: "telegram_personal", channelId: "owner-1" }]
+    const staff: Parameters<typeof canJoinConversation>[0] = { id: "staff-1", role: "customer", workspace: {
+      ownerUserId: "owner-1", allowedPages: [], allowedChannels: [{ platform: "telegram_personal" as const, channelId: "owner-1" }]
     } };
     expect(canJoinConversation(staff, { platform: "telegram_personal", ownerId: "owner-1", channelId: "target-chat" })).toBe(true);
     expect(canJoinConversation(staff, { platform: "zalo_personal", ownerId: "owner-1", channelId: "target-chat" })).toBe(false);

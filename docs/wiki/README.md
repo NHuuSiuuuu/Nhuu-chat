@@ -1,6 +1,6 @@
 # Nhuu-chat Wiki
 
-Tài liệu tổng quan vận hành và trạng thái phát triển của Nhuu-chat — nền tảng quản lý inbox chăm sóc khách hàng đa kênh, hiện hỗ trợ Facebook Messenger, Telegram và trợ lý RAG.
+Tài liệu tổng quan vận hành và trạng thái phát triển của Nhuu-chat — nền tảng quản lý inbox chăm sóc khách hàng đa kênh, hiện hỗ trợ Facebook Messenger, Instagram text DM, Telegram và trợ lý RAG.
 
 > Đây là Wiki source được lưu trong repository. Khi Wiki online được bật trên GitHub, nội dung file này có thể được đồng bộ sang trang Wiki tương ứng.
 
@@ -13,6 +13,7 @@ Nhuu-chat hiện là MVP tập trung vào:
 - Kết nối Telegram cá nhân bằng QR MTProto.
 - Nhận và gửi tin nhắn Telegram trong Inbox realtime.
 - Nhận tin Messenger mới qua webhook đã xác minh chữ ký, lưu hội thoại riêng theo PSID, cập nhật Inbox realtime và trả lời văn bản qua Send API.
+- Instagram Login độc lập cho tài khoản Business/Creator, nhận DM text qua webhook và trả lời text trong Inbox; xem [hướng dẫn Instagram](instagram-messaging.md).
 - Workspace hỗ trợ owner/admin/staff, thành viên nhiều Workspace, quyền Inbox theo Facebook Page và nhiều Page trên một Workspace; xem [hướng dẫn Workspace/Page](workspace-page-access.md).
 - Quản lý hội thoại, unread count, avatar, tên khách hàng, nhóm và nền tảng gửi.
 - Trợ lý RAG với dữ liệu knowledge dạng tài liệu/chính sách.
@@ -50,7 +51,7 @@ MongoDB dùng MongoDB Atlas. Redis có thể chạy local bằng Docker để ph
 - Bot Pause 30 phút; queue hỗ trợ retry `0s`, `1s`, `4s`, nhưng chatbot tự động chỉ gửi một lần do connector chưa hỗ trợ khóa idempotency.
 - Bot Pause 30 phút và retry outbound theo các mốc `0s`, `1s`, `4s`.
 - Cấu hình Trợ lý AI được lưu theo tài khoản qua `GET/PATCH /api/v1/ai-settings`.
-- Trang `Cài đặt > Lịch sử` và API đọc lịch sử đã hoạt động cho thay đổi Cài đặt AI cùng kết nối/ngắt kết nối Facebook Page.
+- Trang `Cài đặt > Lịch sử` và API đọc lịch sử đã hoạt động cho thay đổi Cài đặt AI cùng kết nối/ngắt kết nối Facebook Page và Instagram.
 - Mô hình Gemini có ba tier: `smart`, `balanced` và `economy`, tương ứng với model thông minh nhất, cân bằng và tiết kiệm.
 - Gợi ý trả lời hỗ trợ các chế độ thủ công, khi mở hội thoại và khi khách nhắn tin; chế độ thủ công không tự gọi API khi mở hội thoại.
 - Gợi ý dùng 6 tin nhắn cuối của cả khách hàng và nhân viên theo thứ tự thời gian, trả tối đa 3 câu và có fallback khi Gemini không khả dụng.
@@ -333,7 +334,7 @@ Các test quan trọng của Inbox kiểm tra tự cuộn, unread state, metadat
 - Thanh toán trong phần Trợ lý AI hiện mới là UI cố định; tích hợp ví và tính phí thực tế chưa triển khai.
 - Nút `+ Tạo đơn`, ghi chú và một số toolbar hiện mới là UI placeholder; chưa có luồng persistence/order backend hoàn chỉnh.
 - Gửi media trong message đã hỗ trợ một ảnh/file cho Zalo cá nhân và Telegram cá nhân; upload video chưa có nút riêng trong bản đầu.
-- Instagram OAuth, Zalo cá nhân production UI/live smoke/reconnect đầy đủ, WebRTC và load test thực tế chưa thuộc MVP hiện tại.
+- Instagram implementation có kiểm thử local nhưng chưa được nghiệm thu với Meta app/tài khoản thật; Zalo cá nhân production UI/live smoke/reconnect đầy đủ, WebRTC và load test thực tế cũng chưa hoàn tất.
 
 ## 8. Kế hoạch tiếp theo
 
@@ -344,7 +345,8 @@ Các test quan trọng của Inbox kiểm tra tự cuộn, unread state, metadat
 - Đánh giá MongoDB Atlas Vector Search cho RAG production.
 - Hoàn thiện tích hợp thanh toán và ví cho các tính năng AI.
 - Chạy nghiệm thu live Messenger với Meta test Page và tester đủ quyền; cấu hình webhook, quyền và migrations theo [tài liệu triển khai](../deployment/vercel-railway.md). Việc mở cho người dùng Facebook public vẫn phụ thuộc app mode, quyền truy cập và quy trình review của Meta.
-- Hoàn thiện UI, live smoke và reconnect production cho Zalo cá nhân; tích hợp Instagram sau khi có spec được phê duyệt.
+- Nghiệm thu Instagram trên Meta development app/staging: OAuth, subscribe webhook, inbound DM, trả lời text, quyền Staff, disconnect và reconnect.
+- Hoàn thiện UI, live smoke và reconnect production cho Zalo cá nhân.
 
 ## 9. Tài liệu liên quan
 

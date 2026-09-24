@@ -738,6 +738,21 @@ describe("sendOutboundMessage", () => {
     expect(dependencyMocks.instagramSendText).not.toHaveBeenCalled();
   });
 
+  it("denies Instagram replies to Staff without an explicit account grant", async () => {
+    arrangeConversation(conversation({
+      platform: "instagram", channelId: "ig-1", customerId: { _id: "customer-1", name: "Customer One", platformId: "instagram:ig-1:igsid-7" }
+    }));
+    const staff = { ...agentAuth, workspace: {
+      ownerUserId: "customer-1", role: "staff", allowedChannels: [], allowedPages: [],
+      revokedChannels: [{ platform: "instagram", channelId: "ig-disconnected" }] as WorkspaceChannelRef[]
+    } };
+
+    await expect(sendOutboundMessage({ conversationId: "conversation-1", content: "Not granted" }, staff))
+      .rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+    expect(dependencyMocks.findInstagramConnection).not.toHaveBeenCalled();
+    expect(dependencyMocks.instagramSendText).not.toHaveBeenCalled();
+  });
+
   it.each([null, { ownerUserId: "customer-1", instagramUserId: "ig-1", status: "connected", encryptedAccessToken: "cipher", tokenExpiresAt: new Date(now.getTime() - 1) }])(
     "rejects missing or expired Instagram credentials before calling Meta", async (credential) => {
       arrangeConversation(conversation({ platform: "instagram", channelId: "ig-1", customerId: { platformId: "instagram:ig-1:igsid-7" } }));

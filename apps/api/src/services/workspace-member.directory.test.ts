@@ -65,6 +65,18 @@ describe("Workspace channel directory", () => {
       .resolves.toMatchObject({ channels: [] });
   });
 
+  it("does not restore a disconnected Instagram account from historical conversations", async () => {
+    directoryMocks.conversationAggregate.mockResolvedValue([
+      { _id: { platform: "instagram", channelId: "ig-disconnected" }, name: "Old Shop" }
+    ]);
+
+    const result = await new WorkspaceMemberService().listChannels("workspace-1", "owner-1");
+
+    expect(result.channels).not.toContainEqual({
+      platform: "instagram", channelId: "ig-disconnected", name: "Old Shop"
+    });
+  });
+
   it("lists every connected Instagram account with its public identity only", async () => {
     directoryMocks.instagramFind.mockReturnValue(selectedQuery([
       { instagramUserId: "ig-1", username: "first", displayName: "First Shop", avatarUrl: "https://cdn.test/ig-1.png" },
@@ -90,6 +102,15 @@ describe("Workspace channel directory", () => {
     const result = await new WorkspaceMemberService().listChannels("workspace-1", "staff-1");
 
     expect(result.channels).toEqual([{ platform: "instagram", channelId: "ig-2", name: "Second Shop" }]);
+  });
+
+  it("hides Instagram from unrestricted staff channel directory", async () => {
+    directoryMocks.membershipFindOne.mockReturnValue({ lean: vi.fn().mockResolvedValue({
+      workspaceId: "workspace-1", userId: "staff-1", role: "staff", allowedChannels: []
+    }) });
+    directoryMocks.instagramFind.mockReturnValue(selectedQuery([{ instagramUserId: "ig-1", username: "first" }]));
+    const result = await new WorkspaceMemberService().listChannels("workspace-1", "staff-1");
+    expect(result.channels.filter((channel) => channel.platform === "instagram")).toEqual([]);
   });
 
   it("lets Workspace admins see every connected Instagram channel", async () => {

@@ -1,6 +1,6 @@
 # Nhuu-chat
 
-MVP quản lý inbox chăm sóc khách hàng Facebook Messenger và Telegram cùng trợ lý RAG. MongoDB dùng MongoDB Atlas; Redis vẫn có thể chạy local bằng Docker.
+MVP quản lý inbox chăm sóc khách hàng Facebook Messenger, Instagram và Telegram cùng trợ lý RAG. MongoDB dùng MongoDB Atlas; Redis vẫn có thể chạy local bằng Docker.
 
 ## Đã hoàn thành
 
@@ -15,7 +15,8 @@ MVP quản lý inbox chăm sóc khách hàng Facebook Messenger và Telegram cù
 - Chatbot tự động dùng chung orchestration/delivery cho Telegram Bot và Telegram cá nhân, có template, RAG đúng owner, fallback và bàn giao.
 - REST conversation/message API và Socket.IO room authentication.
 - Inbox Facebook Messenger thủ công cho tin nhắn văn bản mới: webhook xác minh chữ ký, lưu riêng conversation theo PSID, cập nhật realtime và gửi trả lời qua Messenger Send API.
-- Workspace có vai trò owner/admin/staff; owner quản lý thành viên đã đăng ký, cấp quyền theo Facebook Page và có thể kết nối nhiều Page trong một Workspace.
+- Inbox Instagram Professional (Business/Creator): Instagram Login độc lập, nhận webhook DM văn bản, gửi text reply, hỗ trợ nhiều tài khoản trong Workspace và giới hạn quyền Staff theo từng account.
+- Workspace có vai trò owner/admin/staff; owner quản lý thành viên đã đăng ký, cấp quyền theo Facebook Page hoặc Instagram account và có thể kết nối nhiều Page/account trong một Workspace.
 - CRUD danh mục thẻ hội thoại dùng chung cho admin/agent tại `/api/v1/conversation-tags`.
 - CRUD mẫu trả lời nhanh dùng chung cho admin/agent tại `/api/v1/quick-replies`, hỗ trợ lưu một ảnh đính kèm qua Cloudinary.
 - Knowledge chunking, TXT/Markdown/PDF/DOCX parser, provider-independent RAG.
@@ -23,7 +24,7 @@ MVP quản lý inbox chăm sóc khách hàng Facebook Messenger và Telegram cù
 - Inbox React tối thiểu.
 - Ghim tối đa 10 tin nhắn trong mỗi hội thoại, có thanh tin đã ghim và đồng bộ realtime cho admin/agent.
 - Ghi chú nội bộ theo từng hội thoại; agent/admin có thể tạo, sửa, xóa và ghim ghi chú trong sidebar Thông tin.
-- Trang `Cài đặt > Lịch sử` hiển thị Timeline thay đổi Cài đặt AI và kết nối/ngắt kết nối Facebook Page theo từng người dùng.
+- Trang `Cài đặt > Lịch sử` hiển thị Timeline thay đổi Cài đặt AI và kết nối/ngắt kết nối Facebook Page hoặc Instagram theo từng người dùng; access token không được lưu.
 - Security headers, request ID và rate limit auth.
 
 ## Chạy local
@@ -139,11 +140,30 @@ Có ba cách lưu bài: `draft` (bản nháp, chưa gọi Meta), `scheduled` (h�
 
 Bài `failed` có thể retry thủ công; không có retry tự động cho lỗi timeout của Meta vì request có thể đã được Meta nhận dù client không nhận được phản hồi. Hãy kiểm tra Page và bài đã publish trên Meta trước khi bấm retry để tránh đăng trùng. Lease hết hạn cũng chuyển bài sang `failed` và yêu cầu xác nhận thủ công. OAuth đã có trong Dashboard, nhưng app vẫn cần hoàn tất App Review và chuyển sang Live Mode trước khi phục vụ người dùng public; V1 chưa hỗ trợ nhiều Page trên một user, video, nhiều ảnh, link preview, lịch lặp/recurring schedules, chỉnh sửa hoặc xóa bài đã publish, hay bulk/calendar nâng cao.
 
+### Kết nối Instagram Inbox
+
+Instagram dùng Instagram Login riêng, không dùng Facebook Page OAuth. Chỉ hỗ trợ tài khoản Professional Business/Creator, nhận DM một-một dạng text và gửi trả lời text. Workspace owner/admin quản lý nhiều tài khoản Instagram; Staff chỉ thấy account được cấp đúng cặp `{ platform: "instagram", channelId: instagramUserId }`. Ngắt kết nối thu hồi quyền Staff của đúng account; khi kết nối lại account, grant đã lưu có hiệu lực trở lại. OAuth chỉ được báo thành công sau khi frontend tải danh sách đã lưu từ API và xác nhận đúng Instagram account ID vừa kết nối.
+
+Cấu hình backend; không đặt secret/access token ở frontend hoặc gửi token thủ công:
+
+```dotenv
+INSTAGRAM_APP_ID=your-meta-app-id
+INSTAGRAM_APP_SECRET=your-meta-app-secret
+INSTAGRAM_OAUTH_REDIRECT_URI=https://api.example.com/api/v1/instagram/oauth/callback
+INSTAGRAM_GRAPH_API_VERSION=v26.0
+INSTAGRAM_WEBHOOK_VERIFY_TOKEN=your-random-webhook-verification-token
+WEB_APP_URL=https://app.example.com
+```
+
+Trong Meta Developer app, bật Instagram Login và đăng ký chính xác redirect URI. Yêu cầu quyền `instagram_business_basic` và `instagram_business_manage_messages`. Đăng ký webhook callback `https://api.example.com/api/v1/webhooks/instagram` với verify token khớp `INSTAGRAM_WEBHOOK_VERIFY_TOKEN`, trường `messages` và Instagram webhook object; backend xác thực POST bằng `INSTAGRAM_APP_SECRET`. Mỗi connected account được subscribe riêng. Ở Development Mode chỉ tài khoản test/role phù hợp mới có thể kết nối; quyền public vẫn phụ thuộc cấu hình và xét duyệt Meta.
+
+OAuth credential được mã hóa phía backend; response, history, log và realtime chỉ chứa metadata công khai an toàn. Disconnect xóa account connection sau khi gỡ webhook subscription. Meta yêu cầu khách nhắn trước và giới hạn thời gian trả lời; payload text bị giới hạn 1,000 byte UTF-8 theo guard hiện tại. File/media, group DM, chatbot Instagram, kiểm thử app Meta thực tế và nghiệm thu quyền production chưa được xác nhận. Chưa chạy migration hoặc deploy production trong nhánh này; trước rollout database hiện hữu cần sao lưu và duyệt kết quả migration preflight.
+
 ### Lịch sử hoạt động cài đặt
 
-Mở `Cài đặt > Lịch sử` hoặc `/settings/history` để xem Timeline thay đổi, giá trị cũ/mới, người thực hiện, thời gian và mã phiên bản. Bản hiện tại ghi nhận các thay đổi Cài đặt AI và thao tác kết nối/ngắt kết nối Facebook Page, gồm cả kết nối OAuth và nhập thủ công. Timeline có bộ lọc `Tất cả`, `Cài đặt AI`, `Kết nối Facebook` và phân trang 20 bản ghi; thao tác ngắt kết nối hiện nằm trong `Tất cả`.
+Mở `Cài đặt > Lịch sử` hoặc `/settings/history` để xem Timeline thay đổi, giá trị cũ/mới, người thực hiện, thời gian và mã phiên bản. Bản hiện tại ghi nhận các thay đổi Cài đặt AI và thao tác kết nối/ngắt kết nối Facebook Page hoặc Instagram theo từng người dùng. Timeline có bộ lọc và phân trang 20 bản ghi; thao tác ngắt kết nối hiện nằm trong `Tất cả`.
 
-API đọc lịch sử là `GET /api/v1/setting-histories?page=1&pageSize=20&actionType=UPDATE_AI_SETTINGS`. Route yêu cầu phiên đăng nhập hợp lệ với role `admin` hoặc `agent`, ưu tiên access token trong HttpOnly cookie và vẫn hỗ trợ Bearer token cho client cũ. API không nhận `userId`; backend luôn lấy người dùng từ thông tin xác thực và chỉ trả lịch sử của người đó. `page` mặc định là `1`, `pageSize` mặc định là `20` và được giới hạn tối đa `50`; `actionType` tùy chọn nhận `UPDATE_AI_SETTINGS`, `CONNECT_FACEBOOK_PAGE` hoặc `DISCONNECT_FACEBOOK_PAGE`. Kết quả mới nhất đứng trước và có dạng `{ items, pagination: { page, pageSize, total, totalPages, hasNextPage } }`.
+API đọc lịch sử là `GET /api/v1/setting-histories?page=1&pageSize=20&actionType=UPDATE_AI_SETTINGS`. Route yêu cầu phiên đăng nhập hợp lệ với role `admin` hoặc `agent`, ưu tiên access token trong HttpOnly cookie và vẫn hỗ trợ Bearer token cho client cũ. API không nhận `userId`; backend luôn lấy người dùng từ thông tin xác thực và chỉ trả lịch sử của người đó. `page` mặc định là `1`, `pageSize` mặc định là `20` và được giới hạn tối đa `50`; `actionType` hỗ trợ các thay đổi AI và kết nối/ngắt kết nối kênh được tích hợp. Kết quả mới nhất đứng trước và có dạng `{ items, pagination: { page, pageSize, total, totalPages, hasNextPage } }`.
 
 Lịch sử không lưu Page Access Token, OAuth token, cookie, password, secret hoặc trường xác thực nhạy cảm. Mỗi người dùng được giữ tối đa 500 bản ghi; sau khi tạo bản ghi vượt giới hạn, hệ thống tự xóa các bản ghi cũ nhất. Đây là lịch sử vận hành có giới hạn, không phải kho audit lưu vô thời hạn.
 

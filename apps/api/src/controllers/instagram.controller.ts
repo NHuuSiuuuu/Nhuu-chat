@@ -1,6 +1,7 @@
 import type { RequestHandler } from "express";
 import { isValidObjectId } from "mongoose";
 
+import { isWorkspaceChannelRevoked } from "../auth/workspace-channel-access.js";
 import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
 import { AppError } from "../common/errors.js";
 import { instagramAccountService } from "../services/instagram-account.service.js";
@@ -40,8 +41,9 @@ export const finishInstagramOAuth: RequestHandler = async (request, response, ne
       redirect.searchParams.set("instagram_oauth", "cancelled");
     } else {
       const code = typeof request.query.code === "string" ? request.query.code : "";
-      await instagramOAuthService.finish(userId, state, code);
+      const connection = await instagramOAuthService.finish(userId, state, code);
       redirect.searchParams.set("instagram_oauth", "success");
+      redirect.searchParams.set("instagram_user_id", connection.instagramUserId);
     }
   } catch (error) {
     redirect.searchParams.set("instagram_oauth", "error");
@@ -54,9 +56,10 @@ export const listInstagramConnections: RequestHandler = async (request, response
   try {
     const workspace = (request as AuthenticatedRequest).workspace;
     if (!workspace) throw new AppError(400, "WORKSPACE_SELECTION_REQUIRED", "Select a Workspace before continuing");
-    const all = await instagramAccountService.list(workspace.ownerUserId);
+    const all = (await instagramAccountService.list(workspace.ownerUserId)).filter((row) => row.status === "connected");
     const connections = workspace.role === "staff"
-      ? all.filter((row) => workspace.allowedChannels.some((channel) => channel.platform === "instagram" && channel.channelId === row.instagramUserId))
+      ? all.filter((row) => workspace.allowedChannels.some((channel) => channel.platform === "instagram" && channel.channelId === row.instagramUserId)
+        && !isWorkspaceChannelRevoked(workspace, "instagram", row.instagramUserId))
       : all;
     response.json({ connections });
   } catch (error) { next(error); }

@@ -80,3 +80,33 @@ Task 4: implementation commit `f21822a27a59d3af8ad8153afbdc3765a56c1ad5`; focuse
 - GREEN: focused outbound/client/controller suite passed 3 files / 92 tests. The service rejects whitespace-only Instagram content before account lookup or API call; code 100 maps to generic `INSTAGRAM_REQUEST_REJECTED`.
 - Failed/pending traces now carry the persisted response through the existing socket event path before the original stable error is forwarded. Conversation summary update and event emission are best effort and do not mask that error.
 - Official provider-specific recipient code mapping remains unclaimed pending documentation verification.
+Task 4: complete (commits f21822a..514281f, review clean)
+- Reviewer fixes addressed: reject blank Instagram text before credentials/Meta; map undocumented code 100 generically; update conversation summary and emit failed/pending trace before forwarding the same stable error.
+- Scoped re-review approved. Focused service/client/controller verification: 92/92 passed. Root `tsc` still exits 2 with eight diagnostics elsewhere, none in Task 4 changed files.
+- Deferred external gates: Meta public docs checked here do not state the 1,000 UTF-8-byte limit or exact error classifications; no development app/live call. Keep these as release validation requirements.
+
+## Task 5 implementation
+- RED: focused Workspace/realtime/account lifecycle command had 2 failing directory cases because active Instagram accounts were absent; existing lifecycle/access suites passed.
+- Added `InstagramAccountConnectionModel` directory query scoped to `{ ownerUserId, status: "connected" }` with safe profile fields only. Output channel ID is the canonical `instagramUserId`; staff filtering and realtime grants continue through the generic platform/channel path.
+- Added multiple-account, owner/admin directory, staff-filter, Instagram realtime grant, and exact credential-free once-only lifecycle history assertions. Connected-only lookup means accounts in disconnect's invalid state disappear from directory; successful local deletion removes the account thereafter.
+- GREEN: focused Workspace/history/REST access/Socket verification passed 12 files / 122 tests; `git diff --check` passed. Full command and scoped report: `task-5-report.md`.
+- A broader attempt including `src/routes/setting-history.routes.test.ts` exposed its incomplete history-service mock (`recordSettingHistorySafely` missing) while importing the full app. Added the missing mock export; the route test passed 3/3 and the full API suite passed that file.
+- Task 5 complete; no Meta app setup, production migration, or deployment.
+
+## Task 5 reviewer follow-up
+- RED regression reproduced that an old Instagram conversation repopulated a disconnected account (`ig-disconnected`) when no active Instagram connection existed.
+- GREEN excludes Instagram from the conversation aggregate and ignores any Instagram aggregate rows; the Workspace directory now sources Instagram exclusively from active `instagramRows`.
+- Focused directory and Workspace service suites passed 2 files / 12 tests; `git diff --check` passed. See `task-5-report.md`.
+- Further reviewer follow-up: Staff-specific `revokedChannels` now deny the exact disconnected Instagram channel across REST, directory/list, socket joins and inbox fanout, while preserving owner/admin behavior and `allowedChannels: []` unrestricted semantics. Disconnect persists the exact deny before provider unsubscribe and disconnects affected Workspace-member sockets; reconnect clears only that deny and invalidates their sockets so prior grants resume.
+- RED: unrestricted Staff outbound regression exposed a duplicate explicit-grant check in `message.service.ts`; removing the redundant guard leaves `canJoinConversation` as the shared policy. Added fanout projection assertion for `revokedChannels`.
+- GREEN: focused Task 5 suite 11 files / 131 tests passed; `git diff --check` passed. Full branch delivery is pending final verification and commit/push.
+- Root TypeScript check exits 2 on two unrelated diagnostics (Web Settings test import extension and security webhook missing auth module); no Task 5 diagnostics remain.
+- Fresh-review P1: revoked-channel snapshots did not protect historical Instagram conversations from Staff added afterward with empty/unrestricted grants. Workspace REST context and Socket handshake now hydrate currently connected Instagram IDs for Staff only; central REST filters, `canJoinConversation`, and inbox fanout gate Staff Instagram access against those IDs. Owner/admin historical access stays as before. `/instagram/connections` returns connected rows only for every role.
+- RED reproduced both the new-member stale-history access and owner list including a pending removal. GREEN: Task 5 focused suite 11 files / 137 tests passed; `git diff --check` passed. Fresh review approved after the exact-grant fix below.
+
+## Task 5 final-review fix: explicit Instagram grants
+
+- Final review found empty-grant Staff could access every active Instagram account despite the spec requiring explicit per-account grants.
+- RED reproduced this in REST filters, Socket room access/fanout, Workspace directory, and `/instagram/connections`.
+- GREEN preserves empty-grant behavior for non-Instagram platforms while requiring an exact active `{ platform: "instagram", channelId }` grant throughout those paths. Focused verification passed 11 files / 127 tests, and `git diff --check` passed.
+- Scoped re-review verdict: ADDRESSED; no new Important regressions found. See `task-5-report.md` for details.

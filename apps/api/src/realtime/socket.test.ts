@@ -28,8 +28,10 @@ const workspaceMemberMocks = vi.hoisted(() => ({ findOne: vi.fn(), find: vi.fn()
 vi.mock("../models/workspace-member.model.js", () => ({ WorkspaceMemberModel: workspaceMemberMocks }));
 const workspaceMocks = vi.hoisted(() => ({ findById: vi.fn(), findOne: vi.fn() }));
 vi.mock("../models/workspace.model.js", () => ({ WorkspaceModel: workspaceMocks }));
+const instagramMocks = vi.hoisted(() => ({ find: vi.fn(), rows: [] as Array<{ instagramUserId: string }> }));
+vi.mock("../models/instagram-account-connection.model.js", () => ({ InstagramAccountConnectionModel: { find: instagramMocks.find } }));
 
-import { createRealtimeServer, disconnectAuthSession, disconnectAuthUser, emitInboxEventToRecipients } from "./socket.js";
+import { createRealtimeServer, disconnectAuthSession, disconnectAuthUser, disconnectWorkspaceMemberSockets, emitInboxEventToRecipients } from "./socket.js";
 
 describe("inbox realtime recipients", () => {
   beforeEach(() => {
@@ -44,6 +46,8 @@ describe("inbox realtime recipients", () => {
     workspaceMemberMocks.find.mockReturnValue({ limit: () => ({ lean: () => Promise.resolve([]) }), select: () => ({ lean: () => Promise.resolve([]) }) });
     workspaceMocks.findById.mockReturnValue({ select: () => ({ lean: () => Promise.resolve(null) }) });
     workspaceMocks.findOne.mockReturnValue({ select: () => ({ lean: () => Promise.resolve(null) }) });
+    instagramMocks.rows = [];
+    instagramMocks.find.mockReturnValue({ select: () => ({ lean: () => Promise.resolve(instagramMocks.rows) }) });
     createRealtimeServer({} as never, "");
   });
 
@@ -95,6 +99,47 @@ describe("inbox realtime recipients", () => {
     expect(socketMocks.emit).toHaveBeenCalledWith("chat:conversation_updated", {
       id: "conversation-1", platform: "telegram", channelId: "chat-1"
     });
+  });
+
+  it("fans out Instagram only to staff with an exact grant", async () => {
+    instagramMocks.rows = [{ instagramUserId: "ig-1" }];
+    conversationMocks.findById.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({
+      ownerId: "owner-1", platform: "instagram", channelId: "ig-1"
+    }) }) });
+    workspaceMocks.findOne.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({ _id: "workspace-1" }) }) });
+    const selectMembershipFields = vi.fn(() => ({ lean: () => Promise.resolve([
+      { userId: "staff-revoked", role: "staff", allowedChannels: [{ platform: "instagram", channelId: "ig-1" }], revokedChannels: [{ platform: "instagram", channelId: "ig-1" }] },
+      { userId: "staff-unrestricted", role: "staff", allowedChannels: [], revokedChannels: [{ platform: "instagram", channelId: "ig-other" }] },
+      { userId: "owner-1", role: "owner", allowedChannels: [], revokedChannels: [] }
+    ]) }));
+    workspaceMemberMocks.find.mockReturnValue({ select: selectMembershipFields });
+
+    const payload = { id: "conversation-1", platform: "instagram", channelId: "ig-1" };
+    emitInboxEventToRecipients("chat:conversation_updated", ["owner-1", "staff-revoked"], payload);
+
+    await vi.waitFor(() => expect(socketMocks.to).toHaveBeenCalledWith(["inbox:owner-1"]));
+    expect(workspaceMemberMocks.find).toHaveBeenCalledWith({ workspaceId: "workspace-1" });
+    expect(selectMembershipFields).toHaveBeenCalledWith("userId role allowedPages allowedChannels revokedChannels");
+    expect(socketMocks.to).not.toHaveBeenCalledWith(["inbox:staff-unrestricted", "inbox:owner-1"]);
+    expect(socketMocks.to).not.toHaveBeenCalledWith(["inbox:owner-1", "inbox:staff-revoked"]);
+  });
+
+  it("does not fan out historical Instagram events to Staff when the account is disconnected", async () => {
+    conversationMocks.findById.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({
+      ownerId: "owner-1", platform: "instagram", channelId: "ig-old"
+    }) }) });
+    workspaceMocks.findOne.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({ _id: "workspace-1" }) }) });
+    workspaceMemberMocks.find.mockReturnValue({ select: () => ({ lean: () => Promise.resolve([
+      { userId: "staff-new", role: "staff", allowedChannels: [], revokedChannels: [] },
+      { userId: "owner-1", role: "owner", allowedChannels: [] }
+    ]) }) });
+
+    const payload = { id: "conversation-old", platform: "instagram", channelId: "ig-old" };
+    emitInboxEventToRecipients("chat:conversation_updated", ["owner-1", "staff-new"], payload);
+
+    await vi.waitFor(() => expect(socketMocks.to).toHaveBeenCalledWith(["inbox:owner-1"]));
+    expect(instagramMocks.find).toHaveBeenCalledWith({ ownerUserId: "owner-1", status: "connected" });
+    expect(socketMocks.to).not.toHaveBeenCalledWith(["inbox:staff-new", "inbox:owner-1"]);
   });
 
   it("broadcasts personal-account updates only to staff assigned that Workspace owner session", async () => {
@@ -161,13 +206,15 @@ describe("inbox realtime recipients", () => {
   });
 
   it("resolves platform-aware Workspace permissions in the socket handshake", async () => {
+    instagramMocks.rows = [{ instagramUserId: "ig-active" }];
     const principal = { id: "staff-1", email: "staff@example.com", role: "customer" };
     authMocks.verifyAccessToken.mockResolvedValue(principal);
     workspaceMemberMocks.findOne.mockReturnValue({ lean: () => Promise.resolve({
       workspaceId: "workspace-1", userId: "staff-1", role: "staff", allowedPages: [],
-      allowedChannels: [{ platform: "telegram", channelId: "chat-1" }]
+      allowedChannels: [{ platform: "telegram", channelId: "chat-1" }],
+      revokedChannels: [{ platform: "instagram", channelId: "ig-old" }]
     }) });
-    workspaceMocks.findById.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({ ownerUserId: "owner-1" }) }) });
+    workspaceMocks.findById.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({ _id: "workspace-1", ownerUserId: "owner-1" }) }) });
     const socket = { data: {}, handshake: { headers: {}, auth: { token: "session-token", workspaceId: "workspace-1" } } };
     const middleware = socketMocks.use.mock.calls[0]?.[0] as (socket: unknown, next: (error?: Error) => void) => Promise<void>;
     const next = vi.fn();
@@ -176,9 +223,17 @@ describe("inbox realtime recipients", () => {
 
     expect(socket.data).toEqual({ auth: {
       ...principal,
-      workspace: { ownerUserId: "owner-1", allowedChannels: [{ platform: "telegram", channelId: "chat-1" }], allowedPages: [] }
+      workspace: { id: "workspace-1", role: "staff", ownerUserId: "owner-1", allowedChannels: [{ platform: "telegram", channelId: "chat-1" }], allowedPages: [], activeInstagramChannelIds: ["ig-active"], revokedChannels: [{ platform: "instagram", channelId: "ig-old" }] }
     } });
+    expect(instagramMocks.find).toHaveBeenCalledWith({ ownerUserId: "owner-1", status: "connected" });
     expect(next).toHaveBeenCalledWith();
+  });
+
+  it("invalidates only the affected member socket room in the revoked Workspace", () => {
+    disconnectWorkspaceMemberSockets("workspace-1", ["staff-1", "staff-2"]);
+
+    expect(socketMocks.in).toHaveBeenCalledWith(["workspace-member:workspace-1:staff-1", "workspace-member:workspace-1:staff-2"]);
+    expect(socketMocks.disconnectSockets).toHaveBeenCalledWith(true);
   });
 
   it("joins inbox, user, and session rooms for a session-bound connection", async () => {
@@ -206,6 +261,20 @@ describe("inbox realtime recipients", () => {
 
     expect(join.mock.calls.map(([room]) => room)).toEqual(["auth-user:user-1", "inbox:user-1"]);
     expect(authMocks.isAuthSessionActive).not.toHaveBeenCalled();
+  });
+
+  it("joins a Workspace-scoped auth room so a channel revocation can reset only that member session", async () => {
+    const principal = { id: "staff-1", email: "staff@example.com", role: "customer", workspace: {
+      id: "workspace-1", ownerUserId: "owner-1", allowedPages: [], allowedChannels: [], revokedChannels: []
+    } };
+    const join = vi.fn().mockResolvedValue(undefined);
+    const socket = { data: { auth: principal }, join, on: vi.fn(), rooms: new Set<string>(), disconnect: vi.fn() };
+    const connected = socketMocks.on.mock.calls.find(([event]) => event === "connection")?.[1] as (socket: unknown) => Promise<void>;
+
+    await connected(socket);
+
+    expect(join).toHaveBeenCalledWith("workspace-member:workspace-1:staff-1");
+    expect(join).toHaveBeenCalledWith("inbox:staff-1");
   });
 
   it("disconnects only sockets in the requested auth room", () => {

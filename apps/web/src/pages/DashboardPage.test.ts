@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import { FacebookPublishingApiError } from "../lib/facebook-publishing.api.js";
+import * as DashboardPageModule from "./DashboardPage.js";
 import { buildDashboardAccounts, buildWorkspaceDashboardAccounts, conversationPathForPlatform, createLatestRequestRunner, loadFacebookDashboardStatus } from "./DashboardPage.js";
 import { buildConversationListRequestPath } from "./InboxPage.js";
 
@@ -59,6 +60,80 @@ describe("dashboard connected accounts", () => {
     });
   });
 
+  it("builds a separate account card and Inbox filter target for every connected Instagram account", () => {
+    expect(buildDashboardAccounts(
+      { connected: false, displayName: null, username: null },
+      { id: "zalo-session-1", status: "disconnected" },
+      null,
+      [
+        { id: "connection-1", instagramUserId: "ig-1", username: "shop_one", displayName: "Shop One", avatarUrl: "https://cdn.example/one.jpg", status: "connected", tokenExpiresAt: null, subscribedAt: null, lastValidatedAt: null, lastErrorCode: null, createdAt: "2026-09-24T00:00:00.000Z", updatedAt: "2026-09-24T00:00:00.000Z" },
+        { id: "connection-2", instagramUserId: "ig-2", username: "shop_two", displayName: null, avatarUrl: null, status: "connected", tokenExpiresAt: null, subscribedAt: null, lastValidatedAt: null, lastErrorCode: null, createdAt: "2026-09-24T00:00:00.000Z", updatedAt: "2026-09-24T00:00:00.000Z" }
+      ]
+    )).toMatchObject([
+      { id: "instagram:ig-1", platform: "instagram", identifier: "ig-1", username: "shop_one", name: "Shop One", avatarUrl: "https://cdn.example/one.jpg" },
+      { id: "instagram:ig-2", platform: "instagram", identifier: "ig-2", username: "shop_two", name: "shop_two" }
+    ]);
+  });
+
+  it("keeps invalid Instagram connections visible and identifies the exact connection to disconnect", () => {
+    const accounts = buildDashboardAccounts(
+      { connected: false, displayName: null, username: null },
+      { id: "zalo-session-1", status: "disconnected" },
+      null,
+      [{ id: "db-connection-id", instagramUserId: "ig-3", username: "shop_three", displayName: null, avatarUrl: null, status: "invalid", tokenExpiresAt: null, subscribedAt: null, lastValidatedAt: null, lastErrorCode: "INSTAGRAM_TOKEN_INVALID", createdAt: "2026-09-24T00:00:00.000Z", updatedAt: "2026-09-24T00:00:00.000Z" }]
+    );
+    expect(accounts).toMatchObject([{ id: "instagram:ig-3", status: "error" }]);
+    expect((DashboardPageModule as unknown as { instagramConnectionIdForAccount: (account: typeof accounts[number]) => string | null }).instagramConnectionIdForAccount(accounts[0])).toBe("db-connection-id");
+  });
+
+  it("preserves an Instagram load failure as an error instead of treating the account list as empty", async () => {
+    const load = (DashboardPageModule as unknown as { loadInstagramDashboardConnections: (request: () => Promise<never>) => Promise<{ connections: unknown[] | null; error: string | null }> }).loadInstagramDashboardConnections;
+    expect(load).toBeTypeOf("function");
+    if (typeof load === "function") {
+      await expect(load(async () => { throw new Error("network detail"); })).resolves.toEqual({
+        connections: null,
+        error: "Không thể kiểm tra kết nối Instagram. Vui lòng thử lại."
+      });
+    }
+  });
+
+  it("ignores an older Instagram response after switching between owner Workspaces", async () => {
+    let activeWorkspaceId: string | undefined = "owner-workspace-a";
+    let resolveOlder: ((accounts: string[]) => void) | undefined;
+    const visibleAccounts: string[][] = [];
+    const runner = (DashboardPageModule as unknown as {
+      createWorkspaceScopedRequestRunner: (
+        getWorkspaceId: () => string | undefined,
+        onResult: (result: string[]) => void
+      ) => (workspaceId: string | undefined, request: () => Promise<string[]>) => Promise<string[]>;
+    }).createWorkspaceScopedRequestRunner;
+    expect(runner).toBeTypeOf("function");
+    if (typeof runner !== "function") return;
+    const run = runner(() => activeWorkspaceId, (result) => visibleAccounts.push(result));
+
+    const olderWorkspaceRequest = run("owner-workspace-a", () => new Promise<string[]>((resolve) => { resolveOlder = resolve; }));
+    activeWorkspaceId = "owner-workspace-b";
+    const currentWorkspaceRequest = run("owner-workspace-b", async () => ["account-b"]);
+    await currentWorkspaceRequest;
+    resolveOlder?.(["account-a"]);
+    await olderWorkspaceRequest;
+
+    expect(visibleAccounts).toEqual([["account-b"]]);
+  });
+
+  it("does not render the previous Workspace Instagram accounts while the new Workspace is loading", () => {
+    const workspaceScopedValue = (DashboardPageModule as unknown as {
+      workspaceScopedValue: <T>(activeWorkspaceId: string | undefined, storedWorkspaceId: string | undefined, value: T) => T | null;
+    }).workspaceScopedValue;
+    expect(workspaceScopedValue).toBeTypeOf("function");
+    if (typeof workspaceScopedValue !== "function") return;
+    const priorWorkspaceAccounts = [{ id: "prior-connection", instagramUserId: "ig-from-a", username: "workspace_a", displayName: "Workspace A", avatarUrl: null, status: "connected" as const, tokenExpiresAt: null, subscribedAt: null, lastValidatedAt: null, lastErrorCode: null, createdAt: "2026-09-24T00:00:00.000Z", updatedAt: "2026-09-24T00:00:00.000Z" }];
+    const visibleConnections = workspaceScopedValue("owner-workspace-b", "owner-workspace-a", priorWorkspaceAccounts) ?? [];
+    const accounts = buildDashboardAccounts({ connected: false, displayName: null, username: null }, { id: "zalo", status: "disconnected" }, null, visibleConnections);
+
+    expect(accounts.some((account) => account.identifier === "ig-from-a")).toBe(false);
+  });
+
   it("maps each connected channel to its platform identifier instead of its username", () => {
     expect(buildDashboardAccounts(
       { connected: true, telegramUserId: "telegram-42", displayName: "Telegram cá nhân", username: "wrong-username" },
@@ -77,6 +152,7 @@ describe("dashboard connected accounts", () => {
     expect(conversationPathForPlatform("facebook:page-42")).toBe(
       "/inbox?platform=facebook&channelId=page-42"
     );
+    expect(conversationPathForPlatform("instagram:ig-42")).toBe("/inbox?platform=instagram&channelId=ig-42");
     expect(conversationPathForPlatform("zalo:oa-1")).toBe("/inbox?platform=zalo&channelId=oa-1");
     expect(conversationPathForPlatform("telegram:bot-1")).toBe("/inbox?platform=telegram&channelId=bot-1");
     expect(conversationPathForPlatform()).toBe("/inbox");
@@ -85,6 +161,12 @@ describe("dashboard connected accounts", () => {
   it("requests Facebook conversations with the selected Page ID", () => {
     expect(buildConversationListRequestPath("facebook", "page-42")).toBe(
       "/api/v1/conversations?platform=facebook&channelId=page-42"
+    );
+  });
+
+  it("requests conversations for the selected Instagram account ID", () => {
+    expect(buildConversationListRequestPath("instagram", "ig-42")).toBe(
+      "/api/v1/conversations?platform=instagram&channelId=ig-42"
     );
   });
 
@@ -102,7 +184,16 @@ describe("dashboard connected accounts", () => {
     expect(source).toContain('activeWorkspace?.role === "staff"');
     expect(source).toContain("/api/v1/workspaces/${activeWorkspace.id}/channels");
     expect(source).toContain("buildWorkspaceDashboardAccounts(workspaceChannels ?? [])");
-    expect(source).toContain("canManage={!isWorkspaceStaff}");
+    expect(source).toContain("canManage={!isWorkspaceStaff && (account.platform !== \"instagram\" || isWorkspaceOwner)}");
+    expect(source).toContain("isWorkspaceStaff ? Promise.resolve({ connections: [], error: null }) : loadInstagramDashboardConnections()");
+  });
+
+  it("limits Instagram connection management to the active Workspace owner", () => {
+    const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
+    expect(source).toContain('const isWorkspaceOwner = activeWorkspace?.role === "owner"');
+    expect(source).toContain('account.platform !== "instagram" || isWorkspaceOwner');
+    expect(source).toContain("canManageInstagram={isWorkspaceOwner}");
+    expect(source).toContain("buildWorkspaceDashboardAccounts(workspaceChannels ?? [])");
   });
 
   it("forwards nested settings navigation from the dashboard topbar", () => {
@@ -207,6 +298,13 @@ describe("dashboard connected accounts", () => {
     expect(source).toContain('account.platform === "facebook"');
     expect(source).toContain("Làm mới kết nối");
     expect(source).toContain("Ngắt kết nối");
+  });
+
+  it("disconnects Instagram with its server connection ID then reloads dashboard state", () => {
+    const source = readFileSync(new URL("./DashboardPage.tsx", import.meta.url), "utf8");
+    expect(source).toContain("await removeInstagramConnection(connectionId)");
+    expect(source).toContain("await loadStatus(accountToDeactivate.platform === \"facebook\")");
+    expect(source).toContain('account.platform === "instagram"');
   });
 
   it("renders connected accounts as a compact responsive grid without the redundant section title", () => {

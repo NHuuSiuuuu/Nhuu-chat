@@ -10,8 +10,8 @@ export function getDisplayedAiSuggestions(aiSuggestions: string[] | null | undef
   return isLoading || !aiSuggestions?.length ? [] : aiSuggestions;
 }
 
-export function isFacebookTextOnly(platform?: string): boolean {
-  return platform === "facebook";
+export function isTextOnlyDmPlatform(platform?: string): boolean {
+  return platform === "facebook" || platform === "instagram";
 }
 
 export function createQuickReplyDraft(reply: QuickReplyContract, allowAttachment = true): { content: string; attachmentUrl: string | null } {
@@ -100,7 +100,7 @@ export function MessageComposer({ onSend, quickReplies, disabled = false, draft,
   const composerRef = useRef<HTMLFormElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const textOnly = isFacebookTextOnly(platform);
+  const textOnly = isTextOnlyDmPlatform(platform);
   const availableQuickReplies = textOnly ? quickReplies.map((reply) => ({ ...reply, attachment: undefined })) : quickReplies;
 
   useEffect(() => {
@@ -233,6 +233,7 @@ export function MessageComposer({ onSend, quickReplies, disabled = false, draft,
           <input ref={imageInputRef} className="hidden" type="file" accept="image/jpeg,image/png,image/gif,image/webp" aria-label="Chọn hình ảnh đính kèm" onChange={(event) => selectFile(event.target.files?.[0])} />
           <button className="grid size-8 place-items-center rounded-md text-gray-500 transition hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 cursor-pointer disabled:cursor-not-allowed" type="button" aria-label="Đính kèm tệp" title="Video và tài liệu" onClick={() => fileInputRef.current?.click()} disabled={disabled}><InboxIcon name="paperclip" size={17} /></button>
           <button className="grid size-8 place-items-center rounded-md text-gray-500 transition hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 cursor-pointer disabled:cursor-not-allowed" type="button" aria-label="Đính kèm hình ảnh" title="Hình ảnh" onClick={() => imageInputRef.current?.click()} disabled={disabled}><InboxIcon name="image" size={17} /></button></>}
+          {platform === "instagram" && <><button className="grid size-8 place-items-center rounded-md text-gray-400 opacity-50 cursor-pointer disabled:cursor-not-allowed" type="button" aria-label="Đính kèm tệp" title="Instagram hiện chỉ hỗ trợ tin nhắn văn bản" disabled><InboxIcon name="paperclip" size={17} /></button><button className="grid size-8 place-items-center rounded-md text-gray-400 opacity-50 cursor-pointer disabled:cursor-not-allowed" type="button" aria-label="Đính kèm hình ảnh" title="Instagram hiện chỉ hỗ trợ tin nhắn văn bản" disabled><InboxIcon name="image" size={17} /></button><span className="sr-only" role="note">Instagram hiện chỉ hỗ trợ tin nhắn văn bản</span></>}
           <button className="grid size-8 place-items-center rounded-md text-gray-500 transition hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 cursor-pointer" type="button" onClick={() => { setSuggestionKind("quick-reply"); setSuggestionIndex(0); }} aria-label="Mở mẫu trả lời" title="Mẫu trả lời nhanh"><InboxIcon name="template" size={17} /></button>
           <button className="grid size-8 place-items-center rounded-md bg-blue-600 text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 cursor-pointer" type="submit" aria-label="Gửi tin nhắn" title="Gửi tin nhắn" disabled={disabled}><InboxIcon name="send" size={17} /></button>
         </div>

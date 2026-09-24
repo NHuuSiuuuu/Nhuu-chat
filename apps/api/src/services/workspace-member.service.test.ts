@@ -46,7 +46,7 @@ function fixture() {
       }
     }
   };
-  return { service: new WorkspaceMemberService(dependencies), memberships };
+  return { service: new WorkspaceMemberService(dependencies), memberships, channels };
 }
 
 describe("WorkspaceMemberService", () => {
@@ -114,5 +114,23 @@ describe("WorkspaceMemberService", () => {
     });
     await expect(fixtureWithRestrictedMember.service.listChannels("workspace-1", "staff-1"))
       .resolves.toMatchObject({ channels: [{ platform: "telegram", channelId: "chat-1" }] });
+  });
+
+  it("requires Instagram grants for unrestricted staff while preserving other channel access", async () => {
+    const { service, memberships, channels } = fixture();
+    channels.push(
+      { platform: "instagram", channelId: "ig-disconnected", name: "Disconnected Shop" },
+      { platform: "instagram", channelId: "ig-active", name: "Active Shop" }
+    );
+    memberships.set("workspace-1:staff-1", {
+      workspaceId: "workspace-1", userId: "staff-1", role: "staff", allowedPages: [], allowedChannels: [],
+      revokedChannels: [{ platform: "instagram", channelId: "ig-disconnected" }]
+    });
+
+    const result = await service.listChannels("workspace-1", "staff-1");
+
+    expect(result.channels).not.toContainEqual({ platform: "instagram", channelId: "ig-active", name: "Active Shop" });
+    expect(result.channels).not.toContainEqual({ platform: "instagram", channelId: "ig-disconnected", name: "Disconnected Shop" });
+    expect(result.channels).toContainEqual({ platform: "facebook", channelId: "page-1", name: "Page Một" });
   });
 });

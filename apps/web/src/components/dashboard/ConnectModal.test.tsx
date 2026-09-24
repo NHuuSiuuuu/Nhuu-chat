@@ -343,3 +343,65 @@ describe("ConnectModal Tailwind migration", () => {
     expect(source).toContain('<QrLoadingState platform="Zalo" loading={loading} />');
   });
 });
+
+describe("Instagram Login modal", () => {
+  it("starts the independent Instagram OAuth redirect from its connect action", async () => {
+    const authorizationUrl = "https://www.instagram.com/oauth/authorize?state=one-time";
+    const start = vi.fn(async () => ({ authorizationUrl }));
+    const redirect = vi.fn();
+    const candidate: unknown = (connectModal as unknown as Record<string, unknown>).startInstagramOAuthAndRedirect;
+    expect(candidate).toBeTypeOf("function");
+    if (typeof candidate === "function") await candidate(start, redirect);
+
+    expect(start).toHaveBeenCalledOnce();
+    expect(redirect).toHaveBeenCalledWith(authorizationUrl);
+  });
+
+  it("distinguishes cancelled and failed callback states", () => {
+    expect(connectModal.instagramOAuthCallbackAction("?instagram_oauth=cancelled")).toEqual({ status: "cancelled" });
+    expect(connectModal.instagramOAuthCallbackAction("?instagram_oauth=error&code=INSTAGRAM_ACCOUNT_ALREADY_CONNECTED")).toEqual({
+      status: "error",
+      message: "Tài khoản Instagram này đã được kết nối với Workspace khác."
+    });
+  });
+
+  it("renders Instagram cancellation, API errors, and connected account metadata as distinct states", () => {
+    const candidate: unknown = (connectModal as unknown as Record<string, unknown>).InstagramConnectContent;
+    expect(candidate).toBeTypeOf("function");
+    if (typeof candidate !== "function") return;
+    const Content = candidate as React.ComponentType<{ flow: unknown; loading: boolean; onStart: () => void }>;
+    const cancelled = renderToStaticMarkup(<Content flow={{ status: "cancelled" }} loading={false} onStart={() => undefined} />);
+    const error = renderToStaticMarkup(<Content flow={{ status: "error", message: "Không thể kết nối Instagram." }} loading={false} onStart={() => undefined} />);
+    const connected = renderToStaticMarkup(<Content flow={{ status: "connected", connections: [{ id: "c1", instagramUserId: "ig-1", username: "shop", displayName: "Shop", avatarUrl: null, status: "connected" }] }} loading={false} onStart={() => undefined} />);
+    expect(cancelled).toContain("đã huỷ đăng nhập Instagram");
+    expect(error).toContain('role="alert"');
+    expect(error).toContain("Thử lại đăng nhập");
+    expect(connected).toContain("Shop");
+    expect(connected).toContain("Kết nối thêm tài khoản");
+  });
+
+  it("confirms OAuth success by reloading persisted connections before reporting connected", async () => {
+    const load = vi.fn(async () => [{ id: "connection-1", instagramUserId: "ig-1", username: "shop", displayName: "Shop", avatarUrl: null, status: "connected" as const, tokenExpiresAt: null, subscribedAt: null, lastValidatedAt: null, lastErrorCode: null, createdAt: "2026-09-24T00:00:00.000Z", updatedAt: "2026-09-24T00:00:00.000Z" }]);
+    const onConnected = vi.fn();
+
+    await expect(connectModal.confirmInstagramOAuthCallback("?instagram_oauth=success&instagram_user_id=ig-1", load, onConnected)).resolves.toMatchObject({ status: "connected" });
+    expect(load).toHaveBeenCalledOnce();
+    expect(onConnected).toHaveBeenCalledOnce();
+  });
+
+  it("does not trust an OAuth success query when the server has no active account", async () => {
+    const load = vi.fn(async () => []);
+    const onConnected = vi.fn();
+
+    await expect(connectModal.confirmInstagramOAuthCallback("?instagram_oauth=success&instagram_user_id=ig-new", load, onConnected)).resolves.toMatchObject({ status: "error" });
+    expect(onConnected).not.toHaveBeenCalled();
+  });
+
+  it("does not treat an unrelated existing Instagram account as this OAuth attempt", async () => {
+    const load = vi.fn(async () => [{ id: "existing", instagramUserId: "ig-existing", username: "existing", displayName: "Existing", avatarUrl: null, status: "connected" as const, tokenExpiresAt: null, subscribedAt: null, lastValidatedAt: null, lastErrorCode: null, createdAt: "2026-09-24T00:00:00.000Z", updatedAt: "2026-09-24T00:00:00.000Z" }]);
+    const onConnected = vi.fn();
+
+    await expect(connectModal.confirmInstagramOAuthCallback("?instagram_oauth=success&instagram_user_id=ig-new", load, onConnected)).resolves.toMatchObject({ status: "error" });
+    expect(onConnected).not.toHaveBeenCalled();
+  });
+});

@@ -3,7 +3,8 @@ import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const serviceMocks = vi.hoisted(() => ({
-  listSettingHistories: vi.fn()
+  listSettingHistories: vi.fn(),
+  recordSettingHistorySafely: vi.fn()
 }));
 const authMocks = vi.hoisted(() => ({
   verifyAccessToken: vi.fn()

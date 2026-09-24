@@ -4,8 +4,9 @@ import { isValidObjectId } from "mongoose";
 import { AppError } from "../common/errors.js";
 import { WorkspaceMemberModel } from "../models/workspace-member.model.js";
 import { WorkspaceModel } from "../models/workspace.model.js";
+import { InstagramAccountConnectionModel } from "../models/instagram-account-connection.model.js";
 import { workspaceService } from "../services/workspace.service.js";
-import { effectiveAllowedChannels } from "./workspace-channel-access.js";
+import { effectiveAllowedChannels, effectiveRevokedChannels } from "./workspace-channel-access.js";
 import type { AuthenticatedRequest } from "./auth.middleware.js";
 
 export interface WorkspaceContext {
@@ -14,6 +15,8 @@ export interface WorkspaceContext {
   role: "owner" | "admin" | "staff";
   allowedPages: string[] | null;
   allowedChannels: Array<{ platform: "facebook" | "instagram" | "zalo" | "telegram" | "zalo_personal" | "telegram_personal"; channelId: string }>;
+  revokedChannels: Array<{ platform: "facebook" | "instagram" | "zalo" | "telegram" | "zalo_personal" | "telegram_personal"; channelId: string }>;
+  activeInstagramChannelIds: string[];
 }
 
 export const resolveWorkspaceContext: RequestHandler = async (request, _response, next) => {
@@ -39,9 +42,14 @@ export const resolveWorkspaceContext: RequestHandler = async (request, _response
     const workspace = await WorkspaceModel.findById(membership.workspaceId).select("ownerUserId").lean();
     if (!workspace) throw new AppError(404, "WORKSPACE_NOT_FOUND", "Workspace was not found");
     const allowedChannels = membership.role === "staff" ? effectiveAllowedChannels(membership) : [];
+    const revokedChannels = membership.role === "staff" ? effectiveRevokedChannels(membership) : [];
+    const instagramRows = membership.role === "staff"
+      ? await InstagramAccountConnectionModel.find({ ownerUserId: workspace.ownerUserId, status: "connected" }).select("instagramUserId").lean()
+      : [];
     authRequest.workspace = {
       id: String(membership.workspaceId), ownerUserId: String(workspace.ownerUserId),
-      role: membership.role, allowedChannels,
+      role: membership.role, allowedChannels, revokedChannels,
+      activeInstagramChannelIds: instagramRows.map((row) => row.instagramUserId),
       allowedPages: membership.role !== "staff" || allowedChannels.length === 0
         ? null
         : allowedChannels.filter((channel) => channel.platform === "facebook").map((channel) => channel.channelId)

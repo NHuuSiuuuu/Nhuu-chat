@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
+import * as React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import * as composerModule from "./MessageComposer";
+import { MessageComposer } from "./MessageComposer.js";
+import * as composerModule from "./MessageComposer.js";
 
 describe("MessageComposer accessibility", () => {
   it("keeps a visible focus ring on the message input", () => {
@@ -179,9 +182,10 @@ describe("MessageComposer accessibility", () => {
     }, false)).toEqual({ content: "Xem danh mục", attachmentUrl: null });
   });
 
-  it("recognizes Facebook as a text-only composer platform", () => {
-    expect(composerModule.isFacebookTextOnly("facebook")).toBe(true);
-    expect(composerModule.isFacebookTextOnly("telegram_personal")).toBe(false);
+  it("recognizes text-only DM platforms and strips media quick replies", () => {
+    expect(composerModule.isTextOnlyDmPlatform("facebook")).toBe(true);
+    expect(composerModule.isTextOnlyDmPlatform("instagram")).toBe(true);
+    expect(composerModule.isTextOnlyDmPlatform("telegram_personal")).toBe(false);
     expect(composerModule.createQuickReplyDraft({ id: "other", shortcut: "file", message: "Có ảnh", attachment: {
       secureUrl: "https://example.test/image.png", publicId: "image", resourceType: "image", mimeType: "image/png", bytes: 42, width: 2, height: 2
     } })).toMatchObject({ attachmentUrl: "https://example.test/image.png" });
@@ -189,6 +193,14 @@ describe("MessageComposer accessibility", () => {
     expect(source).toContain("!textOnly && <>");
     expect(source).toContain("quickReplies.map((reply) => ({ ...reply, attachment: undefined }))");
     expect(source).toContain("disabled={disabled}");
+  });
+
+  it("shows disabled Instagram attachment controls with an explanation", () => {
+    const html = renderToStaticMarkup(<MessageComposer platform="instagram" quickReplies={[]} onSend={async () => true} />);
+    expect(html).toContain('aria-label="Đính kèm tệp"');
+    expect(html).toContain('aria-label="Đính kèm hình ảnh"');
+    expect(html).toContain('disabled=""');
+    expect(html).toContain("Instagram hiện chỉ hỗ trợ tin nhắn văn bản");
   });
 
   it("lists backend shortcuts and exposes the selected attachment URL", () => {

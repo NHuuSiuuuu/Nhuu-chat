@@ -5,10 +5,13 @@ import { AppError } from "../common/errors.js";
 import { InstagramAccountConnectionModel } from "../models/instagram-account-connection.model.js";
 import { InstagramMetaClient } from "./instagram-meta.client.js";
 import { recordSettingHistorySafely } from "./setting-history.service.js";
+import { clearWorkspaceChannelRevocation, revokeWorkspaceChannel, type AffectedWorkspaceMembers } from "./workspace-channel-revocation.service.js";
+import { disconnectWorkspaceMemberSockets } from "../realtime/socket.js";
 
 const SUBSCRIBE_PENDING = "INSTAGRAM_SUBSCRIBE_PENDING";
 const REMOVE_PENDING = "INSTAGRAM_REMOVE_PENDING";
 const REMOVE_UNSUBSCRIBED = "INSTAGRAM_REMOVE_UNSUBSCRIBED";
+const ACCESS_REVOKE_FAILED = "INSTAGRAM_ACCESS_REVOKE_FAILED";
 const REMOVE_LEASE_MS = 30_000;
 
 interface RecordShape {
@@ -51,6 +54,9 @@ interface Dependencies {
   encrypt?: (value: string) => string;
   decrypt?: (value: string) => string;
   recordHistory?: typeof recordSettingHistorySafely;
+  revokeChannelAccess?: typeof revokeWorkspaceChannel;
+  clearChannelRevocation?: typeof clearWorkspaceChannelRevocation;
+  invalidateWorkspaceMembers?: typeof disconnectWorkspaceMemberSockets;
 }
 
 function responseOf(row: RecordShape): InstagramConnectionResponse {
@@ -88,6 +94,9 @@ export class InstagramAccountService {
   private readonly encrypt: NonNullable<Dependencies["encrypt"]>;
   private readonly decrypt: NonNullable<Dependencies["decrypt"]>;
   private readonly recordHistory: NonNullable<Dependencies["recordHistory"]>;
+  private readonly revokeChannelAccess: NonNullable<Dependencies["revokeChannelAccess"]>;
+  private readonly clearChannelRevocation: NonNullable<Dependencies["clearChannelRevocation"]>;
+  private readonly invalidateWorkspaceMembers: NonNullable<Dependencies["invalidateWorkspaceMembers"]>;
 
   constructor(dependencies: Dependencies = {}) {
     this.model = dependencies.model ?? InstagramAccountConnectionModel as unknown as ModelShape;
@@ -95,6 +104,9 @@ export class InstagramAccountService {
     this.encrypt = dependencies.encrypt ?? encryptSecret;
     this.decrypt = dependencies.decrypt ?? decryptSecret;
     this.recordHistory = dependencies.recordHistory ?? recordSettingHistorySafely;
+    this.revokeChannelAccess = dependencies.revokeChannelAccess ?? revokeWorkspaceChannel;
+    this.clearChannelRevocation = dependencies.clearChannelRevocation ?? clearWorkspaceChannelRevocation;
+    this.invalidateWorkspaceMembers = dependencies.invalidateWorkspaceMembers ?? disconnectWorkspaceMemberSockets;
   }
 
   // Giữ claim toàn cục trước lệnh subscribe để hai Workspace không thể dùng chung account.
@@ -164,6 +176,12 @@ export class InstagramAccountService {
       ).catch(() => undefined);
       throw new AppError(503, "INSTAGRAM_CONNECTION_FAILED", "Instagram connection could not be saved");
     }
+    try {
+      const affected = await this.clearChannelRevocation(ownerUserId, { platform: "instagram", channelId: connected.instagramUserId });
+      this.invalidateAffectedMembers(affected);
+    } catch {
+      throw new AppError(503, "INSTAGRAM_CONNECTION_FAILED", "Instagram connection could not be saved");
+    }
     if (existing?.status !== "connected") {
       this.recordHistory({ userId: ownerUserId, actionType: "CONNECT_CHANNEL", actionTitle: "Kết nối Instagram", oldValue: {}, newValue: historyMetadata(connected) });
     }
@@ -182,6 +200,7 @@ export class InstagramAccountService {
     if (existing.lastErrorCode === SUBSCRIBE_PENDING) {
       throw new AppError(409, "INSTAGRAM_CONNECTION_BUSY", "Instagram connection is being updated");
     }
+    let accessRevoked = false;
     if (existing.lastErrorCode !== REMOVE_UNSUBSCRIBED) {
       // Chờ lease cũ hết hạn trước khi thử lại một unsubscribe có kết quả chưa được ghi nhận.
       if (existing.lastErrorCode === REMOVE_PENDING && existing.updatedAt.getTime() > Date.now() - REMOVE_LEASE_MS) {
@@ -202,6 +221,17 @@ export class InstagramAccountService {
         throw new AppError(503, "INSTAGRAM_DISCONNECT_FAILED", "Instagram disconnection could not be saved");
       }
       if (!removing) throw new AppError(409, "INSTAGRAM_CONNECTION_BUSY", "Instagram connection is being updated");
+      try {
+        const affected = await this.revokeChannelAccess(ownerUserId, { platform: "instagram", channelId: existing.instagramUserId });
+        this.invalidateAffectedMembers(affected);
+        accessRevoked = true;
+      } catch {
+        await this.model.findOneAndUpdate(
+          { _id: existing._id, ownerUserId, lastErrorCode: REMOVE_PENDING },
+          { $set: { lastErrorCode: ACCESS_REVOKE_FAILED } }, { returnDocument: "after" }
+        ).catch(() => undefined);
+        throw new AppError(503, "INSTAGRAM_DISCONNECT_FAILED", "Instagram disconnection could not be saved");
+      }
       if (existing.subscribedAt && existing.encryptedAccessToken) {
         try {
           await this.meta.unsubscribe(existing.instagramUserId, this.decrypt(existing.encryptedAccessToken));
@@ -222,6 +252,14 @@ export class InstagramAccountService {
         recorded = null;
       }
       if (!recorded) throw new AppError(503, "INSTAGRAM_DISCONNECT_FAILED", "Instagram disconnection could not be saved");
+    }
+    if (!accessRevoked) {
+      try {
+        const affected = await this.revokeChannelAccess(ownerUserId, { platform: "instagram", channelId: existing.instagramUserId });
+        this.invalidateAffectedMembers(affected);
+      } catch {
+        throw new AppError(503, "INSTAGRAM_DISCONNECT_FAILED", "Instagram disconnection could not be saved");
+      }
     }
     let deleted: RecordShape | null;
     try {
@@ -248,6 +286,10 @@ export class InstagramAccountService {
     );
     if (!updated) throw new AppError(409, "INSTAGRAM_CONNECTION_BUSY", "Instagram connection is being updated");
     return responseOf(updated);
+  }
+
+  private invalidateAffectedMembers(affected: AffectedWorkspaceMembers | null): void {
+    if (affected?.memberUserIds.length) this.invalidateWorkspaceMembers(affected.workspaceId, affected.memberUserIds);
   }
 }
 

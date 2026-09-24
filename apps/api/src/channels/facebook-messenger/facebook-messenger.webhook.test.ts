@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const socket = vi.hoisted(() => ({ emitChatEvent: vi.fn(), emitInboxEventToRecipients: vi.fn() }));
+const socket = vi.hoisted(() => ({ emitChatEvent: vi.fn(), emitInboxEventToRecipients: vi.fn(), disconnectWorkspaceMemberSockets: vi.fn() }));
 vi.mock("../../realtime/socket.js", () => socket);
 
 import { startTestDatabase, stopTestDatabase } from "../../test/mongo-repl-set.js";

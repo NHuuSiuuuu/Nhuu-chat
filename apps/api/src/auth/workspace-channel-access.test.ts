@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { effectiveAllowedChannels, isWorkspaceChannelPlatform, workspaceChannelAccessFilter } from "./workspace-channel-access.js";
+import { effectiveAllowedChannels, effectiveRevokedChannels, isWorkspaceChannelPlatform, workspaceChannelAccessFilter } from "./workspace-channel-access.js";
 
 describe("workspace channel access", () => {
   it("normalizes legacy Facebook Page permissions without granting a matching ID on another platform", () => {
@@ -24,6 +24,31 @@ describe("workspace channel access", () => {
     expect(workspaceChannelAccessFilter("owner-1", [])).toEqual({
       ownerId: "owner-1",
       platform: { $in: ["facebook", "instagram", "zalo", "telegram", "zalo_personal", "telegram_personal"] }
+    });
+  });
+
+  it("requires an exact grant for Instagram even when other channels are unrestricted", () => {
+    expect(workspaceChannelAccessFilter("owner-1", [], [], ["ig-active"])).toEqual({ ownerId: "owner-1", platform: { $in: ["facebook", "zalo", "telegram", "zalo_personal", "telegram_personal"] } });
+    expect(workspaceChannelAccessFilter("owner-1", [], [], [])).toEqual({
+      ownerId: "owner-1", platform: { $in: ["facebook", "zalo", "telegram", "zalo_personal", "telegram_personal"] }
+    });
+  });
+
+  it("keeps Instagram out of the unrestricted staff filter while retaining an exact grant", () => {
+    expect(workspaceChannelAccessFilter("owner-1", [
+      { platform: "instagram", channelId: "ig-active" }, { platform: "telegram", channelId: "chat-1" }
+    ], [], ["ig-active"])).toEqual({ $or: [
+      { ownerId: "owner-1", platform: "instagram", channelId: "ig-active" },
+      { ownerId: "owner-1", platform: "telegram", channelId: "chat-1" }
+    ] });
+  });
+
+  it("removes explicitly granted Instagram channels from the REST scope when disconnected", () => {
+    expect(workspaceChannelAccessFilter("owner-1", [
+      { platform: "instagram", channelId: "ig-gone" },
+      { platform: "telegram", channelId: "chat-1" }
+    ], [], ["ig-active"])).toEqual({
+      ownerId: "owner-1", platform: "telegram", channelId: "chat-1"
     });
   });
 
@@ -53,5 +78,17 @@ describe("workspace channel access", () => {
     expect(workspaceChannelAccessFilter("owner-1", [
       { platform: "telegram_personal", channelId: "owner-1" }
     ])).toEqual({ ownerId: "owner-1", platform: "telegram_personal" });
+  });
+
+  it("keeps an exact revoked channel denied without changing unrestricted access to other channels", () => {
+    const revoked = effectiveRevokedChannels({ revokedChannels: [
+      { platform: "instagram", channelId: "ig-disconnected" },
+      { platform: "instagram", channelId: "ig-disconnected" }
+    ] });
+    expect(revoked).toEqual([{ platform: "instagram", channelId: "ig-disconnected" }]);
+    expect(workspaceChannelAccessFilter("owner-1", [], revoked)).toEqual({ $and: [
+      { ownerId: "owner-1", platform: { $in: ["facebook", "instagram", "zalo", "telegram", "zalo_personal", "telegram_personal"] } },
+      { $nor: [{ ownerId: "owner-1", platform: "instagram", channelId: "ig-disconnected" }] }
+    ] });
   });
 });

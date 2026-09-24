@@ -24,11 +24,18 @@ function fixture() {
       return index < 0 ? null : rows.splice(index, 1)[0];
     })
   };
-  const meta = { subscribe: vi.fn(async () => undefined), unsubscribe: vi.fn(async () => undefined), refreshLongToken: vi.fn(async () => ({ accessToken: "new-secret", expiresAt: new Date("2030-01-01") })) };
+  const lifecycle: string[] = [];
+  const meta = { subscribe: vi.fn(async () => undefined), unsubscribe: vi.fn(async () => { lifecycle.push("unsubscribe"); }), refreshLongToken: vi.fn(async () => ({ accessToken: "new-secret", expiresAt: new Date("2030-01-01") })) };
   const history = vi.fn();
-  const service = new InstagramAccountService({ model: model as never, meta: meta as never, recordHistory: history, encrypt: (token) => `encrypted:${token}`, decrypt: (token) => token.replace("encrypted:", "") });
+  const access = {
+    revoke: vi.fn(async () => { lifecycle.push("revoke"); return { workspaceId: "workspace-1", memberUserIds: ["staff-1", "staff-2"] }; }),
+    clear: vi.fn(async () => { lifecycle.push("clear"); return { workspaceId: "workspace-1", memberUserIds: ["staff-1"] }; }),
+    invalidate: vi.fn(() => { lifecycle.push("invalidate"); })
+  };
+  const service = new InstagramAccountService({ model: model as never, meta: meta as never, recordHistory: history, encrypt: (token) => `encrypted:${token}`, decrypt: (token) => token.replace("encrypted:", ""),
+    revokeChannelAccess: access.revoke, clearChannelRevocation: access.clear, invalidateWorkspaceMembers: access.invalidate });
   const input = { instagramUserId: "123", accessToken: "long-secret", username: "business", displayName: "Business", avatarUrl: null, expiresAt: new Date("2030-01-01") };
-  return { service, rows, model, meta, history, input };
+  return { service, rows, model, meta, history, input, access, lifecycle };
 }
 
 describe("Instagram account lifecycle", () => {
@@ -94,19 +101,35 @@ describe("Instagram account lifecycle", () => {
   });
 
   it("disconnects only an owned account and records history once", async () => {
-    const { service, rows, meta, history, input } = fixture();
+    const { service, rows, meta, history, input, access, lifecycle } = fixture();
     await service.connect("owner-1", input);
     history.mockClear();
     expect(await service.disconnect("owner-2", "1")).toEqual({ disconnected: false });
     expect(rows).toHaveLength(1);
     expect(await service.disconnect("owner-1", "1")).toEqual({ disconnected: true });
+    expect(lifecycle).toEqual(["clear", "invalidate", "revoke", "invalidate", "unsubscribe"]);
     expect(await service.disconnect("owner-1", "1")).toEqual({ disconnected: false });
     expect(meta.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(access.revoke).toHaveBeenCalledWith("owner-1", { platform: "instagram", channelId: "123" });
+    expect(access.invalidate).toHaveBeenCalledWith("workspace-1", ["staff-1", "staff-2"]);
     expect(history).toHaveBeenCalledTimes(1);
     expect(history).toHaveBeenCalledWith({
       userId: "owner-1", actionType: "DISCONNECT_CHANNEL", actionTitle: "Ngắt kết nối Instagram",
       oldValue: { platform: "instagram", channelId: "123", username: "business" }, newValue: {}
     });
+  });
+
+  it("clears the exact staff revocation and invalidates its Workspace sockets after reconnect", async () => {
+    const { service, input, access } = fixture();
+    await service.connect("owner-1", input);
+    await service.disconnect("owner-1", "1");
+    access.clear.mockClear();
+    access.invalidate.mockClear();
+
+    await service.connect("owner-1", input);
+
+    expect(access.clear).toHaveBeenCalledWith("owner-1", { platform: "instagram", channelId: "123" });
+    expect(access.invalidate).toHaveBeenCalledWith("workspace-1", ["staff-1"]);
   });
 
   it.each(["throws", "returns null"] as const)("retries local deletion after unsubscribe succeeds and deletion %s", async (failure) => {

@@ -29,7 +29,7 @@ function normalizeInstagramWebhook(payload: unknown): InstagramTextEvent[] {
       const mid = nonempty(message?.mid);
       const text = typeof message?.text === "string" && message.text.trim() ? message.text : null;
       if (!event || !sender || !recipient || !mid || !text || message?.is_echo !== undefined && typeof message.is_echo !== "boolean" || message?.attachments !== undefined) continue;
-      const echo = message.is_echo === true;
+      const echo = message?.is_echo === true;
       if (echo ? sender !== accountId || recipient === accountId : recipient !== accountId || sender === accountId) continue;
       const timestamp = typeof event.timestamp === "number" && Number.isFinite(event.timestamp) && event.timestamp > 0 && event.timestamp <= 8.64e15 ? event.timestamp : Date.now();
       result.push({ accountId, igsid: echo ? recipient : sender, mid, senderId: sender, text, timestamp: new Date(timestamp), echo });

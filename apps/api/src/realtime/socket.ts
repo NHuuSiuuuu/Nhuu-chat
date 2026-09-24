@@ -9,7 +9,8 @@ import { ConversationModel } from "../models/conversation.model.js";
 import { canJoinConversation } from "./access.js";
 import { WorkspaceMemberModel } from "../models/workspace-member.model.js";
 import { WorkspaceModel } from "../models/workspace.model.js";
-import { effectiveAllowedChannels, isWorkspaceChannelPlatform } from "../auth/workspace-channel-access.js";
+import { InstagramAccountConnectionModel } from "../models/instagram-account-connection.model.js";
+import { effectiveAllowedChannels, effectiveRevokedChannels, isWorkspaceChannelPlatform, isWorkspaceChannelRevoked } from "../auth/workspace-channel-access.js";
 
 const redisClients = new WeakMap<Server, { pub: RedisClientType; sub: RedisClientType }>();
 let activeServer: Server | undefined;
@@ -42,11 +43,17 @@ export function createRealtimeServer(httpServer: HttpServer, redisUrl = process.
         const workspace = await WorkspaceModel.findById(membership.workspaceId).select("ownerUserId").lean();
         if (!workspace) throw new Error("workspace not found");
         const allowedChannels = membership.role === "staff" ? effectiveAllowedChannels(membership) : [];
+        const instagramRows = membership.role === "staff"
+          ? await InstagramAccountConnectionModel.find({ ownerUserId: workspace.ownerUserId, status: "connected" }).select("instagramUserId").lean()
+          : [];
         socket.data.auth = {
           ...auth,
           workspace: {
-            ownerUserId: String(workspace.ownerUserId), allowedChannels,
-            allowedPages: allowedChannels.filter((channel) => channel.platform === "facebook").map((channel) => channel.channelId)
+            id: String(workspace._id),
+            ownerUserId: String(workspace.ownerUserId), role: membership.role, allowedChannels,
+            allowedPages: allowedChannels.filter((channel) => channel.platform === "facebook").map((channel) => channel.channelId),
+            activeInstagramChannelIds: instagramRows.map((row) => row.instagramUserId),
+            revokedChannels: membership.role === "staff" ? effectiveRevokedChannels(membership) : []
           }
         };
       } else {
@@ -56,13 +63,14 @@ export function createRealtimeServer(httpServer: HttpServer, redisUrl = process.
     } catch { next(new Error("unauthorized")); }
   });
   io.on("connection", (socket) => {
-    const auth = socket.data.auth as AuthPrincipal & { workspace?: { ownerUserId: string; allowedPages: string[]; allowedChannels: ReturnType<typeof effectiveAllowedChannels> } };
+    const auth = socket.data.auth as AuthPrincipal & { workspace?: { id: string; role: "owner" | "admin" | "staff"; ownerUserId: string; allowedPages: string[]; allowedChannels: ReturnType<typeof effectiveAllowedChannels>; activeInstagramChannelIds: string[]; revokedChannels: ReturnType<typeof effectiveRevokedChannels> } };
     const ready = (async (): Promise<boolean> => {
       try {
         if (auth.sessionId) {
           await socket.join(`auth-session:${auth.sessionId}`);
         }
         await socket.join(`auth-user:${auth.id}`);
+        if (auth.workspace) await socket.join(`workspace-member:${auth.workspace.id}:${auth.id}`);
         if (auth.sessionId) {
           // Phiên có thể bị thu hồi sau handshake nhưng trước khi socket tham gia room.
           const active = await isAuthSessionActive(auth.id, auth.sessionId);
@@ -113,6 +121,12 @@ export function disconnectAuthUser(userId: string): void {
   activeServer?.in(`auth-user:${userId}`).disconnectSockets(true);
 }
 
+export function disconnectWorkspaceMemberSockets(workspaceId: string, memberUserIds: readonly string[]): void {
+  if (memberUserIds.length === 0) return;
+  const rooms = memberUserIds.map((userId) => `workspace-member:${workspaceId}:${userId}`);
+  activeServer?.in(rooms).disconnectSockets(true);
+}
+
 export function emitChatEvent(event: string, conversationId: string, payload: unknown): void {
   const server = activeServer;
   if (!server) return;
@@ -153,14 +167,25 @@ export function emitInboxEventToRecipients(event: string, recipientIds: string[]
         server.to(rooms).emit(event, payload);
         return;
       }
-      const memberships = await WorkspaceMemberModel.find({ workspaceId: workspace._id }).select("userId role allowedPages allowedChannels").lean();
+      const activeInstagramChannelIds = conversation.platform === "instagram"
+        ? (await InstagramAccountConnectionModel.find({ ownerUserId: conversation.ownerId, status: "connected" }).select("instagramUserId").lean())
+          .map((row) => row.instagramUserId)
+        : undefined;
+      const memberships = await WorkspaceMemberModel.find({ workspaceId: workspace._id }).select("userId role allowedPages allowedChannels revokedChannels").lean();
       const authorizedRecipients = memberships.filter((membership) => {
         if (membership.role === "owner" || membership.role === "admin") return true;
+        if (conversation.platform === "instagram" && !activeInstagramChannelIds?.includes(conversation.channelId!)) return false;
         const allowed = effectiveAllowedChannels(membership);
-        return allowed.length === 0 || allowed.some((channel) => channel.platform === conversation.platform
+        const revoked = isWorkspaceChannelRevoked(membership, conversation.platform,
+          conversation.platform === "zalo_personal" || conversation.platform === "telegram_personal"
+            ? String(conversation.ownerId) : conversation.channelId);
+        const granted = conversation.platform === "instagram"
+          ? allowed.some((channel) => channel.platform === "instagram" && channel.channelId === conversation.channelId)
+          : allowed.length === 0 || allowed.some((channel) => channel.platform === conversation.platform
           && (conversation.platform === "zalo_personal" || conversation.platform === "telegram_personal"
             ? channel.channelId === String(conversation.ownerId)
             : channel.channelId === conversation.channelId));
+        return !revoked && granted;
       }).map((membership) => String(membership.userId));
       if (authorizedRecipients.length) server.to([...new Set(authorizedRecipients)].map((id) => `inbox:${id}`)).emit(event, payload);
     }).catch(() => undefined);

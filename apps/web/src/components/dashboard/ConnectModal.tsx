@@ -5,6 +5,8 @@ import QRCode from "qrcode";
 
 import { apiRequest } from "../../lib/api.js";
 import { connectFacebookPage, FacebookPublishingApiError, listFacebookOAuthPages, selectFacebookOAuthPage, startFacebookOAuth, type FacebookOAuthPage } from "../../lib/facebook-publishing.api.js";
+import { getInstagramConnections, InstagramApiError, startInstagramOAuth } from "../../lib/instagram.api.js";
+import type { InstagramConnectionResponse } from "@nhuu-chat/contracts";
 import { runIntervalWhileVisible } from "../../state/inbox-session-state.js";
 import { connectionProviders, initialConnectionProvider, type ConnectionProviderId } from "../../state/dashboard-ui.js";
 import { PlatformIcon } from "./PlatformIcon.js";
@@ -63,6 +65,62 @@ export function completeFacebookOAuthSelection(dispatch: (action: FacebookOAuthF
   onConnected();
 }
 
+export type InstagramOAuthFlow =
+  | { status: "login" | "loading" | "cancelled" }
+  | { status: "connected"; connections: InstagramConnectionResponse[] }
+  | { status: "error"; message: string };
+
+export function instagramOAuthCallbackAction(search: string): { status: "success"; instagramUserId: string } | { status: "cancelled" } | { status: "error"; message: string } | null {
+  const params = new URLSearchParams(search);
+  const status = params.get("instagram_oauth");
+  if (status === "cancelled") return { status: "cancelled" };
+  if (status === "success") {
+    const instagramUserId = params.get("instagram_user_id")?.trim();
+    return instagramUserId ? { status: "success", instagramUserId } : { status: "error", message: "Không xác định được tài khoản Instagram vừa kết nối. Hãy thử lại." };
+  }
+  if (status !== "error") return null;
+  const messages: Record<string, string> = {
+    INSTAGRAM_ACCOUNT_ALREADY_CONNECTED: "Tài khoản Instagram này đã được kết nối với Workspace khác.",
+    INSTAGRAM_OAUTH_STATE_INVALID: "Phiên đăng nhập Instagram đã hết hạn. Hãy thử lại.",
+    INSTAGRAM_OAUTH_NOT_CONFIGURED: "Đăng nhập Instagram chưa được cấu hình.",
+    INSTAGRAM_SUBSCRIBE_FAILED: "Không thể bật nhận tin nhắn Instagram. Hãy thử kết nối lại."
+  };
+  return { status: "error", message: messages[params.get("code") ?? ""] ?? "Không thể kết nối Instagram. Hãy thử lại." };
+}
+
+export async function startInstagramOAuthAndRedirect(start: () => Promise<{ authorizationUrl: string }>, redirect: (url: string) => void): Promise<void> {
+  const { authorizationUrl } = await start();
+  redirect(authorizationUrl);
+}
+
+export async function confirmInstagramOAuthCallback(
+  search: string,
+  loadConnections: () => Promise<InstagramConnectionResponse[]>,
+  onConnected: () => void
+): Promise<InstagramOAuthFlow> {
+  const action = instagramOAuthCallbackAction(search);
+  if (!action) return { status: "login" };
+  if (action.status === "cancelled") return { status: "cancelled" };
+  if (action.status === "error") return action;
+  try {
+    const connections = await loadConnections();
+    const active = connections.filter((connection) => connection.status === "connected");
+    if (!active.some((connection) => connection.instagramUserId === action.instagramUserId)) return { status: "error", message: "Instagram chưa lưu được tài khoản vừa kết nối. Hãy thử lại." };
+    onConnected();
+    return { status: "connected", connections: active };
+  } catch {
+    return { status: "error", message: "Không thể xác minh kết nối Instagram. Hãy thử tải lại." };
+  }
+}
+
+function instagramOAuthApiError(error: unknown): string {
+  if (error instanceof InstagramApiError) {
+    const action = instagramOAuthCallbackAction(`?instagram_oauth=error&code=${encodeURIComponent(error.code)}`);
+    return action?.status === "error" ? action.message : "Không thể kết nối Instagram. Hãy thử lại.";
+  }
+  return "Không thể bắt đầu đăng nhập Instagram. Hãy thử lại.";
+}
+
 // Giữ lỗi an toàn từ API và chỉ báo Dashboard tải lại sau khi kết nối thủ công thành công.
 export async function submitFacebookManualConnection(input: { pageId: string; pageAccessToken: string }, onConnected: () => void): Promise<string | null> {
   try {
@@ -100,10 +158,10 @@ export function facebookOAuthSelectionFailure(requestError: unknown): { restart:
   return { restart: false, error: "Không thể kết nối Facebook Page" };
 }
 
-export function ConnectModal({ token, refresh, onClose, onConnected, initialProvider }: { token: string; refresh?: () => Promise<string | null>; onClose: () => void; onConnected: () => void; initialProvider?: ConnectionProviderId }) {
+export function ConnectModal({ token, refresh, onClose, onConnected, initialProvider, canManageInstagram = false }: { token: string; refresh?: () => Promise<string | null>; onClose: () => void; onConnected: () => void; initialProvider?: ConnectionProviderId; canManageInstagram?: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const [selected, setSelected] = useState<ConnectionProviderId>(initialProvider ?? initialConnectionProvider);
+  const [selected, setSelected] = useState<ConnectionProviderId>(initialProvider ?? (instagramOAuthCallbackAction(location.search) ? "instagram" : initialConnectionProvider));
   const [qr, setQr] = useState<QrStatus | null>(null);
   const [zaloQr, setZaloQr] = useState<ZaloQrStatus | null>(null);
   const [image, setImage] = useState<string | null>(null);
@@ -114,6 +172,7 @@ export function ConnectModal({ token, refresh, onClose, onConnected, initialProv
   const [facebookPageAccessToken, setFacebookPageAccessToken] = useState("");
   const [facebookManualError, setFacebookManualError] = useState<string | null>(null);
   const [facebookManualLoading, setFacebookManualLoading] = useState(false);
+  const [instagramFlow, setInstagramFlow] = useState<InstagramOAuthFlow>({ status: "login" });
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -122,6 +181,7 @@ export function ConnectModal({ token, refresh, onClose, onConnected, initialProv
   const dialogRef = useRef<HTMLElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   const closeTimerRef = useRef<number | null>(null);
+  const processedInstagramCallbackRef = useRef<string | null>(null);
 
   function requestClose() {
     if (closing) return;
@@ -257,6 +317,17 @@ export function ConnectModal({ token, refresh, onClose, onConnected, initialProv
     }
   }
 
+  async function startInstagram() {
+    setInstagramFlow({ status: "loading" });
+    setLoading(true);
+    try {
+      await startInstagramOAuthAndRedirect(startInstagramOAuth, (url) => window.location.assign(url));
+    } catch (requestError) {
+      setInstagramFlow({ status: "error", message: instagramOAuthApiError(requestError) });
+      setLoading(false);
+    }
+  }
+
   async function selectFacebookPage() {
     if (facebookFlow.status !== "selecting" || !facebookFlow.selectedPageId) return;
     setError(null);
@@ -293,6 +364,20 @@ export function ConnectModal({ token, refresh, onClose, onConnected, initialProv
     if (initialProvider === "zalo") void startZalo();
   }, [initialProvider]);
 
+  useEffect(() => {
+    const action = instagramOAuthCallbackAction(location.search);
+    if (!action || processedInstagramCallbackRef.current === location.search) return;
+    processedInstagramCallbackRef.current = location.search;
+    setSelected("instagram");
+    if (action.status === "success") {
+      setInstagramFlow({ status: "loading" });
+      void confirmInstagramOAuthCallback(location.search, getInstagramConnections, onConnected).then(setInstagramFlow).finally(() => navigate("/dashboard", { replace: true }));
+    } else {
+      setInstagramFlow(action);
+      navigate("/dashboard", { replace: true });
+    }
+  }, [location.search, navigate, onConnected]);
+
   async function submitPassword(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!qr) return;
@@ -314,11 +399,11 @@ export function ConnectModal({ token, refresh, onClose, onConnected, initialProv
       <header className="flex shrink-0 items-center justify-between border-b border-slate-200/80 px-5 py-[18px] sm:px-7 sm:py-[22px]"><h2 id="connect-modal-title" className="m-0 text-[15px] font-bold text-slate-700 sm:text-xl">Thêm kết nối</h2><button ref={closeButtonRef} className="cursor-pointer border-0 bg-transparent text-[25px] leading-none text-slate-400 transition-colors hover:text-slate-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500" type="button" aria-label="Đóng" onClick={requestClose}>×</button></header>
       <div className="min-h-0 flex-1 overflow-y-auto"><div className="grid min-h-[540px] grid-cols-1 sm:grid-cols-[260px_minmax(0,1fr)]">
         <nav className="flex max-h-none gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50/70 p-3 sm:block sm:max-h-[540px] sm:overflow-y-auto sm:border-r sm:border-b-0" aria-label="Nền tảng kết nối">
-          {connectionProviders.map((item) => <button key={item.id} type="button" className={`flex min-h-16 min-w-[150px] w-full shrink-0 cursor-pointer items-center gap-3 rounded-xl border-0 px-3.5 py-3 text-left text-[15px] transition-[background-color,transform] duration-150 hover:translate-x-0.5 hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-500 motion-reduce:transition-none ${selected === item.id ? "bg-gray-100 font-semibold text-gray-900" : "bg-transparent text-slate-700"}`} onClick={() => { setSelected(item.id); if (item.id !== "telegram") setQr(null); if (item.id !== "zalo") setZaloQr(null); setError(null); if (item.id === "telegram") void startTelegram(); if (item.id === "zalo") void startZalo(); }}><PlatformIcon provider={item.id} menu size={36} /><span>{item.label}</span>{item.badge && <small className="bg-yellow-100/80 text-yellow-700 text-[10px] font-medium px-2 py-0.5 rounded-full ml-auto">{item.badge}</small>}</button>)}
+          {connectionProviders.map((item) => <button key={item.id} type="button" disabled={item.id === "instagram" && !canManageInstagram} title={item.id === "instagram" && !canManageInstagram ? "Chỉ chủ Workspace được quản lý kết nối Instagram" : undefined} className={`flex min-h-16 min-w-[150px] w-full shrink-0 cursor-pointer items-center gap-3 rounded-xl border-0 px-3.5 py-3 text-left text-[15px] transition-[background-color,transform] duration-150 hover:translate-x-0.5 hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-500 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50 ${selected === item.id ? "bg-gray-100 font-semibold text-gray-900" : "bg-transparent text-slate-700"}`} onClick={() => { if (item.id === "instagram" && !canManageInstagram) return; setSelected(item.id); if (item.id !== "telegram") setQr(null); if (item.id !== "zalo") setZaloQr(null); setError(null); if (item.id === "telegram") void startTelegram(); if (item.id === "zalo") void startZalo(); }}><PlatformIcon provider={item.id} menu size={36} /><span>{item.label}</span>{item.id === "instagram" && !canManageInstagram && <small className="ml-auto text-[10px] text-slate-400">Chủ Workspace</small>}{item.badge && <small className="bg-yellow-100/80 text-yellow-700 text-[10px] font-medium px-2 py-0.5 rounded-full ml-auto">{item.badge}</small>}</button>)}
         </nav>
         <div className="min-w-0">
           <div className="flex items-center justify-between border-b border-slate-200/70 px-5 py-4 text-[13px] font-bold text-slate-700 sm:px-[30px] sm:py-5"><span>Thêm tài khoản {provider.label}</span>{(provider.id === "telegram" || provider.id === "zalo") && <span className="text-[10px] text-sky-500">●</span>}</div>
-          {selected === "telegram" ? <TelegramConnectContent error={error} image={image} loading={loading} onStart={() => void startTelegram()} onSubmit={submitPassword} password={password} qr={qr} setPassword={setPassword} /> : selected === "zalo" ? <ZaloConnectContent error={error} image={zaloImage} loading={loading} onStart={() => void startZalo()} qr={zaloQr} /> : selected === "facebook" ? facebookConnectionMode === "manual" ? <FacebookManualConnectContent error={facebookManualError} loading={facebookManualLoading} onBack={() => { setFacebookConnectionMode("oauth"); setFacebookManualError(null); }} onPageAccessTokenChange={setFacebookPageAccessToken} onPageIdChange={setFacebookPageId} onSubmit={(event) => void submitFacebookManual(event)} pageAccessToken={facebookPageAccessToken} pageId={facebookPageId} /> : <FacebookConnectContent flow={facebookFlow} loading={loading} onManual={() => { setFacebookConnectionMode("manual"); setFacebookManualError(null); }} onStart={() => void startFacebook()} onSelect={selectFacebookPage} onSelectPage={(pageId) => dispatchFacebookFlow({ type: "select-page", pageId })} /> : <div className="px-9 py-[70px] text-center"><span className="mx-auto mb-[18px] grid h-[54px] w-[54px] place-items-center rounded-full bg-blue-50 text-[28px] text-sky-500">◷</span><h3 className="m-0 text-[17px] font-bold text-slate-800">{provider.label} đang chờ kích hoạt</h3><p className="text-[13px] text-slate-500">Tích hợp kênh này sẽ được bổ sung trong phiên bản tiếp theo.</p></div>}
+          {selected === "telegram" ? <TelegramConnectContent error={error} image={image} loading={loading} onStart={() => void startTelegram()} onSubmit={submitPassword} password={password} qr={qr} setPassword={setPassword} /> : selected === "zalo" ? <ZaloConnectContent error={error} image={zaloImage} loading={loading} onStart={() => void startZalo()} qr={zaloQr} /> : selected === "facebook" ? facebookConnectionMode === "manual" ? <FacebookManualConnectContent error={facebookManualError} loading={facebookManualLoading} onBack={() => { setFacebookConnectionMode("oauth"); setFacebookManualError(null); }} onPageAccessTokenChange={setFacebookPageAccessToken} onPageIdChange={setFacebookPageId} onSubmit={(event) => void submitFacebookManual(event)} pageAccessToken={facebookPageAccessToken} pageId={facebookPageId} /> : <FacebookConnectContent flow={facebookFlow} loading={loading} onManual={() => { setFacebookConnectionMode("manual"); setFacebookManualError(null); }} onStart={() => void startFacebook()} onSelect={selectFacebookPage} onSelectPage={(pageId) => dispatchFacebookFlow({ type: "select-page", pageId })} /> : selected === "instagram" && canManageInstagram ? <InstagramConnectContent flow={instagramFlow} loading={loading} onStart={() => void startInstagram()} /> : selected === "instagram" ? <div className="px-9 py-[70px] text-center"><h3 className="m-0 text-[17px] font-bold text-slate-800">Quyền kết nối Instagram</h3><p className="mt-3 text-sm text-slate-600" role="status">Chỉ chủ Workspace được kết nối hoặc ngắt kết nối tài khoản Instagram.</p></div> : <div className="px-9 py-[70px] text-center"><span className="mx-auto mb-[18px] grid h-[54px] w-[54px] place-items-center rounded-full bg-blue-50 text-[28px] text-sky-500">◷</span><h3 className="m-0 text-[17px] font-bold text-slate-800">{provider.label} đang chờ kích hoạt</h3><p className="text-[13px] text-slate-500">Tích hợp kênh này sẽ được bổ sung trong phiên bản tiếp theo.</p></div>}
         </div></div>
       </div>
     </section>
@@ -332,6 +417,13 @@ export function FacebookConnectContent({ flow, loading, onManual, onStart, onSel
   if (flow.status === "selecting") return <div className="px-6 py-10 sm:px-12 sm:py-16"><h3 className="m-0 text-xl font-bold text-slate-800">Chọn Facebook Page</h3><p className="mt-2 text-sm text-slate-500">Chọn Page có quyền nhắn tin qua Messenger. Quyền đăng bài được hiển thị riêng.</p><div className="mt-6 grid gap-3">{flow.pages.map((page) => <label className={`flex cursor-pointer items-center gap-3 rounded-xl border p-4 ${flow.selectedPageId === page.id ? "border-sky-500 text-gray-900 " : "border-slate-200"}`} key={page.id}><input type="radio" name="facebook-page" value={page.id} checked={flow.selectedPageId === page.id} onChange={() => onSelectPage(page.id)} disabled={!page.canMessage} /><span className="min-w-0 flex-1"><strong className="block text-sm text-slate-800">{page.name}</strong><small className="block text-xs text-slate-500">{page.canMessage ? "Có quyền nhắn tin" : "Không có quyền nhắn tin"} · {page.canPublish ? "Có quyền đăng bài" : "Không có quyền đăng bài"}</small></span></label>)}</div><button className="mt-6 rounded-lg text-gray-900 0 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer" type="button" onClick={onSelect} disabled={loading || !flow.selectedPageId || !flow.pages.find((page) => page.id === flow.selectedPageId)?.canMessage}>{loading ? "Đang kết nối..." : "Kết nối Page này"}</button>{flow.error && <p className="mt-4 text-xs text-rose-600" role="alert">{flow.error}</p>}</div>;
   const oauthLoading = flow.status === "loading" || loading;
   return <div className="px-6 py-12 text-center sm:px-9 sm:py-[70px]"><span className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-full bg-blue-50 shadow-sm ring-1 ring-blue-100"><PlatformIcon provider="facebook" plain size={40} /></span><h3 className="m-0 text-[17px] font-bold text-slate-800">Đăng nhập bằng tài khoản Facebook</h3><p className="mx-auto mt-3 max-w-md text-[13px] leading-6 text-slate-500">Đăng nhập Facebook để lấy danh sách Page anh đang quản lý, sau đó chọn Page muốn kết nối vào NhuuChat.</p><div className="mt-6 flex flex-col items-center gap-3"><button className="rounded-lg bg-[#1877f2] px-5 py-3 text-sm font-bold text-white hover:bg-[#166fe5] disabled:cursor-wait disabled:opacity-60 cursor-pointer" type="button" onClick={onStart} disabled={oauthLoading}>{oauthLoading ? "Đang chuyển tới Facebook..." : "Đăng nhập bằng Facebook"}</button><button className="rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#1877f2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 cursor-pointer" type="button" onClick={onManual}>Kết nối bằng Page ID + Access Token</button></div></div>;
+}
+
+export function InstagramConnectContent({ flow, loading, onStart }: { flow: InstagramOAuthFlow; loading: boolean; onStart: () => void }) {
+  if (flow.status === "connected") return <div className="px-6 py-10 sm:px-9 sm:py-14"><div className="text-center"><span className="mx-auto mb-4 grid size-14 place-items-center rounded-full bg-emerald-50 text-2xl text-emerald-600">✓</span><h3 className="m-0 text-[17px] font-bold text-emerald-700">Đã kết nối Instagram thành công</h3><p className="mt-2 text-[13px] text-slate-500">Trạng thái đã được xác nhận từ máy chủ.</p></div><ul className="mx-auto mt-6 grid max-w-md gap-2" aria-label="Tài khoản Instagram đã kết nối">{flow.connections.map((connection) => <li key={connection.id} className="flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 p-3"><span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-pink-50 font-bold text-pink-600">{connection.avatarUrl ? <img className="size-full object-cover" src={connection.avatarUrl} alt="" /> : "@"}</span><span className="min-w-0"><strong className="block truncate text-sm text-slate-800">{connection.displayName?.trim() || connection.username || connection.instagramUserId}</strong><small className="block truncate text-xs text-slate-500">{connection.username ? `@${connection.username}` : connection.instagramUserId}</small></span></li>)}</ul><div className="mt-6 text-center"><button className="rounded-lg bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] px-5 py-3 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60 cursor-pointer" type="button" onClick={onStart} disabled={loading}>{loading ? "Đang chuyển tới Instagram..." : "Kết nối thêm tài khoản"}</button></div></div>;
+  if (flow.status === "error") return <div className="px-6 py-12 text-center sm:px-9 sm:py-[70px]"><span className="mx-auto mb-4 grid size-14 place-items-center rounded-full bg-rose-50 text-2xl text-rose-600">!</span><h3 className="m-0 text-[17px] font-bold text-slate-800">Không thể hoàn tất kết nối Instagram</h3><p className="mx-auto mt-3 max-w-md text-sm text-rose-700" role="alert">{flow.message}</p><button className="mt-5 rounded-lg bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] px-5 py-3 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60 cursor-pointer" type="button" onClick={onStart} disabled={loading}>{loading ? "Đang chuyển tới Instagram..." : "Thử lại đăng nhập"}</button></div>;
+  if (flow.status === "loading") return <div className="px-6 py-16 text-center" role="status" aria-live="polite">{flow.status === "loading" ? "Đang xác minh kết nối Instagram..." : "Đang chuyển tới Instagram..."}</div>;
+  return <div className="px-6 py-12 text-center sm:px-9 sm:py-[70px]"><span className="mx-auto mb-5 grid size-16 place-items-center rounded-full bg-gradient-to-br from-[#833ab4] via-[#fd1d1d] to-[#fcb045] text-3xl font-bold text-white">@</span><h3 className="m-0 text-[17px] font-bold text-slate-800">Đăng nhập bằng tài khoản Instagram</h3><p className="mx-auto mt-3 max-w-md text-[13px] leading-6 text-slate-500">Kết nối trực tiếp tài khoản Instagram Business hoặc Creator để nhận và trả lời tin nhắn trong Inbox.</p>{flow.status === "cancelled" && <p className="mt-3 text-sm text-amber-700" role="status">Anh đã huỷ đăng nhập Instagram.</p>}<button className="mt-6 rounded-lg bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] px-5 py-3 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60 cursor-pointer" type="button" onClick={onStart} disabled={loading}>{loading ? "Đang chuyển tới Instagram..." : "Đăng nhập bằng Instagram"}</button></div>;
 }
 
 export function FacebookManualConnectContent({ error, loading, onBack, onPageAccessTokenChange, onPageIdChange, onSubmit, pageAccessToken, pageId }: { error: string | null; loading: boolean; onBack: () => void; onPageAccessTokenChange: (value: string) => void; onPageIdChange: (value: string) => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; pageAccessToken: string; pageId: string }) {

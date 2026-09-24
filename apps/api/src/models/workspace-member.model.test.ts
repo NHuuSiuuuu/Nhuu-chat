@@ -10,6 +10,7 @@ describe("Workspace member model", () => {
     });
     expect(member.allowedPages).toEqual([]);
     expect(member.allowedChannels).toBeUndefined();
+    expect(member.revokedChannels).toEqual([]);
     expect(workspaceRoles).toEqual(["owner", "admin", "staff"]);
   });
 
@@ -32,5 +33,18 @@ describe("Workspace member model", () => {
     });
     await expect(member.validate()).resolves.toBeUndefined();
     expect(member.allowedChannels).toHaveLength(2);
+  });
+
+  it("stores exact revoked Instagram channels without replacing the member grants", async () => {
+    const member = new WorkspaceMemberModel({
+      workspaceId: new mongoose.Types.ObjectId(), userId: new mongoose.Types.ObjectId(), role: "staff",
+      allowedChannels: [{ platform: "instagram", channelId: "ig-1" }],
+      revokedChannels: [{ platform: "instagram", channelId: "ig-1" }]
+    });
+    await expect(member.validate()).resolves.toBeUndefined();
+    expect(member.allowedChannels?.map((channel: { platform: string; channelId: string }) => ({ platform: channel.platform, channelId: channel.channelId })))
+      .toEqual([{ platform: "instagram", channelId: "ig-1" }]);
+    expect(member.revokedChannels?.map((channel: { platform: string; channelId: string }) => ({ platform: channel.platform, channelId: channel.channelId })))
+      .toEqual([{ platform: "instagram", channelId: "ig-1" }]);
   });
 });

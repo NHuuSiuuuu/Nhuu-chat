@@ -140,10 +140,10 @@
 - Existing platform filters include Instagram and distinguish multiple accounts by channel ID.
 - Composer allows text only for Instagram; unsupported attachment actions are disabled with clear UI state until supported.
 
-- [ ] Add failing UI tests for OAuth trigger, multiple connection rows/status, cancel/error, disconnect, account filter and text-only composer.
-- [ ] Run focused Web tests and confirm expected failures.
-- [ ] Implement UI with existing connection modal, custom toast, loading and empty/error patterns.
-- [ ] Run focused Web tests, TypeScript check, production build, and `git diff --check`.
+- [x] Add failing UI tests for OAuth trigger, multiple connection rows/status, cancel/error, disconnect, account filter and text-only composer.
+- [x] Run focused Web tests and confirm expected failures.
+- [x] Implement UI with existing connection modal, custom toast, loading and empty/error patterns.
+- [x] Run focused Web tests, TypeScript check, production build, and `git diff --check`.
 
 ### Task 7: Integrated verification and rollout readiness
 
@@ -152,12 +152,14 @@
 - Update `README.md` and `docs/wiki/` with setup, Meta app requirements, OAuth URLs, webhook setup, usage, limitations and deployment order.
 - Update implementation changelog under `CHANGELOG.md`.
 
-- [ ] Run API focused tests for OAuth, account, webhook, messages, Workspace access and migration.
-- [ ] Run full API tests, Web focused tests, TypeScript checks and production build; document unrelated pre-existing failures separately.
-- [ ] Perform migration preflight on an isolated copy/fixture and record rollback steps; do not run production migration until backup and duplicate report are reviewed.
+- [x] Run API focused tests for OAuth, account, webhook, messages, Workspace access and migration.
+- [x] Run full API tests, Web focused tests, TypeScript checks and production build; document unrelated pre-existing failures separately. API full suite: 159 files passed, 1 baseline assertion failed (`workspace.schemas.test.ts`); 1,105 tests passed, 1 failed, 3 skipped. Web full suite: 49 files and 452 tests passed. Source TypeScript check (excluding test files) passed; production Web build and `git diff --check` passed.
+- [x] Perform migration preflight on an isolated copy/fixture and record rollback steps; do not run production migration until backup and duplicate report are reviewed. Fixture-based migration tests passed; production URI was not used.
 - [ ] Verify Meta app configuration, HTTPS callback, scopes/Advanced Access, webhook subscription and test professional accounts in development/staging.
 - [ ] Test end-to-end: OAuth, incoming DM, staff access grant, realtime receive, text reply, history event, disconnect, and reconnect.
-- [ ] Inspect `git diff`, stage only Instagram feature files, commit with a concise Conventional Commit message, and push the current feature branch after all applicable verification passes.
+- [x] Inspect `git diff`, stage only Instagram feature files, commit with a concise Conventional Commit message, and push the current feature branch after all applicable verification passes.
+
+**Local release gates still open:** Meta app configuration/Advanced Access, actual HTTPS OAuth and webhook delivery, send policy/error behavior, and the end-to-end staging scenario require a configured Meta developer app and test accounts. No production migration or deployment was performed.
 
 ## Dependencies and release gates
 

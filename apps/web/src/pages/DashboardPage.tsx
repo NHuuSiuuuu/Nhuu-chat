@@ -1,10 +1,11 @@
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import type { FacebookPageConnectionResponse, WorkspaceChannelRef } from "@nhuu-chat/contracts";
+import type { FacebookPageConnectionResponse, InstagramConnectionResponse, WorkspaceChannelRef } from "@nhuu-chat/contracts";
 
 import { apiRequest } from "../lib/api.js";
 import { FacebookPublishingApiError, getFacebookPageConnection, removeFacebookPage } from "../lib/facebook-publishing.api.js";
+import { getInstagramConnections, InstagramApiError, removeInstagramConnection } from "../lib/instagram.api.js";
 import { ConnectModal } from "../components/dashboard/ConnectModal.js";
 import { DashboardTopbar, type DashboardAccount } from "../components/dashboard/DashboardTopbar.js";
 import { InboxIcon } from "../components/conversations/InboxIcon.js";
@@ -20,6 +21,22 @@ type WorkspaceDashboardChannel = WorkspaceChannelRef & { name: string; displayId
 
 const FACEBOOK_DASHBOARD_TIMEOUT_MS = 10_000;
 const FACEBOOK_DASHBOARD_ERROR = "Không thể kiểm tra kết nối Facebook. Vui lòng thử lại.";
+const INSTAGRAM_DASHBOARD_ERROR = "Không thể kiểm tra kết nối Instagram. Vui lòng thử lại.";
+
+function instagramDashboardError(error: unknown): string {
+  if (error instanceof InstagramApiError && error.status === 401) return "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại để tải kết nối Instagram.";
+  return INSTAGRAM_DASHBOARD_ERROR;
+}
+
+export async function loadInstagramDashboardConnections(
+  request: () => Promise<InstagramConnectionResponse[]> = getInstagramConnections
+): Promise<{ connections: InstagramConnectionResponse[] | null; error: string | null }> {
+  try {
+    return { connections: await request(), error: null };
+  } catch (error) {
+    return { connections: null, error: instagramDashboardError(error) };
+  }
+}
 
 // Giới hạn thời gian kiểm tra Facebook và phân biệt chưa kết nối với lỗi dịch vụ.
 export async function loadFacebookDashboardStatus(
@@ -50,8 +67,22 @@ export function createLatestRequestRunner<T>(onResult: (result: T) => void): (re
   };
 }
 
+export function workspaceScopedValue<T>(activeWorkspaceId: string | undefined, storedWorkspaceId: string | undefined, value: T): T | null {
+  return activeWorkspaceId === storedWorkspaceId ? value : null;
+}
+
+export function createWorkspaceScopedRequestRunner<T>(getWorkspaceId: () => string | undefined, onResult: (result: T, workspaceId: string | undefined) => void): (workspaceId: string | undefined, request: () => Promise<T>) => Promise<T> {
+  let requestId = 0;
+  return async (workspaceId, request) => {
+    const currentRequestId = ++requestId;
+    const result = await request();
+    if (currentRequestId === requestId && workspaceId === getWorkspaceId()) onResult(result, workspaceId);
+    return result;
+  };
+}
+
 // Kênh dùng ID ghép platform/channel; phiên cá nhân giữ một lựa chọn cho cả Inbox của phiên.
-export interface DashboardConnectedAccount { id: "telegram_personal" | "zalo_personal" | `${"facebook" | "instagram" | "zalo" | "telegram"}:${string}`; platform: "telegram" | "zalo" | "facebook" | "instagram"; identifier?: string | null; pageId?: string; name: string; username?: string; avatarUrl?: string | null; status?: "error"; }
+export interface DashboardConnectedAccount { id: "telegram_personal" | "zalo_personal" | `${"facebook" | "instagram" | "zalo" | "telegram"}:${string}`; connectionId?: string; platform: "telegram" | "zalo" | "facebook" | "instagram"; identifier?: string | null; pageId?: string; name: string; username?: string; avatarUrl?: string | null; status?: "error"; }
 
 // Chuyển mọi kênh mà API đã cấp cho Workspace thành thẻ điều hướng Inbox.
 export function buildWorkspaceDashboardAccounts(channels: WorkspaceDashboardChannel[]): DashboardConnectedAccount[] {
@@ -73,7 +104,7 @@ export function buildWorkspaceDashboardAccounts(channels: WorkspaceDashboardChan
 }
 
 // Chuẩn hóa định danh thật của từng kênh để card không phụ thuộc username hiển thị.
-export function buildDashboardAccounts(telegram: TelegramStatus, zalo: ZaloStatus, facebook?: FacebookStatus | null): DashboardConnectedAccount[] {
+export function buildDashboardAccounts(telegram: TelegramStatus, zalo: ZaloStatus, facebook?: FacebookStatus | null, instagram: readonly InstagramConnectionResponse[] = []): DashboardConnectedAccount[] {
   const accounts: DashboardConnectedAccount[] = [];
   if (telegram.connected) accounts.push({ id: "telegram_personal", platform: "telegram", name: telegram.displayName ?? "Telegram cá nhân", ...(telegram.telegramUserId ? { identifier: telegram.telegramUserId } : {}), ...(telegram.username ? { username: telegram.username } : {}), ...(telegram.avatarUrl ? { avatarUrl: telegram.avatarUrl } : {}) });
   if (zalo.status === "connected" || (zalo.status === "error" && zalo.displayName)) {
@@ -82,7 +113,24 @@ export function buildDashboardAccounts(telegram: TelegramStatus, zalo: ZaloStatu
   if (facebook?.status === "connected") {
     accounts.push({ id: `facebook:${facebook.pageId}`, platform: "facebook", identifier: facebook.pageId, pageId: facebook.pageId, name: facebook.pageName?.trim() || "Facebook Page", ...(facebook.avatarUrl ? { avatarUrl: facebook.avatarUrl } : {}) });
   }
+  for (const connection of instagram) {
+    if (connection.status === "disconnected") continue;
+    accounts.push({
+      id: `instagram:${connection.instagramUserId}`,
+      connectionId: connection.id,
+      platform: "instagram",
+      identifier: connection.instagramUserId,
+      name: connection.displayName?.trim() || connection.username || connection.instagramUserId,
+      ...(connection.username ? { username: connection.username } : {}),
+      ...(connection.avatarUrl ? { avatarUrl: connection.avatarUrl } : {}),
+      ...(connection.status === "invalid" ? { status: "error" as const } : {})
+    });
+  }
   return accounts;
+}
+
+export function instagramConnectionIdForAccount(account: DashboardConnectedAccount): string | null {
+  return account.platform === "instagram" ? account.connectionId ?? null : null;
 }
 
 export function conversationPathForPlatform(platform?: DashboardConnectedAccount["id"]): string {
@@ -103,6 +151,9 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
   const workspacePicker = useWorkspacePicker();
   const activeWorkspace = workspacePicker?.workspaces.find((workspace) => workspace.id === workspacePicker.activeWorkspaceId);
   const isWorkspaceStaff = activeWorkspace?.role === "staff";
+  const isWorkspaceOwner = activeWorkspace?.role === "owner";
+  const activeWorkspaceIdRef = useRef(activeWorkspace?.id);
+  activeWorkspaceIdRef.current = activeWorkspace?.id;
   const [telegramStatus, setTelegramStatus] = useState<TelegramStatus | null>(null);
   const [zaloStatus, setZaloStatus] = useState<ZaloStatus | null>(null);
   const [facebookStatus, setFacebookStatus] = useState<FacebookPageConnectionResponse | null>();
@@ -110,8 +161,9 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
   const [workspaceChannels, setWorkspaceChannels] = useState<WorkspaceDashboardChannel[] | null>(null);
   const [workspaceChannelsError, setWorkspaceChannelsError] = useState(false);
   const [workspaceChannelRefreshKey, setWorkspaceChannelRefreshKey] = useState(0);
-  const [showConnect, setShowConnect] = useState(() => new URLSearchParams(location.search).get("facebook_oauth") !== null);
-  const [connectionProvider, setConnectionProvider] = useState<DashboardConnectedAccount["platform"] | undefined>();
+  const instagramOAuthCallback = new URLSearchParams(location.search).has("instagram_oauth");
+  const [showConnect, setShowConnect] = useState(() => new URLSearchParams(location.search).has("facebook_oauth") || instagramOAuthCallback);
+  const [connectionProvider, setConnectionProvider] = useState<DashboardConnectedAccount["platform"] | undefined>(() => instagramOAuthCallback ? "instagram" : undefined);
   const [accountToDeactivate, setAccountToDeactivate] = useState<DashboardConnectedAccount | null>(null);
   const [isDeactivating, setIsDeactivating] = useState(false);
   const [deactivateError, setDeactivateError] = useState<string | null>(null);
@@ -122,6 +174,19 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
   const [mergeSearch, setMergeSearch] = useState("");
   const [selectedMergePageIds, setSelectedMergePageIds] = useState<Set<string>>(new Set());
   const [isReloading, setIsReloading] = useState(false);
+  const [instagramConnections, setInstagramConnections] = useState<InstagramConnectionResponse[] | null>(null);
+  const [instagramError, setInstagramError] = useState<string | null>(null);
+  const [instagramWorkspaceId, setInstagramWorkspaceId] = useState<string | undefined>();
+  const instagramDashboardRunnerRef = useRef(createWorkspaceScopedRequestRunner<Awaited<ReturnType<typeof loadInstagramDashboardConnections>>>(
+    () => activeWorkspaceIdRef.current,
+    (result, workspaceId) => {
+      setInstagramWorkspaceId(workspaceId);
+      setInstagramConnections(result.connections ?? []);
+      setInstagramError(result.error);
+    }
+  ));
+  const visibleInstagramConnections = workspaceScopedValue(activeWorkspace?.id, instagramWorkspaceId, instagramConnections);
+  const visibleInstagramError = instagramWorkspaceId === activeWorkspace?.id ? instagramError : null;
   const facebookStatusRunnerRef = useRef(createLatestRequestRunner<FacebookDashboardLoadResult>((result) => {
     setFacebookStatus(result.connection);
     setFacebookError(result.error);
@@ -135,13 +200,14 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
     const facebookPromise = loadFacebookStatus();
     const [telegram, zalo] = await Promise.all([
       apiRequest<TelegramStatus>("", "/api/v1/channels/telegram-personal/status", token, {}, refresh).catch(() => ({ connected: false, displayName: null, username: null })),
-      apiRequest<ZaloStatus>("", "/api/v1/channels/zalo-personal/status", token, {}, refresh).catch(() => ({ id: "zalo", status: "disconnected" as const }))
+      apiRequest<ZaloStatus>("", "/api/v1/channels/zalo-personal/status", token, {}, refresh).catch(() => ({ id: "zalo", status: "disconnected" as const })),
     ]);
+    await instagramDashboardRunnerRef.current(activeWorkspace?.id, () => isWorkspaceStaff ? Promise.resolve({ connections: [], error: null }) : loadInstagramDashboardConnections());
     setTelegramStatus(telegram);
     setZaloStatus(zalo);
     if (waitForFacebook) await facebookPromise;
-  }, [loadFacebookStatus, refresh, token]);
-  useEffect(() => { void loadStatus(); }, [loadStatus]);
+  }, [activeWorkspace?.id, isWorkspaceStaff, loadFacebookStatus, refresh, token]);
+  useEffect(() => { void loadStatus(); }, [activeWorkspace?.id, loadStatus]);
   useEffect(() => {
     if (!isWorkspaceStaff || !activeWorkspace?.id) {
       setWorkspaceChannels(null);
@@ -168,9 +234,9 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
 
   const accounts = useMemo(() => isWorkspaceStaff
     ? buildWorkspaceDashboardAccounts(workspaceChannels ?? [])
-    : buildDashboardAccounts(telegramStatus ?? { connected: false, displayName: null, username: null }, zaloStatus ?? { id: "zalo", status: "disconnected" }, facebookStatus),
-  [facebookStatus, isWorkspaceStaff, telegramStatus, workspaceChannels, zaloStatus]);
-  const accountsLoading = isWorkspaceStaff ? workspaceChannels === null : !telegramStatus || !zaloStatus;
+    : buildDashboardAccounts(telegramStatus ?? { connected: false, displayName: null, username: null }, zaloStatus ?? { id: "zalo", status: "disconnected" }, facebookStatus, visibleInstagramConnections ?? []),
+  [facebookStatus, isWorkspaceStaff, telegramStatus, visibleInstagramConnections, workspaceChannels, zaloStatus]);
+  const accountsLoading = isWorkspaceStaff ? workspaceChannels === null : !telegramStatus || !zaloStatus || visibleInstagramConnections === null;
   const visibleAccounts = accounts.filter((account) => {
     if (filter !== "all" && account.platform !== filter) return false;
     return !search || `${account.name} ${account.identifier ?? ""} ${account.username ?? ""} ${account.platform}`.toLowerCase().includes(search.toLowerCase());
@@ -192,15 +258,20 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
   const openDeactivateModal = (account: DashboardConnectedAccount) => { setDeactivateError(null); setAccountToDeactivate(account); };
   const closeDeactivateModal = () => { if (!isDeactivating) setAccountToDeactivate(null); };
   const deactivateAccount = async () => {
-    if (!accountToDeactivate || (accountToDeactivate.id !== "zalo_personal" && accountToDeactivate.id !== "telegram_personal" && accountToDeactivate.platform !== "facebook")) return;
+    if (!accountToDeactivate || (accountToDeactivate.id !== "zalo_personal" && accountToDeactivate.id !== "telegram_personal" && accountToDeactivate.platform !== "facebook" && accountToDeactivate.platform !== "instagram")) return;
     setIsDeactivating(true);
     setDeactivateError(null);
     try {
-      const disconnectRequest = accountToDeactivate.platform === "facebook"
+      const disconnectRequest = accountToDeactivate.platform === "facebook" || accountToDeactivate.platform === "instagram"
         ? { method: "DELETE" as const }
         : { method: "POST" as const };
       if (disconnectRequest.method === "DELETE") {
-        await removeFacebookPage();
+        if (accountToDeactivate.platform === "facebook") await removeFacebookPage();
+        else {
+          const connectionId = instagramConnectionIdForAccount(accountToDeactivate);
+          if (!connectionId) throw new Error("Instagram connection ID unavailable");
+          await removeInstagramConnection(connectionId);
+        }
       } else {
         const logoutPath = accountToDeactivate.id === "zalo_personal"
           ? "/api/v1/channels/zalo-personal/logout"
@@ -233,12 +304,13 @@ export function DashboardPage({ token, refresh, onOpenInbox, onLogoClick, onNavi
           {isWorkspaceStaff && workspaceChannelsError && <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-[13px] text-red-700" role="alert">Không thể tải các kênh được cấp quyền. Vui lòng thử làm mới.</p>}
           {!isWorkspaceStaff && facebookStatus === undefined && <p className="mb-4 rounded-lg bg-blue-50 px-4 py-3 text-[13px] text-blue-700" role="status">Đang kiểm tra kết nối Facebook...</p>}
           {!isWorkspaceStaff && facebookError && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-red-50 px-4 py-3 text-[13px] text-red-700" role="alert"><span>{facebookError}</span><button className="rounded-lg border border-red-200 bg-white px-3 py-1.5 font-semibold hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-red-400 focus-visible:outline-offset-2 cursor-pointer" type="button" onClick={() => void loadFacebookStatus()}>Thử lại Facebook</button></div>}
-          {visibleAccounts.length > 0 ? <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">{visibleAccounts.map((account) => <ConnectedAccountCard account={account} key={account.id} canManage={!isWorkspaceStaff} onOpen={() => onOpenInbox(account.id)} onRefresh={() => openRefreshModal(account)} onDeactivate={() => openDeactivateModal(account)} />)}</div>
-            : !workspaceChannelsError && (isWorkspaceStaff || (facebookStatus !== undefined && !facebookError)) ? <div className="grid justify-items-center px-5 pb-20 pt-[100px] text-center"><div className="mb-[18px] grid h-[58px] w-[58px] place-items-center rounded-full bg-[#e9f6fc] text-[30px] text-[#22a8df]">＋</div><h3 className="mb-2 text-base">{isWorkspaceStaff ? "Chưa được cấp quyền vào kênh nào" : "Chưa có tài khoản kết nối"}</h3><p className="text-[13px] text-[#8390a1]">{isWorkspaceStaff ? "Liên hệ chủ Workspace để được cấp quyền truy cập kênh." : "Kết nối Facebook, Zalo hoặc Telegram để quản lý các kênh tại một nơi."}</p>{!isWorkspaceStaff && <button className="mt-5 cursor-pointer rounded-lg border-0 bg-[#2aa9e7] px-4 py-[10px] text-[12px] font-bold text-white focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2 transition-opacity hover:opacity-80" type="button" onClick={openModal}>Kết nối tài khoản</button>}</div> : null}
+          {!isWorkspaceStaff && visibleInstagramError && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-red-50 px-4 py-3 text-[13px] text-red-700" role="alert"><span>{visibleInstagramError}</span><button className="rounded-lg border border-red-200 bg-white px-3 py-1.5 font-semibold hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-red-400 focus-visible:outline-offset-2 cursor-pointer" type="button" onClick={() => void loadStatus()}>Thử lại Instagram</button></div>}
+          {visibleAccounts.length > 0 ? <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">{visibleAccounts.map((account) => <ConnectedAccountCard account={account} key={account.id} canManage={!isWorkspaceStaff && (account.platform !== "instagram" || isWorkspaceOwner)} onOpen={() => onOpenInbox(account.id)} onRefresh={() => openRefreshModal(account)} onDeactivate={() => openDeactivateModal(account)} />)}</div>
+            : !workspaceChannelsError && (isWorkspaceStaff || (facebookStatus !== undefined && !facebookError && !visibleInstagramError)) ? <div className="grid justify-items-center px-5 pb-20 pt-[100px] text-center"><div className="mb-[18px] grid h-[58px] w-[58px] place-items-center rounded-full bg-[#e9f6fc] text-[30px] text-[#22a8df]">＋</div><h3 className="mb-2 text-base">{isWorkspaceStaff ? "Chưa được cấp quyền vào kênh nào" : "Chưa có tài khoản kết nối"}</h3><p className="text-[13px] text-[#8390a1]">{isWorkspaceStaff ? "Liên hệ chủ Workspace để được cấp quyền truy cập kênh." : "Kết nối Facebook, Instagram, Zalo hoặc Telegram để quản lý các kênh tại một nơi."}</p>{!isWorkspaceStaff && <button className="mt-5 cursor-pointer rounded-lg border-0 bg-[#2aa9e7] px-4 py-[10px] text-[12px] font-bold text-white focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2 transition-opacity hover:opacity-80" type="button" onClick={openModal}>Kết nối tài khoản</button>}</div> : null}
         </>}
       </section>
     </div>
-    {showConnect && <ConnectModal token={token} refresh={refresh} initialProvider={connectionProvider} onClose={() => setShowConnect(false)} onConnected={() => { void loadStatus(); }} />}
+    {showConnect && <ConnectModal token={token} refresh={refresh} initialProvider={connectionProvider} canManageInstagram={isWorkspaceOwner} onClose={() => setShowConnect(false)} onConnected={() => { void loadStatus(); }} />}
     {showMergePages && <MergePagesModal pages={accounts} selectedIds={selectedMergePageIds} searchQuery={mergeSearch} onSearchChange={setMergeSearch} onTogglePage={toggleMergePage} onSelectAll={selectAllMergePagesFromSearch} onClose={() => setShowMergePages(false)} onMerge={mergeSelectedPages} />}
     {accountToDeactivate && <DeactivateAccountModal account={accountToDeactivate} error={deactivateError} loading={isDeactivating} onCancel={closeDeactivateModal} onConfirm={() => void deactivateAccount()} />}
   </main>;
@@ -264,7 +336,7 @@ function ConnectedAccountCard({ account, onOpen, onRefresh, onDeactivate, canMan
           <span className="truncate">{account.identifier?.trim() || "Chưa có ID"}</span></small></span>
     </button>
     <span className={`absolute right-12 top-4 text-[19px] ${needsReconnect ? "text-[#e87927]" : "text-[#f3a51d]"}`} title={needsReconnect ? "Cần kết nối lại" : "Đang hoạt động"}>●</span>
-    {canManage && (account.id === "zalo_personal" || account.id === "telegram_personal" || account.platform === "facebook") && <div className="absolute right-2 top-2"><button className="grid size-9 place-items-center rounded-lg border-0 bg-transparent text-xl leading-none text-[#7e8b9c] hover:bg-[#f1f5f9] hover:text-[#354258] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2 cursor-pointer" type="button" aria-label="Tùy chọn tài khoản" aria-expanded={isMenuOpen} aria-haspopup="menu" onClick={() => setIsMenuOpen((current) => !current)}>⋮</button>{isMenuOpen && <div className="absolute right-0 top-10 z-20 grid min-w-[180px] gap-1 rounded-xl border border-[#e3e8ef] bg-white p-1.5 shadow-lg" role="menu"><button className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[13px] text-[#354258] hover:bg-[#f1f5f9] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2 cursor-pointer" type="button" role="menuitem" onClick={() => { setIsMenuOpen(false); onRefresh(); }}>Làm mới kết nối</button><button className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[13px] text-[#354258] hover:bg-[#fff1f1] hover:text-[#c33d3d] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2 cursor-pointer" type="button" role="menuitem" onClick={() => { setIsMenuOpen(false); onDeactivate(); }}>Ngắt kết nối</button></div>}</div>}
+    {canManage && (account.id === "zalo_personal" || account.id === "telegram_personal" || account.platform === "facebook" || account.platform === "instagram") && <div className="absolute right-2 top-2"><button className="grid size-9 place-items-center rounded-lg border-0 bg-transparent text-xl leading-none text-[#7e8b9c] hover:bg-[#f1f5f9] hover:text-[#354258] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2 cursor-pointer" type="button" aria-label="Tùy chọn tài khoản" aria-expanded={isMenuOpen} aria-haspopup="menu" onClick={() => setIsMenuOpen((current) => !current)}>⋮</button>{isMenuOpen && <div className="absolute right-0 top-10 z-20 grid min-w-[180px] gap-1 rounded-xl border border-[#e3e8ef] bg-white p-1.5 shadow-lg" role="menu"><button className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[13px] text-[#354258] hover:bg-[#f1f5f9] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2 cursor-pointer" type="button" role="menuitem" onClick={() => { setIsMenuOpen(false); onRefresh(); }}>Làm mới kết nối</button><button className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[13px] text-[#354258] hover:bg-[#fff1f1] hover:text-[#c33d3d] focus-visible:outline-2 focus-visible:outline-[#86b8ff] focus-visible:outline-offset-2 cursor-pointer" type="button" role="menuitem" onClick={() => { setIsMenuOpen(false); onDeactivate(); }}>Ngắt kết nối</button></div>}</div>}
   </article>;
 }
 

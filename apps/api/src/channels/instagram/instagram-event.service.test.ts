@@ -57,6 +57,15 @@ describe("Instagram event persistence", () => {
     expect(socket.emitInboxEventToRecipients).not.toHaveBeenCalled();
   });
 
+  it("ignores messaging events without a message object", async () => {
+    await connect();
+    await expect(processInstagramWebhook({
+      object: "instagram",
+      entry: [{ id: "ig-account-1", messaging: [{ sender: { id: "igsid-1" }, recipient: { id: "ig-account-1" }, message: null }] }]
+    })).resolves.toBeUndefined();
+    expect(await MessageModel.countDocuments({ platform: "instagram" })).toBe(0);
+  });
+
   it("keeps multiple customers on one account in separate conversations", async () => {
     await connect();
     await processInstagramWebhook(event("igsid-1", "mid-1"));

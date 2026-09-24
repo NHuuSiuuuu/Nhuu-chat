@@ -1,6 +1,6 @@
 import { AppError } from "../common/errors.js";
 import type { WorkspaceChannelPlatform, WorkspaceChannelRef } from "@nhuu-chat/contracts";
-import { effectiveAllowedChannels, isWorkspaceChannelPlatform, workspaceChannelPlatforms } from "../auth/workspace-channel-access.js";
+import { effectiveAllowedChannels, effectiveRevokedChannels, isWorkspaceChannelPlatform, isWorkspaceChannelRevoked, workspaceChannelPlatforms } from "../auth/workspace-channel-access.js";
 import { ConversationModel } from "../models/conversation.model.js";
 import { FacebookPageConnectionModel } from "../models/facebook-page-connection.model.js";
 import { InstagramAccountConnectionModel } from "../models/instagram-account-connection.model.js";
@@ -16,6 +16,7 @@ export interface WorkspaceMembership {
   role: WorkspaceRole;
   allowedPages: string[];
   allowedChannels?: WorkspaceChannelRef[];
+  revokedChannels?: WorkspaceChannelRef[];
 }
 
 export interface WorkspaceMemberView extends WorkspaceMembership {
@@ -84,7 +85,8 @@ const defaultDependencies: WorkspaceMemberDependencies = {
       const membership = await WorkspaceMemberModel.findOne({ workspaceId, userId }).lean();
       return membership ? {
         workspaceId: String(membership.workspaceId), userId: String(membership.userId),
-        role: membership.role, allowedPages: membership.allowedPages ?? [], allowedChannels: membership.allowedChannels
+        role: membership.role, allowedPages: membership.allowedPages ?? [], allowedChannels: membership.allowedChannels,
+        revokedChannels: membership.revokedChannels ?? []
       } : null;
     },
     async list(workspaceId) {
@@ -94,7 +96,8 @@ const defaultDependencies: WorkspaceMemberDependencies = {
         if (!user || typeof user.email !== "string") return [];
         return [{
           workspaceId: String(row.workspaceId), userId: String(user._id), email: user.email, name: user.name ?? "",
-          role: row.role, allowedPages: row.allowedPages ?? [], allowedChannels: row.allowedChannels
+          role: row.role, allowedPages: row.allowedPages ?? [], allowedChannels: row.allowedChannels,
+          revokedChannels: row.revokedChannels ?? []
         }];
       });
     },
@@ -126,7 +129,7 @@ const defaultDependencies: WorkspaceMemberDependencies = {
         FacebookPageConnectionModel.find({ userId: ownerUserId, status: "connected" }).select("pageId pageName avatarUrl").lean(),
         InstagramAccountConnectionModel.find({ ownerUserId, status: "connected" }).select("instagramUserId username displayName avatarUrl").lean(),
         ConversationModel.aggregate<{ _id: { platform: string; channelId: string }; name?: string }>([
-          { $match: { ownerId: ownerUserId, platform: { $in: sharedPlatforms.filter((platform) => platform !== "facebook") } } },
+          { $match: { ownerId: ownerUserId, platform: { $in: sharedPlatforms.filter((platform) => platform !== "facebook" && platform !== "instagram") } } },
           { $sort: { updatedAt: 1 } },
           { $group: { _id: { platform: "$platform", channelId: "$channelId" }, name: { $last: "$conversationName" } } }
         ]),
@@ -144,7 +147,7 @@ const defaultDependencies: WorkspaceMemberDependencies = {
         ...(account.avatarUrl ? { avatarUrl: account.avatarUrl } : {})
       });
       for (const row of conversationRows) {
-        if (!isWorkspaceChannelPlatform(row._id.platform)) continue;
+        if (row._id.platform === "instagram" || !isWorkspaceChannelPlatform(row._id.platform)) continue;
         channels.set(`${row._id.platform}:${row._id.channelId}`, {
           platform: row._id.platform as WorkspaceChannelPlatform,
           channelId: row._id.channelId, name: row.name?.trim() || row._id.channelId
@@ -182,7 +185,14 @@ export class WorkspaceMemberService {
     const channels = await this.dependencies.channels.listOwned(workspace.ownerUserId);
     const allowed = membership.role === "staff" ? effectiveAllowedChannels(membership) : [];
     const allowedKeys = new Set(allowed.map((item) => `${item.platform}:${item.channelId}`));
-    return { channels: allowed.length ? channels.filter((item) => allowedKeys.has(`${item.platform}:${item.channelId}`)) : channels };
+    const visible = membership.role === "staff"
+      ? channels.filter((item) => item.platform === "instagram"
+        ? allowedKeys.has(`${item.platform}:${item.channelId}`)
+        : !allowed.length || allowedKeys.has(`${item.platform}:${item.channelId}`))
+      : channels;
+    return { channels: membership.role === "staff"
+      ? visible.filter((item) => !isWorkspaceChannelRevoked(membership, item.platform, item.channelId))
+      : visible };
   }
 
   // Chỉ chủ Workspace được thay đổi role hoặc Page được cấp cho thành viên.
